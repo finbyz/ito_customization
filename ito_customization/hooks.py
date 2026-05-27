@@ -144,8 +144,11 @@ doctype_js = {"Lead" : "public/js/lead.js",
 # Hook on document methods and events
 
 doc_events = {
-    "Lead":{
-        "on_update":"ito_customization.ito_customization.doc_events.lead.on_update"
+    "Lead": {
+        "on_update": "ito_customization.ito_customization.doc_events.lead.on_update"
+    },
+    "Sales Partner": {
+        "on_update": "ito_customization.ito_customization.doc_events.sales_partner.after_save"
     }
 }
 
