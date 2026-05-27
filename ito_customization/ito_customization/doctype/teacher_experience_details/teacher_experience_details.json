@@ -1,0 +1,58 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-05-22 16:47:33.711058",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "school",
+  "column_break_rwgq",
+  "woking_years",
+  "section_break_gmfb",
+  "description"
+ ],
+ "fields": [
+  {
+   "fieldname": "school",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "School"
+  },
+  {
+   "fieldname": "column_break_rwgq",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "woking_years",
+   "fieldtype": "Duration",
+   "in_list_view": 1,
+   "label": "Woking Years"
+  },
+  {
+   "fieldname": "section_break_gmfb",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Description"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-05-22 16:53:12.265265",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "Teacher Experience Details",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

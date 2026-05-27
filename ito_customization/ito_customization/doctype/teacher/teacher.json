@@ -1,0 +1,162 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:name1",
+ "creation": "2026-05-22 16:26:26.078564",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "profile_image",
+  "name1",
+  "date_of_birth",
+  "phone_number",
+  "column_break_eqxw",
+  "status",
+  "email_id",
+  "subject",
+  "experience",
+  "section_break_kahd",
+  "specialization",
+  "add_address",
+  "column_break_wpqt",
+  "year_of_experience",
+  "address",
+  "section_break_fonj",
+  "previous_experience_details"
+ ],
+ "fields": [
+  {
+   "fieldname": "profile_image",
+   "fieldtype": "Attach Image",
+   "in_preview": 1,
+   "label": "Profile Image",
+   "options": "profile_image"
+  },
+  {
+   "fieldname": "name1",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "date_of_birth",
+   "fieldtype": "Date",
+   "label": "Date of Birth",
+   "reqd": 1
+  },
+  {
+   "fieldname": "phone_number",
+   "fieldtype": "Phone",
+   "in_list_view": 1,
+   "label": "Phone Number"
+  },
+  {
+   "fieldname": "experience",
+   "fieldtype": "Select",
+   "label": " Experience",
+   "options": "Select Experience\nFresher\nExperienced",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_eqxw",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Active\nInactive",
+   "reqd": 1
+  },
+  {
+   "fieldname": "email_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Email ID",
+   "options": "Email"
+  },
+  {
+   "fieldname": "subject",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Subject",
+   "options": "School Subject",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_kahd",
+   "fieldtype": "Section Break",
+   "label": "Additional Information"
+  },
+  {
+   "fieldname": "specialization",
+   "fieldtype": "Data",
+   "label": "Specialization"
+  },
+  {
+   "fieldname": "column_break_wpqt",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.experience == \"Experienced\"",
+   "fieldname": "year_of_experience",
+   "fieldtype": "Int",
+   "label": "Year Of Experience"
+  },
+  {
+   "depends_on": "eval:doc.year_of_experience>0",
+   "fieldname": "section_break_fonj",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "previous_experience_details",
+   "fieldtype": "Table",
+   "label": "Previous Experience Details",
+   "options": "Teacher Experience Details"
+  },
+  {
+   "button_color": "Primary",
+   "fieldname": "add_address",
+   "fieldtype": "Button",
+   "label": "Add Address"
+  },
+  {
+   "fieldname": "address",
+   "fieldtype": "HTML",
+   "label": "Address",
+   "no_copy": 1,
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "image_field": "profile_image",
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-05-26 17:12:27.155197",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "Teacher",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
