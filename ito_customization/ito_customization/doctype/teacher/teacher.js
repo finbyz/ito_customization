@@ -4,6 +4,20 @@
 frappe.ui.form.on("Teacher", {
 	refresh(frm) {
 		frm.trigger("render_addresses");
+		
+		// Add "Make Co-ordinator" button if teacher doesn't have a co-ordinator yet
+		if (!frm.doc.__islocal && !frm.doc.co_ordinator) {
+			frm.add_custom_button(__('Make Co-ordinator'), function() {
+				make_coordinator(frm);
+			}, __('Create'));
+		}
+		
+		// Add button to view Sales Partner if co-ordinator exists
+		if (frm.doc.co_ordinator) {
+			frm.add_custom_button(__('View Co-ordinator'), function() {
+				frappe.set_route('Form', 'Sales Partner', frm.doc.co_ordinator);
+			});
+		}
 	},
 
 	render_addresses(frm) {
@@ -99,3 +113,47 @@ frappe.ui.form.on("Teacher", {
 		refresh_field("profile_image");
 	}
 });
+
+
+function make_coordinator(frm) {
+	frappe.confirm(
+		__('Are you sure you want to create a Sales Partner (Co-ordinator) for {0}?', [frm.doc.name1]),
+		function() {
+			// User confirmed, proceed with creation
+			frappe.call({
+				method: 'ito_customization.ito_customization.doctype.teacher.teacher.make_sales_partner',
+				args: {
+					teacher: frm.doc.name
+				},
+				freeze: true,
+				freeze_message: __('Creating Co-ordinator...'),
+				callback: function(r) {
+					if (r.message) {
+						frappe.show_alert({
+							message: __('Co-ordinator created successfully: {0}', [r.message]),
+							indicator: 'green'
+						}, 5);
+						
+						// Refresh the form to show the new co_ordinator link
+						frm.reload_doc();
+						
+						// Ask if user wants to open the Sales Partner
+						frappe.confirm(
+							__('Do you want to open the newly created Co-ordinator?'),
+							function() {
+								frappe.set_route('Form', 'Sales Partner', r.message);
+							}
+						);
+					}
+				},
+				error: function(r) {
+					frappe.msgprint({
+						title: __('Error'),
+						message: __('Failed to create Co-ordinator. Please try again.'),
+						indicator: 'red'
+					});
+				}
+			});
+		}
+	);
+}

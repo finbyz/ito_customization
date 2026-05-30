@@ -165,92 +165,93 @@ frappe.ui.form.on("Lead", {
 
 	},
 
-	// custom_parent_email_id(frm) {
+	custom_stateprovince_copy(frm) {
 
-	// 	if (frm.doc.custom_parent_email_id) {
+		if (frm.doc.custom_stateprovince_copy) {
 
-	// 		frm.set_value(
-	// 			"email_id",
-	// 			frm.doc.custom_parent_email_id
-	// 		);
+			frm.set_value(
+				"state",
+				frm.doc.custom_stateprovince_copy
+			);
 
-	// 	}
+		}
 
-	// },
+	},
+	country(frm) {
+        set_state_options(frm);
+    },
 
 	custom_request_category(frm) {
 
 	let subcategory_map = {
-
-		"IND-AWARDS & CHEQUES": [
-			"INCORRECT DETAILS IN CERTIFICATE",
-			"AWARDS/CERTIFICATE NOT DELIVERED",
-			"MISSING CERTIFICATE",
-			"AWARDS/CERTIFICATE RETURNED",
-			"CHEQUE NAME CORRECTION",
-			"AWARD PARCEL STUCK",
-			"CHEQUE EXPIRED (RE-ISSUE)",
-			"CERTIFICATE NAME CORRECTION"
+		"Ind-Awards & Cheques": [
+		"Incorrect Details In Certificate",
+		"Awards/Certificate Not Delivered",
+		"Missing Certificate",
+		"Awards/Certificate Returned",
+		"Cheque Name Correction",
+		"Award Parcel Stuck",
+		"Cheque Expired (Re-Issue)",
+		"Certificate Name Correction"
+		],
+		"Ind-Profile Update": [
+			"Number Change",
+			"Delete Profile",
+			"Email Change",
+			"Name Change",
+			"Address Change",
+			"Class Change",
+			"School Name Change"
 		],
 
-		"IND-PROFILE UPDATE": [
-			"NUMBER CHANGE",
-			"DELETE PROFILE",
-			"EMAIL CHANGE",
-			"NAME CHANGE",
-			"ADDRESS CHANGE",
-			"CLASS CHANGE",
-			"SCHOOL NAME CHANGE"
+		"Ind-Registration": [
+			"Payment Link",
+			"Refund",
+			"Product Change/Update",
+			"Adjusting Payment",
+			"Subject Change",
+			"Activate Subscription",
+			"Payment Pending"
 		],
 
-		"IND-REGISTRATION": [
-			"PAYMENT LINK",
-			"REFUND",
-			"PRODUCT CHANGE/UPDATE",
-			"ADJUSTING PAYMENT",
-			"SUBJECT CHANGE",
-			"ACTIVATE SUBSCRIPTION",
-			"PAYMENT PENDING"
+		"Ind-Study Material": [
+			"Undelivered / Not Received",
+			"Missing Study Material",
+			"Study Material Change",
+			"Order Returned - Redispatch",
+			"Activate Ebooks / Epqps",
+			"Product Change/Update",
+			"Update Address / Contact (Dispatch)",
+			"Dispatch Status",
+			"Incorrect Material Received"
 		],
 
-		"IND-STUDY MATERIAL": [
-			"UNDELIVERED / NOT RECEIVED",
-			"MISSING STUDY MATERIAL",
-			"STUDY MATERIAL CHANGE",
-			"ORDER RETURNED - REDISPATCH",
-			"ACTIVATE EBOOKS / EPQPS",
-			"PRODUCT CHANGE/UPDATE",
-			"UPDATE ADDRESS / CONTACT (Dispatch)",
-			"DISPATCH STATUS",
-			"INCORRECT MATERIAL RECEIVED"
+		"Online Exam": [
+			"Submission Error",
+			"Slot Change",
+			"Check Exam Submission",
+			"Technical Error During Exam",
+			"Re-Attempt"
 		],
 
-		"ONLINE EXAM": [
-			"SUBMISSION ERROR",
-			"SLOT CHANGE",
-			"CHECK EXAM SUBMISSION",
-			"TECHNICAL ERROR DURING EXAM",
-			"RE - ATTEMPT"
-		],
-
-		"PAYMENT": [
-			"Missing payment details",
-			"Amount discrepancy",
-			"Partial payment received",
-			"Dispatch details not provided",
-			"Additional order required"
+		"Payment": [
+			"Missing Payment Details",
+			"Amount Discrepancy",
+			"Partial Payment Received",
+			"Dispatch Details Not Provided",
+			"Additional Order Required"
 		],
 
 		"Study Material Not Received": [
-			"Out of stock",
-			"Incorrect book received",
-			"Exchange request",
-			"Missing book",
-			"Sample or teachers copy request"
+			"Out Of Stock",
+			"Incorrect Book Received",
+			"Exchange Request",
+			"Missing Book",
+			"Sample Or Teachers Copy Request"
 		],
 
-		"TASKS": [
-			"OTHERS"
+		"Tasks": [
+			"Others"
 		]
 
 	};
@@ -272,3 +273,15 @@ frappe.ui.form.on("Lead", {
 
 }
 });
+
+function set_state_options(frm) {
+    let field = frm.fields_dict.custom_stateprovince;
+
+    if (!field) return;
+
+    if (frm.doc.country === "India") {
+        field.set_data(frappe.boot.india_state_options || []);
+    } else {
+        field.set_data([]);
+    }
+}

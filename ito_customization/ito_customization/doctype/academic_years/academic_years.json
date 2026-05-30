@@ -1,0 +1,37 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:registration_from",
+ "creation": "2026-05-28 18:47:02.739638",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "registration_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "registration_from",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Registration From",
+   "options": "Academic Year",
+   "unique": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-05-30 12:46:24.139296",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "Academic Years",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

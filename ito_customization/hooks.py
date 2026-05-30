@@ -145,7 +145,8 @@ doctype_js = {"Lead" : "public/js/lead.js",
 
 doc_events = {
     "Lead": {
-        "on_update": "ito_customization.ito_customization.doc_events.lead.on_update"
+        "on_update": "ito_customization.ito_customization.doc_events.lead.on_update",
+        "validate": "ito_customization.ito_customization.doc_events.lead.validate_duplicate_lead"
     },
     "Sales Partner": {
         "on_update": "ito_customization.ito_customization.doc_events.sales_partner.after_save"
