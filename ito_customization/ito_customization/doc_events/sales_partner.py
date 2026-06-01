@@ -187,7 +187,7 @@ def create_address(doc):
     """Create or Update Address for Sales Partner if address fields are filled"""
     
     # Check if address fields are available
-    if not (doc.custom_city or doc.custom_state or doc.custom_country or doc.custom_pincode):
+    if not (doc.custom_city or doc.custom_stateprovince or doc.custom_country or doc.custom_pincode):
         return
     
     # First, check if there's already an address linked to this Sales Partner
@@ -231,8 +231,8 @@ def create_address(doc):
             updated = True
         
         # Update State
-        if doc.custom_state and address.state != doc.custom_state:
-            address.state = doc.custom_state
+        if doc.custom_stateprovince and address.state != doc.custom_stateprovince:
+            address.state = doc.custom_stateprovince
             updated = True
         
         # Update Country
@@ -333,8 +333,8 @@ def create_address(doc):
         address.city = doc.custom_city
     
     # State
-    if doc.custom_state:
-        address.state = doc.custom_state
+    if doc.custom_stateprovince:
+        address.state = doc.custom_stateprovince
     
     # Country
     if doc.custom_country:
