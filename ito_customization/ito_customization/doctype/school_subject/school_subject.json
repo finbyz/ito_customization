@@ -6,18 +6,20 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "section_break_g0vp"
+  "little_champ"
  ],
  "fields": [
   {
-   "fieldname": "section_break_g0vp",
-   "fieldtype": "Section Break"
+   "default": "0",
+   "fieldname": "little_champ",
+   "fieldtype": "Check",
+   "label": "Little Champ"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-05-22 16:58:50.342299",
+ "modified": "2026-06-06 13:18:34.768302",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "School Subject",

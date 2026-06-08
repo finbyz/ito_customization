@@ -1,0 +1,949 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Little Champ Registration Form AY 2026-27</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        window.current_user = "{{ frappe.session.user }}";
+        window._csrf_token = "{{ frappe.session.csrf_token }}";
+    </script>
+    <style>
+        .table-container::-webkit-scrollbar { height: 8px; width: 8px; }
+        .table-container::-webkit-scrollbar-thumb { background-color: #d8b4fe; border-radius: 4px; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="bg-fuchsia-50 min-h-screen py-10 px-4 font-sans text-slate-800">
+
+    <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-xl overflow-hidden border border-fuchsia-100">
+        
+        <div class="bg-purple-600 p-6 text-white flex flex-col md:flex-row justify-between items-center md:items-start gap-4">
+            <div>
+                <div class="flex items-center gap-3 mb-1">
+                    <h1 class="text-3xl font-bold tracking-tight">INDIAN TALENT OLYMPIAD</h1>
+                </div>
+                <p class="text-purple-100 font-semibold text-lg">Little Champ Registration Form 2026-27</p>
+                <p class="text-purple-200 text-sm mt-1">Nursery, Junior KG & Senior KG</p>
+            </div>
+            <div class="bg-purple-800/40 backdrop-blur-sm border border-purple-500 rounded-lg p-3 text-sm flex flex-col gap-1 text-center md:text-right shadow-inner">
+                <span class="font-semibold text-white uppercase tracking-wider text-xs">Last Date Of Registration</span>
+                <span class="text-lg font-bold text-amber-300">10th Oct 2026 <span class="text-xs font-normal text-purple-100">(Slot 1)</span></span>
+                <span class="text-lg font-bold text-amber-300">16th Nov 2026 <span class="text-xs font-normal text-purple-100">(Slot 2)</span></span>
+            </div>
+        </div>
+
+        <form class="p-8" id="registrationForm" onsubmit="showSuccessModal(event)">
+            
+            <div class="mb-8">
+                <div class="flex items-center justify-between relative max-w-3xl mx-auto">
+                    <div class="absolute left-0 top-5 -translate-y-1/2 w-full h-1 bg-fuchsia-100 -z-10"></div>
+                    <div class="absolute left-0 top-5 -translate-y-1/2 h-1 bg-purple-600 -z-10 transition-all duration-500 ease-in-out" id="progressLine" style="width: 0%;"></div>
+                    
+                    <div class="flex flex-col items-center gap-2">
+                        <div class="step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-purple-600 text-white shadow ring-4 ring-white transition-colors duration-300" data-step="1">1</div>
+                        <span class="text-xs font-bold text-purple-700">School Info</span>
+                    </div>
+                    <div class="flex flex-col items-center gap-2">
+                        <div class="step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-white border-2 border-slate-300 text-slate-400 shadow ring-4 ring-white transition-colors duration-300" data-step="2">2</div>
+                        <span class="text-xs font-semibold text-slate-400 transition-colors duration-300">Co-ordinators</span>
+                    </div>
+                    <div class="flex flex-col items-center gap-2">
+                        <div class="step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-white border-2 border-slate-300 text-slate-400 shadow ring-4 ring-white transition-colors duration-300" data-step="3">3</div>
+                        <span class="text-xs font-semibold text-slate-400 transition-colors duration-300">Exams</span>
+                    </div>
+                    <div class="flex flex-col items-center gap-2">
+                        <div class="step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-white border-2 border-slate-300 text-slate-400 shadow ring-4 ring-white transition-colors duration-300" data-step="4">4</div>
+                        <span class="text-xs font-semibold text-slate-400 transition-colors duration-300">Payment</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="step1" class="step-content animate-fade-in">
+                <div class="mb-10">
+                    <h2 class="text-xl font-semibold text-slate-800 border-b-2 border-purple-100 pb-2 mb-6 flex items-center gap-2">
+                        <span class="bg-purple-100 text-purple-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">1</span>
+                        School Information
+                    </h2>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-5">
+                        <div class="md:col-span-3">
+                            <label class="block text-sm font-medium text-slate-700 mb-1">School Name</label>
+                            <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 uppercase focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none" placeholder="ENTER SCHOOL NAME">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">School Code (Existing)</label>
+                            <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 uppercase focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none" placeholder="LC - - - -">
+                        </div>
+
+                        <div class="md:col-span-4">
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Complete School Address</label>
+                            <textarea rows="2" class="w-full rounded-md border border-slate-300 px-3 py-2 uppercase focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"></textarea>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">City / Town</label>
+                            <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Taluka</label>
+                            <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">District</label>
+                            <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">State & Pin Code</label>
+                            <div class="flex gap-2">
+                                <input type="text" class="w-2/3 rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none" placeholder="State">
+                                <input type="text" class="w-1/3 rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none" placeholder="PIN">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">GST No. of School / Trust</label>
+                            <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none">
+                        </div>
+                        
+                        <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">STD Code</label>
+                                <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Phone 1</label>
+                                <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">WhatsApp No. (Key Updates)</label>
+                                <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none">
+                            </div>
+                        </div>
+
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium text-slate-700 mb-1">School E-mail ID</label>
+                            <input type="email" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none">
+                        </div>
+                    </div>
+                </div>
+            </div> <div id="step2" class="step-content hidden animate-fade-in">
+                <div class="mb-10">
+                    <h2 class="text-xl font-semibold text-slate-800 border-b-2 border-purple-100 pb-2 mb-6 flex items-center gap-2">
+                        <span class="bg-purple-100 text-purple-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">2</span>
+                        Principals, Co-ordinators & Subject In-Charges
+                    </h2>
+
+                    <div class="border border-purple-200 rounded-xl shadow-sm overflow-hidden bg-white">
+                        <div class="overflow-x-auto table-container">
+                            <table class="w-full text-left border-collapse whitespace-nowrap">
+                                <thead class="bg-purple-100/60 border-b border-purple-200">
+                                    <tr>
+                                        <th class="p-4 text-xs font-black text-purple-900 uppercase tracking-wider w-1/5">Role / Title</th>
+                                        <th class="p-4 text-xs font-black text-purple-900 uppercase tracking-wider w-1/4">Name</th>
+                                        <th class="p-4 text-xs font-black text-purple-900 uppercase tracking-wider w-1/6">Mobile</th>
+                                        <th class="p-4 text-xs font-black text-purple-900 uppercase tracking-wider w-1/6">D.O.B</th>
+                                        <th class="p-4 text-xs font-black text-purple-900 uppercase tracking-wider w-1/4">Email ID</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-purple-50">
+                                    
+                                    <tr class="hover:bg-purple-50/50 transition-colors">
+                                        <td class="p-3 font-bold text-amber-900 bg-amber-50/50 border-r border-amber-100 flex items-center gap-2"><span class="text-lg">👑</span> Head Master / Principal</td>
+                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
+                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
+                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
+                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
+                                    </tr>
+                                    <tr class="hover:bg-purple-50/50 transition-colors">
+                                        <td class="p-3 font-bold text-amber-900 bg-amber-50/50 border-r border-amber-100 flex items-center gap-2"><span class="text-lg">⭐</span> Overall Co-ordinator</td>
+                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
+                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
+                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
+                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
+                                    </tr>
+
+                                    <tr class="hover:bg-fuchsia-50/50 transition-colors">
+                                        <td class="p-3 font-bold text-purple-900 bg-fuchsia-50/30 border-r border-fuchsia-100 flex items-center gap-2"><span>🧮</span> Maths In-charge</td>
+                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
+                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
+                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
+                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
+                                    </tr>
+                                    <tr class="hover:bg-fuchsia-50/50 transition-colors">
+                                        <td class="p-3 font-bold text-purple-900 bg-fuchsia-50/30 border-r border-fuchsia-100 flex items-center gap-2"><span>🔤</span> English In-charge</td>
+                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
+                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
+                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
+                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
+                                    </tr>
+                                    <tr class="hover:bg-fuchsia-50/50 transition-colors">
+                                        <td class="p-3 font-bold text-purple-900 bg-fuchsia-50/30 border-r border-fuchsia-100 flex items-center gap-2"><span>🌿</span> EVS In-charge</td>
+                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
+                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
+                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
+                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
+                                    </tr>
+                                    <tr class="hover:bg-fuchsia-50/50 transition-colors">
+                                        <td class="p-3 font-bold text-purple-900 bg-fuchsia-50/30 border-r border-fuchsia-100 flex items-center gap-2"><span>🎨</span> Drawing In-charge</td>
+                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
+                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
+                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
+                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
+                                    </tr>
+                                    <tr class="hover:bg-fuchsia-50/50 transition-colors">
+                                        <td class="p-3 font-bold text-purple-900 bg-fuchsia-50/30 border-r border-fuchsia-100 flex items-center gap-2"><span>🪔</span> Hindi In-charge</td>
+                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
+                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
+                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
+                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
+                                    </tr>
+                                    <tr class="hover:bg-fuchsia-50/50 transition-colors">
+                                        <td class="p-3 font-bold text-purple-900 bg-fuchsia-50/30 border-r border-fuchsia-100 flex items-center gap-2"><span>📿</span> Abacus In-charge</td>
+                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
+                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
+                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
+                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
+                                    </tr>
+
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div> <div id="step3" class="step-content hidden animate-fade-in">
+                <div class="mb-10">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between border-b-2 border-purple-100 pb-2 mb-6 gap-2">
+                        <h2 class="text-xl font-semibold text-slate-800 flex items-center gap-2">
+                            <span class="bg-purple-100 text-purple-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">3</span>
+                            Exams Summary (Subject-Wise Registrations)
+                        </h2>
+                        <div class="flex gap-2 self-start md:self-auto">
+                            <button type="button" onclick="expandAll()" class="bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100 border border-fuchsia-200 text-xs font-bold px-3 py-1.5 rounded transition-all">
+                                Expand All
+                            </button>
+                            <button type="button" onclick="collapseAll()" class="bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300 text-xs font-bold px-3 py-1.5 rounded transition-all">
+                                Collapse All
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <p class="text-sm text-slate-500 mb-6 bg-amber-50 p-3 border border-amber-200 rounded-lg">
+                        <strong>Instructions:</strong> Expand a subject to record class registration. Select the target exam slot (Slot 1 or Slot 2). <strong>Classes are restricted to Nursery, Jr. KG, and Sr. KG.</strong>
+                    </p>
+
+                    <div id="subjectCardsContainer" class="space-y-4">
+                        </div>
+                </div>
+            </div> <div id="step4" class="step-content hidden animate-fade-in">
+                <div class="mb-10">
+                    <h2 class="text-xl font-semibold text-slate-800 border-b-2 border-purple-100 pb-2 mb-6 flex items-center gap-2">
+                        <span class="bg-purple-100 text-purple-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">4</span>
+                        Fee Calculation & Mode of Payment
+                    </h2>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div class="bg-fuchsia-50 rounded-xl p-5 border border-fuchsia-200 flex flex-col justify-center">
+                            <div class="flex justify-between items-center mb-6 border-b border-fuchsia-200 pb-4">
+                                <h3 class="text-sm font-bold text-fuchsia-900 uppercase tracking-wide">Fee Calculator</h3>
+                                <select id="regionSelect" class="text-sm border border-fuchsia-300 text-fuchsia-900 rounded p-1 bg-white focus:outline-none focus:ring-1 focus:ring-purple-500" onchange="calculateTotal()">
+                                    <option value="india">Schools in India (₹150)</option>
+                                    <option value="outside">Schools Outside India ($8)</option>
+                                </select>
+                            </div>
+                            
+                            <div class="flex justify-between items-center mb-4">
+                                <span class="text-slate-700 font-medium">Total Registered Students:</span>
+                                <span class="text-xl font-bold text-slate-900" id="totalStudentsDisplay">0</span>
+                            </div>
+                            
+                            <div class="flex justify-between items-center mt-auto pt-4 border-t border-fuchsia-200">
+                                <span class="font-bold text-purple-900 text-lg">Total Amount:</span>
+                                <span class="text-3xl font-bold text-purple-600" id="totalAmountDisplay">₹ 0</span>
+                            </div>
+                        </div>
+
+                        <div class="lg:col-span-2 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                            <label class="block text-sm font-medium text-slate-700 mb-3">Mode of Payment</label>
+                            <div class="flex flex-wrap gap-3 mb-5">
+                                <label class="flex items-center gap-2 cursor-pointer p-2 border rounded-lg hover:bg-slate-50 border-slate-200 has-[:checked]:border-purple-500 has-[:checked]:bg-fuchsia-50 has-[:checked]:ring-1 ring-purple-500 transition-all">
+                                    <input type="radio" name="payment_mode" value="dd" class="w-4 h-4 text-purple-600" onchange="togglePaymentFields()" checked>
+                                    <span class="text-sm font-medium">A. Demand Draft (DD)</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer p-2 border rounded-lg hover:bg-slate-50 border-slate-200 has-[:checked]:border-purple-500 has-[:checked]:bg-fuchsia-50 has-[:checked]:ring-1 ring-purple-500 transition-all">
+                                    <input type="radio" name="payment_mode" value="neft" class="w-4 h-4 text-purple-600" onchange="togglePaymentFields()">
+                                    <span class="text-sm font-medium">B. NEFT/RTGS</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer p-2 border rounded-lg hover:bg-slate-50 border-slate-200 has-[:checked]:border-purple-500 has-[:checked]:bg-fuchsia-50 has-[:checked]:ring-1 ring-purple-500 transition-all">
+                                    <input type="radio" name="payment_mode" value="cash" class="w-4 h-4 text-purple-600" onchange="togglePaymentFields()">
+                                    <span class="text-sm font-medium">C. Cash Deposit</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer p-2 border rounded-lg hover:bg-slate-50 border-slate-200 has-[:checked]:border-purple-500 has-[:checked]:bg-fuchsia-50 has-[:checked]:ring-1 ring-purple-500 transition-all">
+                                    <input type="radio" name="payment_mode" value="upi" class="w-4 h-4 text-purple-600" onchange="togglePaymentFields()">
+                                    <span class="text-sm font-medium">D. QR Code / UPI</span>
+                                </label>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="paymentFieldsContainer">
+                                </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h2 class="text-xl font-semibold text-slate-800 border-b-2 border-purple-100 pb-2 mb-6 flex items-center gap-2">
+                        <span class="bg-purple-100 text-purple-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">5</span>
+                        Reference & Declaration
+                    </h2>
+                    
+                    <div class="border-t border-slate-200 pt-6 flex flex-col md:flex-row items-center justify-between gap-6">
+                        <label class="flex items-start gap-3 cursor-pointer max-w-3xl">
+                            <input type="checkbox" class="mt-1 w-5 h-5 text-purple-600 rounded border-slate-300 focus:ring-purple-500">
+                            <span class="text-sm text-slate-600 italic">"All the above filled information is correct as per my knowledge. We agree to any changes and decisions made by INDIAN TALENT OLYMPIAD regarding this examination. By providing contact numbers and emails, I permit ITO to send SMS/WhatsApp alerts."</span>
+                        </label>
+                    </div>
+                </div>
+            </div> <div class="border-t border-slate-200 mt-8 pt-6 flex items-center justify-between sticky bottom-0 bg-white py-4 -mx-8 px-8 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-10">
+                <button type="button" id="prevBtn" onclick="changeStep(-1)" class="hidden bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-2.5 px-6 rounded-lg shadow-sm transition-all focus:ring-2 focus:ring-slate-300 outline-none">
+                    &larr; Previous
+                </button>
+                <div class="flex-grow"></div>
+                <button type="button" id="nextBtn" onclick="changeStep(1)" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md hover:shadow-lg transition-all focus:ring-2 focus:ring-purple-500 outline-none">
+                    Next Step &rarr;
+                </button>
+                <button type="submit" id="submitBtn" class="hidden bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md hover:shadow-lg transition-all focus:ring-2 focus:ring-green-500 whitespace-nowrap outline-none">
+                    Submit LC Registration ✓
+                </button>
+            </div>
+            
+        </form>
+    </div>
+
+    <div id="successModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
+        <div class="bg-white max-w-md w-full rounded-2xl shadow-2xl p-6 text-center transform scale-95 opacity-0 transition-all duration-300" id="successModalCard">
+            <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
+                </svg>
+            </div>
+            <h3 class="text-xl font-bold text-slate-900 mb-2">LC Registration Submitted!</h3>
+            <p class="text-sm text-slate-500 mb-6">Your Little Champ Olympiad registration data has been captured successfully. It is ready to map to your ERPNext School Registration ledger.</p>
+            <button onclick="closeSuccessModal()" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2.5 px-5 rounded-lg transition-colors">
+                Close
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- WIZARD LOGIC ---
+        let currentStep = 1;
+        const totalSteps = 4;
+
+        function changeStep(direction) {
+            currentStep += direction;
+            if (currentStep < 1) currentStep = 1;
+            if (currentStep > totalSteps) currentStep = totalSteps;
+
+            updateWizardUI();
+            document.getElementById('registrationForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function updateWizardUI() {
+            document.querySelectorAll('.step-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`step${currentStep}`).classList.remove('hidden');
+
+            const progressPercentage = ((currentStep - 1) / (totalSteps - 1)) * 100;
+            document.getElementById('progressLine').style.width = `${progressPercentage}%`;
+
+            document.querySelectorAll('.step-indicator').forEach((el) => {
+                const stepNum = parseInt(el.getAttribute('data-step'));
+                const label = el.nextElementSibling;
+                
+                if (stepNum < currentStep) {
+                    el.className = 'step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow ring-4 ring-white transition-colors duration-300 bg-purple-600 text-white';
+                    label.className = 'text-xs font-semibold text-purple-600 transition-colors duration-300';
+                } else if (stepNum === currentStep) {
+                    el.className = 'step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow ring-4 ring-white transition-colors duration-300 bg-white border-2 border-purple-600 text-purple-600';
+                    label.className = 'text-xs font-bold text-purple-700 transition-colors duration-300';
+                } else {
+                    el.className = 'step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow ring-4 ring-white transition-colors duration-300 bg-white border-2 border-slate-300 text-slate-400';
+                    label.className = 'text-xs font-semibold text-slate-400 transition-colors duration-300';
+                }
+            });
+
+            document.getElementById('prevBtn').classList.toggle('hidden', currentStep === 1);
+            document.getElementById('nextBtn').classList.toggle('hidden', currentStep === totalSteps);
+            document.getElementById('submitBtn').classList.toggle('hidden', currentStep !== totalSteps);
+        }
+
+        // --- LITTLE CHAMP EXAMS ACCORDION DATA & LOGIC ---
+        // Specific dates pulled from PDF Page 3 (Slot 1 and Slot 2)
+        const lcSubjectDates = {
+            "LCAO": ["07th Dec, 26 (Slot 1)", "18th Jan, 27 (Slot 2)"],
+            "LCHO": ["07th Dec, 26 (Slot 1)", "18th Jan, 27 (Slot 2)"],
+            "LCEVSO": ["08th Dec, 26 (Slot 1)", "19th Jan, 27 (Slot 2)"],
+            "LCEO": ["09th Dec, 26 (Slot 1)", "20th Jan, 27 (Slot 2)"],
+            "LCDO": ["10th Dec, 26 (Slot 1)", "21st Jan, 27 (Slot 2)"],
+            "LCMO": ["11th Dec, 26 (Slot 1)", "22nd Jan, 27 (Slot 2)"]
+        };
+
+        const lcSubjectNames = {
+            "LCMO": "Little Champ Maths (LCMO)",
+            "LCEVSO": "Little Champ EVS (LCEVSO)",
+            "LCEO": "Little Champ English (LCEO)",
+            "LCHO": "Little Champ Hindi (LCHO)",
+            "LCDO": "Little Champ Drawing (LCDO)",
+            "LCAO": "Little Champ Abacus (LCAO)"
+        };
+
+        const lcClasses = ["Nursery", "Junior KG", "Senior KG"];
+
+        const cardsContainer = document.getElementById('subjectCardsContainer');
+
+        // Render all collapsible subject child tables on page load
+        function buildAllSubjectAccordions() {
+            cardsContainer.innerHTML = '';
+            
+            Object.keys(lcSubjectNames).forEach((subjectCode, index) => {
+                const dates = lcSubjectDates[subjectCode];
+                const fullName = lcSubjectNames[subjectCode];
+                const cardId = `lcSubjectCard_${subjectCode}`;
+
+                // Generate date options
+                const datesHtml = dates.map((date, dateIdx) => `
+                    <label class="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 border border-slate-200 rounded text-xs hover:bg-slate-50 has-[:checked]:border-purple-500 has-[:checked]:ring-1 ring-purple-500 transition-all">
+                        <input type="radio" name="date_${cardId}" value="${date}" class="w-3.5 h-3.5 text-purple-600" ${dateIdx === 0 ? 'checked' : ''}>
+                        <span class="font-medium text-slate-700">${date}</span>
+                    </label>
+                `).join('');
+
+                const cardHtml = `
+                    <div id="${cardId}" class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden transition-all duration-200">
+                        
+                        <div onclick="toggleAccordion('${cardId}')" class="bg-slate-50 border-b border-slate-200/60 p-4 flex justify-between items-center cursor-pointer hover:bg-fuchsia-50/60 transition-colors select-none">
+                            <div class="flex items-center gap-3">
+                                <svg id="chevron_${cardId}" class="w-5 h-5 text-slate-500 transform transition-transform duration-200 -rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                                <span class="font-bold text-slate-800 text-sm md:text-base">${fullName}</span>
+                            </div>
+                            
+                            <div class="flex items-center gap-2">
+                                <span id="pill_${cardId}" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-200/80 text-slate-600">
+                                    No Registrations
+                                </span>
+                            </div>
+                        </div>
+
+                        <div id="body_${cardId}" class="hidden border-t border-slate-100 p-4 bg-white">
+                            
+                            <div class="mb-4 pb-4 border-b border-slate-100">
+                                <span class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Select Target Exam Date:</span>
+                                <div class="flex flex-wrap gap-2">
+                                    ${datesHtml}
+                                </div>
+                            </div>
+
+                            <div class="overflow-x-auto table-container">
+                                <table class="w-full text-left border-collapse">
+                                    <thead class="bg-slate-50 rounded-t-lg">
+                                        <tr>
+                                            <th class="p-3 text-xs font-semibold text-slate-600 uppercase tracking-wider rounded-tl-lg w-[140px]">Class</th>
+                                            <th class="p-3 text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[200px]">Teacher In-charge</th>
+                                            <th class="p-3 text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[150px]">WhatsApp No.</th>
+                                            <th class="p-3 text-xs font-semibold text-slate-600 uppercase tracking-wider w-[150px]">No. of Students</th>
+                                            <th class="p-3 text-xs font-semibold text-slate-600 uppercase tracking-wider rounded-tr-lg w-[60px]"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbody_${cardId}" class="divide-y divide-slate-100">
+                                        </tbody>
+                                </table>
+                            </div>
+
+                            <div class="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center">
+                                <button type="button" onclick="addClassRow('${cardId}')" class="text-xs text-purple-600 font-bold hover:text-purple-800 flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-fuchsia-50 transition-colors outline-none">
+                                    + Add Class Row
+                                </button>
+                                <div class="text-xs font-bold text-slate-700 bg-slate-50 px-3 py-1.5 rounded-md border border-slate-200">
+                                    Registered: <span id="total_${cardId}" class="text-purple-700">0</span> Students
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                `;
+                cardsContainer.insertAdjacentHTML('beforeend', cardHtml);
+                
+                // Add initial empty row to subject sheet
+                addClassRow(cardId);
+            });
+        }
+
+        // Accordion collapsing trigger
+        function toggleAccordion(cardId) {
+            const body = document.getElementById(`body_${cardId}`);
+            const chevron = document.getElementById(`chevron_${cardId}`);
+            
+            if (body.classList.contains('hidden')) {
+                body.classList.remove('hidden');
+                chevron.classList.remove('-rotate-90');
+            } else {
+                body.classList.add('hidden');
+                chevron.classList.add('-rotate-90');
+            }
+        }
+
+        function expandAll() {
+            Object.keys(lcSubjectNames).forEach(subjectCode => {
+                const cardId = `lcSubjectCard_${subjectCode}`;
+                const body = document.getElementById(`body_${cardId}`);
+                const chevron = document.getElementById(`chevron_${cardId}`);
+                body.classList.remove('hidden');
+                chevron.classList.remove('-rotate-90');
+            });
+        }
+
+        function collapseAll() {
+            Object.keys(lcSubjectNames).forEach(subjectCode => {
+                const cardId = `lcSubjectCard_${subjectCode}`;
+                const body = document.getElementById(`body_${cardId}`);
+                const chevron = document.getElementById(`chevron_${cardId}`);
+                body.classList.add('hidden');
+                chevron.classList.add('-rotate-90');
+            });
+        }
+
+        // Add a row to a specific subject card
+        function addClassRow(cardId) {
+            const tbody = document.getElementById(`tbody_${cardId}`);
+            const rowTemplate = `
+                <tr class="hover:bg-fuchsia-50/30 group">
+                    <td class="p-2">
+                        <select class="w-full rounded border border-transparent hover:border-slate-300 focus:border-purple-500 px-2 py-1.5 text-xs bg-slate-50 focus:bg-white transition-all outline-none">
+                            <option value="" disabled selected>Select LC Class</option>
+                            ${lcClasses.map(c => `<option value="${c}">${c}</option>`).join('')}
+                        </select>
+                    </td>
+                    <td class="p-2">
+                        <input type="text" placeholder="Teacher Name" class="w-full rounded border border-transparent hover:border-slate-300 focus:border-purple-500 px-2 py-1.5 text-xs bg-slate-50 focus:bg-white transition-all outline-none">
+                    </td>
+                    <td class="p-2">
+                        <input type="text" placeholder="Mobile / WA" class="w-full rounded border border-transparent hover:border-slate-300 focus:border-purple-500 px-2 py-1.5 text-xs bg-slate-50 focus:bg-white transition-all outline-none">
+                    </td>
+                    <td class="p-2">
+                        <input type="number" min="0" placeholder="0" class="student-count w-full rounded border border-slate-300 px-2 py-1.5 text-xs text-right focus:border-purple-500 focus:ring-1 ring-purple-500 transition-all outline-none" oninput="calculateTotal(); updateSubjectTotal('${cardId}')">
+                    </td>
+                    <td class="p-2 text-center">
+                        <button type="button" class="text-slate-300 hover:text-red-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity outline-none" onclick="removeClassRow(this, '${cardId}')" title="Remove row">✕</button>
+                    </td>
+                </tr>
+            `;
+            tbody.insertAdjacentHTML('beforeend', rowTemplate);
+        }
+
+        // Remove row from subject card
+        function removeClassRow(button, cardId) {
+            const tbody = document.getElementById(`tbody_${cardId}`);
+            if(tbody.children.length > 1) {
+                button.closest('tr').remove();
+                calculateTotal();
+                updateSubjectTotal(cardId);
+            } else {
+                // If only one row remains, reset the input values
+                const row = tbody.firstElementChild;
+                row.querySelectorAll('input').forEach(i => i.value = '');
+                row.querySelector('select').selectedIndex = 0;
+                calculateTotal();
+                updateSubjectTotal(cardId);
+            }
+        }
+
+        // Update single subject count totals and update header display pills
+        function updateSubjectTotal(cardId) {
+            const card = document.getElementById(cardId);
+            if(!card) return;
+            const inputs = card.querySelectorAll('.student-count');
+            let subTotal = 0;
+            inputs.forEach(input => {
+                const val = parseInt(input.value);
+                if (!isNaN(val) && val > 0) subTotal += val;
+            });
+            document.getElementById(`total_${cardId}`).textContent = subTotal;
+            
+            // Update Header status pills
+            const statusPill = document.getElementById(`pill_${cardId}`);
+            if(subTotal > 0) {
+                statusPill.className = "text-xs font-bold px-2.5 py-1 rounded-full bg-purple-100 text-purple-700 border border-purple-200";
+                statusPill.textContent = `${subTotal} Students Registered`;
+            } else {
+                statusPill.className = "text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-200/80 text-slate-600";
+                statusPill.textContent = "No Registrations";
+            }
+        }
+
+        // Compute total amount payable across all cards (No Free Reg in LC form)
+        function calculateTotal() {
+            const inputs = document.querySelectorAll('.student-count');
+            const region = document.getElementById('regionSelect').value;
+            
+            let totalStudents = 0;
+            inputs.forEach(input => {
+                const val = parseInt(input.value);
+                if (!isNaN(val) && val > 0) totalStudents += val;
+            });
+
+            const rate = region === 'india' ? 150 : 8;
+            const currencySymbol = region === 'india' ? '₹' : '$';
+            const totalAmount = totalStudents * rate;
+
+            document.getElementById('totalStudentsDisplay').textContent = totalStudents;
+            document.getElementById('totalAmountDisplay').textContent = `${currencySymbol} ${totalAmount.toLocaleString('en-IN')}`;
+        }
+
+        // Dynamically toggle input form groups based on payment mode selected
+        function togglePaymentFields() {
+            const mode = document.querySelector('input[name="payment_mode"]:checked').value;
+            const container = document.getElementById('paymentFieldsContainer');
+            
+            let html = '';
+            
+            if (mode === 'dd') {
+                html = `
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Bank Name</label><input type="text" class="w-full rounded border border-slate-300 p-2 text-sm focus:ring-1 ring-purple-500 outline-none"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">DD No.</label><input type="text" class="w-full rounded border border-slate-300 p-2 text-sm focus:ring-1 ring-purple-500 outline-none"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Date</label><input type="date" class="w-full rounded border border-slate-300 p-2 text-sm focus:ring-1 ring-purple-500 outline-none"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Amount</label><input type="number" class="w-full rounded border border-slate-300 p-2 text-sm focus:ring-1 ring-purple-500 outline-none"></div>
+                `;
+            } else if (mode === 'neft') {
+                html = `
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Bank Name</label><input type="text" class="w-full rounded border border-slate-300 p-2 text-sm focus:ring-1 ring-purple-500 outline-none"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">UTR No.</label><input type="text" class="w-full rounded border border-slate-300 p-2 text-sm focus:ring-1 ring-purple-500 outline-none"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Date</label><input type="date" class="w-full rounded border border-slate-300 p-2 text-sm focus:ring-1 ring-purple-500 outline-none"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Amount</label><input type="number" class="w-full rounded border border-slate-300 p-2 text-sm focus:ring-1 ring-purple-500 outline-none"></div>
+                `;
+            } else if (mode === 'cash') {
+                html = `
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Bank Deposited In</label><select class="w-full rounded border border-slate-300 p-2 text-sm focus:ring-1 ring-purple-500 outline-none"><option>SBI</option><option>HDFC</option><option>Canara Bank</option></select></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Transaction ID</label><input type="text" class="w-full rounded border border-slate-300 p-2 text-sm focus:ring-1 ring-purple-500 outline-none"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Date</label><input type="date" class="w-full rounded border border-slate-300 p-2 text-sm focus:ring-1 ring-purple-500 outline-none"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Amount</label><input type="number" class="w-full rounded border border-slate-300 p-2 text-sm focus:ring-1 ring-purple-500 outline-none"></div>
+                `;
+            } else if (mode === 'upi') {
+                html = `
+                    <div class="md:col-span-2 text-xs mb-2 p-3 bg-fuchsia-50 border border-fuchsia-200 rounded-lg text-fuchsia-900">
+                        <strong>Available UPI IDs:</strong><br>
+                        • SBI: indiantalent@sbi<br>
+                        • HDFC: indiantalent.82113152@hdfcbank<br>
+                        • Canara: 3155494016849112@cnrb
+                    </div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">UPI Transaction ID / Ref No.</label><input type="text" class="w-full rounded border border-slate-300 p-2 text-sm focus:ring-1 ring-purple-500 outline-none"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Date</label><input type="date" class="w-full rounded border border-slate-300 p-2 text-sm focus:ring-1 ring-purple-500 outline-none"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Amount</label><input type="number" class="w-full rounded border border-slate-300 p-2 text-sm focus:ring-1 ring-purple-500 outline-none"></div>
+                `;
+            }
+            
+            container.innerHTML = html;
+        }
+
+        // --- CUSTOM MODAL POPUPS ---
+        async function showSuccessModal(event) {
+            event.preventDefault();
+        
+            const formData = collectFormData();
+            const csrfToken = window._csrf_token || "";
+        
+            try {
+                const response = await fetch(
+                    "/api/method/ito_customization.ito_customization.api.save_little_champ_registration",
+                    {
+                        method: "POST",
+                        credentials: "include",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-Frappe-CSRF-Token": csrfToken
+                        },
+                        body: JSON.stringify({
+                            registration_data: JSON.stringify(formData)
+                        })
+                    }
+                );
+        
+                const result = await response.json();
+                console.log("Status:", response.status, "Response:", result);
+        
+                if (!response.ok || !result.message?.success) {
+                    alert("Failed to save: " + JSON.stringify(result));
+                    return;
+                }
+        
+                const modal = document.getElementById("successModal");
+                const card = document.getElementById("successModalCard");
+                modal.classList.remove("hidden");
+                setTimeout(() => {
+                    card.classList.remove("scale-95", "opacity-0");
+                    card.classList.add("scale-100", "opacity-100");
+                }, 50);
+        
+            } catch (error) {
+                console.error(error);
+                alert("Submission failed: " + error.message);
+            }
+        }
+
+        function collectFormData() {
+
+            const data = {
+                school_info: {},
+                coordinators: {},
+                exams: {},
+                payment: {}
+            };
+        
+            // ----------------------------------
+            // School Information (Step 1)
+            // ----------------------------------
+        
+            const schoolInputs = document.querySelectorAll(
+                '#step1 input, #step1 select, #step1 textarea'
+            );
+        
+            const schoolLabels = {
+                0: 'school_name',
+                1: 'school_code',
+                2: 'school_address',
+                3: 'city',
+                4: 'taluka',
+                5: 'district',
+                6: 'state',
+                7: 'pincode',
+                8: 'gst_no',
+                9: 'std_code',
+                10: 'phone_no',
+                11: 'whatsapp_no',
+                12: 'school_email'
+            };
+        
+            schoolInputs.forEach((input, index) => {
+        
+                if (schoolLabels[index]) {
+        
+                    data.school_info[
+                        schoolLabels[index]
+                    ] = input.value;
+                }
+            });
+        
+            // ----------------------------------
+            // Coordinators (Step 2)
+            // ----------------------------------
+        
+            const coordRows =
+                document.querySelectorAll(
+                    '#step2 tbody tr'
+                );
+        
+                const coordRoles = [
+                'principal',
+                'overall_coordinator',
+                'maths',
+                'english',
+                'evs',
+                'drawing',
+                'hindi',
+                'abacus'
+            ];
+        
+            coordRows.forEach((row, index) => {
+        
+                const cells =
+                    row.querySelectorAll(
+                        'input, select'
+                    );
+        
+                if (
+                    cells.length >= 4 &&
+                    cells[0].value
+                ) {
+        
+                    data.coordinators[
+                        coordRoles[index] ||
+                        `coord_${index}`
+                    ] = {
+                        name: cells[0].value,
+                        mobile: cells[1].value,
+                        dob: cells[2].value,
+                        email: cells[3].value
+                    };
+                }
+            });
+        
+            // ----------------------------------
+// Exams (Step 3)
+// ----------------------------------
+
+document
+.querySelectorAll('[id^="lcSubjectCard_"]')
+.forEach(card => {
+
+    const cardId = card.id;
+
+    const subjectCode =
+        cardId.replace(
+            'lcSubjectCard_',
+            ''
+        );
+
+    const tbody =
+        card.querySelector('tbody');
+
+    if (!tbody) return;
+
+    const selectedDate =
+        card.querySelector(
+            `input[name="date_${cardId}"]:checked`
+        )?.value || '';
+
+    data.exams[subjectCode] = {
+        exam_date: selectedDate,
+        registrations: []
+    };
+
+    tbody
+        .querySelectorAll('tr')
+        .forEach(row => {
+
+            const cells =
+                row.querySelectorAll(
+                    'input, select'
+                );
+
+            if (
+                cells.length >= 4 &&
+                (
+                    cells[0].value ||
+                    cells[1].value ||
+                    cells[2].value ||
+                    cells[3].value
+                )
+            ) {
+
+                data.exams[
+                    subjectCode
+                ].registrations.push({
+                    class: cells[0].value,
+                    teacher_name: cells[1].value,
+                    whatsapp: cells[2].value,
+                    students: cells[3].value
+                });
+            }
+        });
+
+    if (
+        data.exams[
+            subjectCode
+        ].registrations.length === 0
+    ) {
+
+        delete data.exams[
+            subjectCode
+        ];
+    }
+});
+        
+            // ----------------------------------
+            // Payment (Step 4)
+            // ----------------------------------
+        
+            data.payment.mode =
+                document.querySelector(
+                    'input[name="payment_mode"]:checked'
+                )?.value || '';
+        
+            data.payment.reference =
+                document.querySelector(
+                    'input[name="reference_type"]:checked'
+                )?.value || '';
+        
+            data.payment.coordinator_name =
+                document.querySelector(
+                    'input[name="reference_type"][value="coordinator"]'
+                )
+                ?.parentElement
+                ?.parentElement
+                ?.querySelector('input')
+                ?.value || '';
+        
+            console.log(
+                "Final Form Data",
+                data
+            );
+        
+            return data;
+        }
+
+        function closeSuccessModal() {
+            const modal = document.getElementById('successModal');
+            const card = document.getElementById('successModalCard');
+            card.classList.add('scale-95', 'opacity-0');
+            card.classList.remove('scale-100', 'opacity-100');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 250);
+        }
+
+        // --- PAGE INIT ---
+        window.onload = async function() {
+            buildAllSubjectAccordions();
+            togglePaymentFields();
+
+            await loadCustomerData();
+
+        };
+
+        async function loadCustomerData() {
+
+            try {
+        
+                const response = await fetch(
+                    "/api/method/ito_customization.ito_customization.api.get_customer_from_session_user"
+                );
+        
+                const result = await response.json();
+        
+                if (!result.message) {
+                    return;
+                }
+        
+                // ONLY FOR LITTLE CHAMP SCHOOLS
+                if (!result.message.is_little_champ) {
+                    return;
+                }
+        
+                populateSchoolInfo(result.message);
+        
+                populateCoordinatorData(
+                    result.message.coordinators || {}
+                );
+        
+                populateExamSummaryData(
+                    result.message.exam_summaries || []
+                );
+        
+            } catch (e) {
+        
+                console.error(e);
+        
+            }
+        }
+
+    </script>
+</body>
+</html>
