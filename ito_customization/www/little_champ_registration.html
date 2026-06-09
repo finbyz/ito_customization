@@ -287,7 +287,7 @@
                 </button>
                 <div class="flex-grow"></div>
                 <button type="button" id="nextBtn" onclick="changeStep(1)" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md hover:shadow-lg transition-all focus:ring-2 focus:ring-purple-500 outline-none">
-                    Next Step &rarr;
+                    Save and Proceed &rarr;
                 </button>
                 <button type="submit" id="submitBtn" class="hidden bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md hover:shadow-lg transition-all focus:ring-2 focus:ring-green-500 whitespace-nowrap outline-none">
                     Submit LC Registration ✓
@@ -318,13 +318,31 @@
         let currentStep = 1;
         const totalSteps = 4;
 
-        function changeStep(direction) {
+        async function changeStep(direction) {
+
+            if (direction === 1) {
+        
+                const saved =
+                    await saveCurrentStep();
+        
+                if (!saved) {
+                    return;
+                }
+            }
+        
             currentStep += direction;
+        
             if (currentStep < 1) currentStep = 1;
             if (currentStep > totalSteps) currentStep = totalSteps;
-
+        
             updateWizardUI();
-            document.getElementById('registrationForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        
+            document
+                .getElementById("registrationForm")
+                .scrollIntoView({
+                    behavior: "smooth",
+                    block: "start"
+                });
         }
 
         function updateWizardUI() {
@@ -658,6 +676,253 @@
             }
             
             container.innerHTML = html;
+        }
+
+        function validateStep2() {
+
+            const rows =
+                document.querySelectorAll(
+                    "#step2 tbody tr"
+                );
+        
+            for (const row of rows) {
+        
+                const role =
+                    row.querySelector("td")
+                        ?.innerText
+                        ?.trim();
+        
+                const inputs =
+                    row.querySelectorAll(
+                        "input"
+                    );
+        
+                if (inputs.length < 4) {
+                    continue;
+                }
+        
+                const name =
+                    inputs[0].value.trim();
+        
+                const mobile =
+                    inputs[1].value.trim();
+        
+                const dob =
+                    inputs[2].value.trim();
+        
+                const email =
+                    inputs[3].value.trim();
+        
+                const hasAnyValue =
+                    name ||
+                    mobile ||
+                    dob ||
+                    email;
+        
+                if (!hasAnyValue) {
+                    continue;
+                }
+        
+                if (!mobile) {
+        
+                    alert(
+                        `${role}: Mobile is mandatory`
+                    );
+        
+                    return false;
+                }
+        
+                if (!dob) {
+        
+                    alert(
+                        `${role}: DOB is mandatory`
+                    );
+        
+                    return false;
+                }
+        
+                if (!email) {
+        
+                    alert(
+                        `${role}: Email is mandatory`
+                    );
+        
+                    return false;
+                }
+            }
+        
+            return true;
+        }
+
+        function validateStep3() {
+
+            const exams =
+                collectFormData().exams;
+        
+            for (
+                const [subject, data]
+                of Object.entries(exams)
+            ) {
+        
+                const rows =
+                    data.registrations || [];
+        
+                for (const row of rows) {
+        
+                    const hasAnyValue =
+                        row.class ||
+                        row.teacher_name ||
+                        row.whatsapp ||
+                        row.students;
+        
+                    if (!hasAnyValue) {
+                        continue;
+                    }
+        
+                    if (!row.class) {
+        
+                        alert(
+                            `${subject}: Class is mandatory`
+                        );
+        
+                        return false;
+                    }
+        
+                    if (!row.teacher_name) {
+        
+                        alert(
+                            `${subject}: Teacher Name is mandatory`
+                        );
+        
+                        return false;
+                    }
+        
+                    if (!row.whatsapp) {
+        
+                        alert(
+                            `${subject}: WhatsApp Number is mandatory`
+                        );
+        
+                        return false;
+                    }
+        
+                    if (!row.students) {
+        
+                        alert(
+                            `${subject}: Number of Students is mandatory`
+                        );
+        
+                        return false;
+                    }
+                }
+            }
+        
+            return true;
+        }
+
+        async function saveCurrentStep() {
+
+            try {
+        
+                let payload = {};
+        
+                if (currentStep === 1) {
+        
+                    payload = {
+                        step: 1,
+                        school_info:
+                            collectFormData()
+                                .school_info
+                    };
+        
+                } else if (currentStep === 2) {
+
+                    if (!validateStep2()) {
+                        return false;
+                    }
+                
+                    payload = {
+                        step: 2,
+                        coordinators:
+                            collectFormData()
+                                .coordinators
+                    };
+                
+        
+                } else if (currentStep === 3) {
+
+                    if (!validateStep3()) {
+                        return false;
+                    }
+                
+                    payload = {
+                        step: 3,
+                        exams:
+                            collectFormData()
+                                .exams
+                    };
+                
+        
+                } else {
+        
+                    return true;
+                }
+        
+                if (
+                    window.current_user === "Guest"
+                ) {
+                    return true;
+                }
+        
+                const response = await fetch(
+                    "/api/method/ito_customization.ito_customization.api.save_little_champ_step",
+                    {
+                        method: "POST",
+                        credentials: "include",
+                        headers: {
+                            "Content-Type":
+                                "application/json",
+                            "X-Frappe-CSRF-Token":
+                                window._csrf_token || ""
+                        },
+                        body: JSON.stringify(
+                            payload
+                        )
+                    }
+                );
+        
+                const result =
+                    await response.json();
+        
+                if (
+                    !response.ok ||
+                    (
+                        result.message &&
+                        result.message.success === false
+                    )
+                ) {
+        
+                    throw new Error(
+                        result.message?.message ||
+                        "Unable to save"
+                    );
+                }
+        
+                return true;
+        
+            } catch (e) {
+        
+                console.error(
+                    "Step Save Error",
+                    e
+                );
+        
+                alert(
+                    "Unable to save current step."
+                );
+        
+                return false;
+            }
         }
 
         // --- CUSTOM MODAL POPUPS ---

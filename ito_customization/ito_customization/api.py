@@ -1156,3 +1156,284 @@ def create_or_update_little_champ_teachers(
     customer.save(
         ignore_permissions=True
     )
+
+
+@frappe.whitelist()
+def save_little_champ_step():
+
+    try:
+
+        data = frappe.request.get_json() or {}
+        step = cint(data.get("step"))
+
+        original_flag = frappe.flags.ignore_permissions
+        frappe.flags.ignore_permissions = True
+
+        try:
+
+            # ----------------------------------
+            # STEP 1 : School Information
+            # ----------------------------------
+
+            if step == 1:
+
+                school_info = data.get(
+                    "school_info",
+                    {}
+                )
+
+                customer = create_or_update_customer(
+                    school_info
+                )
+
+                customer_doc = frappe.get_doc(
+                    "Customer",
+                    customer
+                )
+
+                customer_doc.custom_is_little_champ = 1
+
+                customer_doc.custom_school_code = (
+                    school_info.get(
+                        "school_code"
+                    )
+                )
+
+                customer_doc.custom_taluka = (
+                    school_info.get(
+                        "taluka"
+                    )
+                )
+
+                customer_doc.custom_district = (
+                    school_info.get(
+                        "district"
+                    )
+                )
+
+                customer_doc.save(
+                    ignore_permissions=True
+                )
+
+                if customer_doc.customer_primary_contact:
+
+                    contact = frappe.get_doc(
+                        "Contact",
+                        customer_doc.customer_primary_contact
+                    )
+
+                    contact.mobile_no = (
+                        school_info.get(
+                            "phone_no"
+                        )
+                    )
+
+                    contact.custom_whatsapp_no = (
+                        school_info.get(
+                            "whatsapp_no"
+                        )
+                    )
+
+                    contact.save(
+                        ignore_permissions=True
+                    )
+
+                create_or_update_address(
+                    customer_doc.name,
+                    school_info
+                )
+
+                frappe.cache().set_value(
+                    f"little_champ_customer_{frappe.session.user}",
+                    customer_doc.name
+                )
+
+                frappe.db.commit()
+
+                return {
+                    "success": True,
+                    "step": 1,
+                    "customer": customer_doc.name
+                }
+
+            # ----------------------------------
+            # STEP 2 : Coordinators
+            # ----------------------------------
+
+            elif step == 2:
+
+                customer = frappe.cache().get_value(
+                    f"little_champ_customer_{frappe.session.user}"
+                )
+
+                if not customer:
+
+                    customer = frappe.db.get_value(
+                        "Portal User",
+                        {
+                            "user":
+                                frappe.session.user
+                        },
+                        "parent"
+                    )
+
+                if not customer:
+                    frappe.throw(
+                        "Please save School Information first."
+                    )
+
+                create_or_update_little_champ_teachers(
+                    data.get(
+                        "coordinators",
+                        {}
+                    ),
+                    customer
+                )
+
+                frappe.db.commit()
+
+                return {
+                    "success": True,
+                    "step": 2
+                }
+
+            # ----------------------------------
+            # STEP 3 : Exam Summary
+            # ----------------------------------
+
+            elif step == 3:
+
+                customer = frappe.cache().get_value(
+                    f"little_champ_customer_{frappe.session.user}"
+                )
+
+                if not customer:
+
+                    customer = frappe.db.get_value(
+                        "Portal User",
+                        {
+                            "user":
+                                frappe.session.user
+                        },
+                        "parent"
+                    )
+
+                if not customer:
+                    frappe.throw(
+                        "Please save School Information first."
+                    )
+
+                exams_data = data.get(
+                    "exams",
+                    {}
+                )
+
+                if exams_data:
+
+                    es_name = frappe.db.get_value(
+                        "Exams Summary",
+                        {
+                            "customer":
+                                customer
+                        }
+                    )
+
+                    if es_name:
+
+                        es_doc = frappe.get_doc(
+                            "Exams Summary",
+                            es_name
+                        )
+
+                    else:
+
+                        es_doc = frappe.new_doc(
+                            "Exams Summary"
+                        )
+
+                        es_doc.customer = customer
+
+                    es_doc.exam_summary = []
+
+                    for subject_key, subject_data in exams_data.items():
+
+                        subject_name = (
+                            subject_data.get(
+                                "subject"
+                            )
+                            or subject_data.get(
+                                "subject_name"
+                            )
+                            or subject_key
+                        )
+
+                        registrations = (
+                            subject_data.get(
+                                "registrations",
+                                []
+                            )
+                        )
+
+                        for row in registrations:
+
+                            es_doc.append(
+                                "exam_summary",
+                                {
+                                    "subject":
+                                        subject_name,
+                                    "class":
+                                        row.get("class"),
+                                    "teacher_name":
+                                        row.get("teacher_name"),
+                                    "whatsapp_no":
+                                        row.get("whatsapp"),
+                                    "no_of_students":
+                                        row.get("students")
+                                }
+                            )
+
+                    if es_doc.is_new():
+
+                        es_doc.insert(
+                            ignore_permissions=True
+                        )
+
+                    else:
+
+                        es_doc.save(
+                            ignore_permissions=True
+                        )
+
+                frappe.db.commit()
+
+                return {
+                    "success": True,
+                    "step": 3
+                }
+
+            else:
+
+                frappe.throw(
+                    f"Invalid step {step}"
+                )
+
+        finally:
+
+            frappe.flags.ignore_permissions = (
+                original_flag
+            )
+
+    except Exception:
+
+        frappe.db.rollback()
+
+        frappe.log_error(
+            frappe.get_traceback(),
+            "Little Champ Step Save Error"
+        )
+
+        return {
+            "success": False,
+            "message":
+                frappe.get_traceback()
+        }

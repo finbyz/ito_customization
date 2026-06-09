@@ -1,6 +1,6 @@
-
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,117 +11,157 @@
         window._csrf_token = "{{ frappe.session.csrf_token }}";
     </script>
     <style>
-        .table-container::-webkit-scrollbar { height: 8px; width: 8px; }
-        .table-container::-webkit-scrollbar-thumb { background-color: #94a3b8; border-radius: 4px; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+        .table-container::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
         }
+
+        .table-container::-webkit-scrollbar-thumb {
+            background-color: #94a3b8;
+            border-radius: 4px;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
         .animate-fade-in {
             animation: fadeIn 0.4s ease-out forwards;
         }
     </style>
 </head>
+
 <body class="bg-slate-50 min-h-screen py-10 px-4 font-sans text-slate-800">
 
     <div class="max-w-[1200px] mx-auto bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200">
-        
-        <div class="bg-blue-800 p-6 text-white flex flex-col md:flex-row justify-between items-center md:items-start gap-4">
+
+        <div
+            class="bg-blue-800 p-6 text-white flex flex-col md:flex-row justify-between items-center md:items-start gap-4">
             <div>
                 <h1 class="text-3xl font-bold tracking-tight">INDIAN TALENT OLYMPIAD</h1>
                 <p class="text-blue-200 mt-1 font-medium">School Registration Form 2026-27</p>
             </div>
-                        <div
-                class="bg-blue-700/20 border border-blue-400 rounded-2xl px-8 py-4 text-center shadow-sm"
-            >
+            <div class="bg-blue-700/20 border border-blue-400 rounded-2xl px-8 py-4 text-center shadow-sm">
                 <p class="text-blue-100 text-sm uppercase tracking-wider">
                     Application Deadline
                 </p>
 
-                <p
-                    id="application-deadline"
-                    class="text-white text-2xl font-bold mt-1"
-                >
+                <p id="application-deadline" class="text-white text-2xl font-bold mt-1">
                     August 31, 2026
                 </p>
             </div>
-                    </div>
+        </div>
 
         <form class="p-8" id="registrationForm" onsubmit="showSuccessModal(event)">
-            
+
             <div class="mb-8">
                 <div class="flex items-center justify-between relative max-w-4xl mx-auto">
                     <div class="absolute left-0 top-5 -translate-y-1/2 w-full h-1 bg-slate-200 -z-10"></div>
-                    <div class="absolute left-0 top-5 -translate-y-1/2 h-1 bg-blue-600 -z-10 transition-all duration-500 ease-in-out" id="progressLine" style="width: 0%;"></div>
-                    
+                    <div class="absolute left-0 top-5 -translate-y-1/2 h-1 bg-blue-600 -z-10 transition-all duration-500 ease-in-out"
+                        id="progressLine" style="width: 0%;"></div>
+
                     <div class="flex flex-col items-center gap-2">
-                        <div class="step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-blue-600 text-white shadow ring-4 ring-white transition-colors duration-300" data-step="1">1</div>
+                        <div class="step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-blue-600 text-white shadow ring-4 ring-white transition-colors duration-300"
+                            data-step="1">1</div>
                         <span class="text-xs font-bold text-blue-700 uppercase tracking-wide">School Info</span>
                     </div>
                     <div class="flex flex-col items-center gap-2">
-                        <div class="step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-white border-2 border-slate-300 text-slate-400 shadow ring-4 ring-white transition-colors duration-300" data-step="2">2</div>
-                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide transition-colors duration-300">Co-ordinators</span>
+                        <div class="step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-white border-2 border-slate-300 text-slate-400 shadow ring-4 ring-white transition-colors duration-300"
+                            data-step="2">2</div>
+                        <span
+                            class="text-xs font-semibold text-slate-400 uppercase tracking-wide transition-colors duration-300">Co-ordinators</span>
                     </div>
                     <div class="flex flex-col items-center gap-2">
-                        <div class="step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-white border-2 border-slate-300 text-slate-400 shadow ring-4 ring-white transition-colors duration-300" data-step="3">3</div>
-                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide transition-colors duration-300">Exams Matrix</span>
+                        <div class="step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-white border-2 border-slate-300 text-slate-400 shadow ring-4 ring-white transition-colors duration-300"
+                            data-step="3">3</div>
+                        <span
+                            class="text-xs font-semibold text-slate-400 uppercase tracking-wide transition-colors duration-300">Exams
+                            Matrix</span>
                     </div>
                     <div class="flex flex-col items-center gap-2">
-                        <div class="step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-white border-2 border-slate-300 text-slate-400 shadow ring-4 ring-white transition-colors duration-300" data-step="4">4</div>
-                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide transition-colors duration-300">Payment</span>
+                        <div class="step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-white border-2 border-slate-300 text-slate-400 shadow ring-4 ring-white transition-colors duration-300"
+                            data-step="4">4</div>
+                        <span
+                            class="text-xs font-semibold text-slate-400 uppercase tracking-wide transition-colors duration-300">Payment</span>
                     </div>
                 </div>
             </div>
 
             <div id="step1" class="step-content animate-fade-in">
                 <div class="mb-10">
-                    <h2 class="text-xl font-semibold text-slate-800 border-b-2 border-blue-100 pb-2 mb-6 flex items-center gap-2">
-                        <span class="bg-blue-100 text-blue-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">1</span>
+                    <h2
+                        class="text-xl font-semibold text-slate-800 border-b-2 border-blue-100 pb-2 mb-6 flex items-center gap-2">
+                        <span
+                            class="bg-blue-100 text-blue-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">1</span>
                         School Information
                     </h2>
-                    
+
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-5">
                         <div class="md:col-span-3">
                             <label class="block text-sm font-medium text-slate-700 mb-1">School Name</label>
-                            <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 uppercase focus:ring-2 focus:ring-blue-500 outline-none transition-shadow" placeholder="ENTER SCHOOL NAME">
+                            <input type="text"
+                                class="w-full rounded-md border border-slate-300 px-3 py-2 uppercase focus:ring-2 focus:ring-blue-500 outline-none transition-shadow"
+                                placeholder="ENTER SCHOOL NAME">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-slate-700 mb-1">ITO School Code (Existing)</label>
-                            <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 uppercase focus:ring-2 focus:ring-blue-500 outline-none transition-shadow" placeholder="ITO 14 - - - -">
+                            <label class="block text-sm font-medium text-slate-700 mb-1">ITO School Code
+                                (Existing)</label>
+                            <input type="text"
+                                class="w-full rounded-md border border-slate-300 px-3 py-2 uppercase focus:ring-2 focus:ring-blue-500 outline-none transition-shadow"
+                                placeholder="ITO 14 - - - -">
                         </div>
 
                         <div class="md:col-span-4">
                             <label class="block text-sm font-medium text-slate-700 mb-1">Complete School Address</label>
-                            <textarea rows="2" class="w-full rounded-md border border-slate-300 px-3 py-2 uppercase focus:ring-2 focus:ring-blue-500 outline-none transition-shadow"></textarea>
+                            <textarea rows="2"
+                                class="w-full rounded-md border border-slate-300 px-3 py-2 uppercase focus:ring-2 focus:ring-blue-500 outline-none transition-shadow"></textarea>
                         </div>
 
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">City / Town</label>
-                            <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
+                            <input type="text"
+                                class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">Taluka</label>
-                            <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
+                            <input type="text"
+                                class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">District</label>
-                            <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
+                            <input type="text"
+                                class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">State & Pin Code</label>
                             <div class="flex gap-2">
-                                <input type="text" class="w-2/3 rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow" placeholder="State">
-                                <input type="text" class="w-1/3 rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow" placeholder="PIN">
+                                <input type="text"
+                                    class="w-2/3 rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow"
+                                    placeholder="State">
+                                <input type="text"
+                                    class="w-1/3 rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow"
+                                    placeholder="PIN">
                             </div>
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium text-slate-700 mb-1">GST No. of School / Trust</label>
-                            <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
+                            <label class="block text-sm font-medium text-slate-700 mb-1">GST No. of School /
+                                Trust</label>
+                            <input type="text"
+                                class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">Board / Trust</label>
-                            <select class="w-full rounded-md border border-slate-300 px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
+                            <select
+                                class="w-full rounded-md border border-slate-300 px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
                                 <option>CBSE</option>
                                 <option>ICSE</option>
                                 <option>STATE BOARD</option>
@@ -129,28 +169,37 @@
                             </select>
                         </div>
                         <div class="md:col-span-2">
-                            <label class="block text-sm font-medium text-slate-700 mb-1">Total student strength of school upto running classes</label>
-                            <input type="number" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Total student strength of
+                                school upto running classes</label>
+                            <input type="number"
+                                class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
                         </div>
 
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">School Ph. No. 1</label>
-                            <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
+                            <input type="text"
+                                class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-slate-700 mb-1">School Ph. No. 2 (with STD)</label>
-                            <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
+                            <label class="block text-sm font-medium text-slate-700 mb-1">School Ph. No. 2 (with
+                                STD)</label>
+                            <input type="text"
+                                class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
                         </div>
                         <div class="md:col-span-2">
                             <label class="block text-sm font-medium text-slate-700 mb-1">School E-mail ID</label>
-                            <input type="email" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
+                            <input type="email"
+                                class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
                         </div>
                     </div>
                 </div>
-            </div> <div id="step2" class="step-content hidden animate-fade-in">
+            </div>
+            <div id="step2" class="step-content hidden animate-fade-in">
                 <div class="mb-10">
-                    <h2 class="text-xl font-semibold text-slate-800 border-b-2 border-blue-100 pb-2 mb-6 flex items-center gap-2">
-                        <span class="bg-blue-100 text-blue-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">2</span>
+                    <h2
+                        class="text-xl font-semibold text-slate-800 border-b-2 border-blue-100 pb-2 mb-6 flex items-center gap-2">
+                        <span
+                            class="bg-blue-100 text-blue-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">2</span>
                         Principals, Co-ordinators & Subject In-Charges
                     </h2>
 
@@ -159,140 +208,97 @@
                             <table class="w-full text-left border-collapse whitespace-nowrap">
                                 <thead class="bg-blue-50/80 border-b border-blue-200">
                                     <tr>
-                                        <th class="p-4 text-xs font-bold text-slate-700 uppercase tracking-wider w-1/4">Role / Title</th>
-                                        <th class="p-4 text-xs font-bold text-slate-700 uppercase tracking-wider w-1/4">Name</th>
-                                        <th class="p-4 text-xs font-bold text-slate-700 uppercase tracking-wider w-1/6">Mobile</th>
-                                        <th class="p-4 text-xs font-bold text-slate-700 uppercase tracking-wider w-1/6">D.O.B</th>
-                                        <th class="p-4 text-xs font-bold text-slate-700 uppercase tracking-wider w-1/4">Email ID</th>
+                                        <th class="p-4 text-xs font-bold text-slate-700 uppercase tracking-wider w-1/4">
+                                            Role / Title</th>
+                                        <th class="p-4 text-xs font-bold text-slate-700 uppercase tracking-wider w-1/4">
+                                            Name</th>
+                                        <th class="p-4 text-xs font-bold text-slate-700 uppercase tracking-wider w-1/6">
+                                            Mobile</th>
+                                        <th class="p-4 text-xs font-bold text-slate-700 uppercase tracking-wider w-1/6">
+                                            D.O.B</th>
+                                        <th class="p-4 text-xs font-bold text-slate-700 uppercase tracking-wider w-1/4">
+                                            Email ID</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-slate-100">
-                                    
-                                    <tr class="hover:bg-blue-50/30 transition-colors">
-                                        <td class="p-3 font-bold text-blue-900 bg-blue-50/50 border-r border-blue-100 flex items-center gap-2"><span>👑</span> Head Master / Principal</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
-                                    </tr>
-                                    <tr class="hover:bg-blue-50/30 transition-colors">
-                                        <td class="p-3 font-bold text-blue-900 bg-blue-50/50 border-r border-blue-100 flex items-center gap-2"><span>⭐</span> Overall Co-ordinator</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
-                                    </tr>
 
-                                    <tr class="hover:bg-slate-50 transition-colors">
-                                        <td class="p-3 font-semibold text-slate-700 border-r border-slate-100 flex items-center gap-2"><span>🔬</span> Science In-charge (ISO)</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
+                                    <tr class="hover:bg-blue-50/30 transition-colors">
+                                        <td
+                                            class="p-3 font-bold text-blue-900 bg-blue-50/50 border-r border-blue-100 flex items-center gap-2">
+                                            <span>👑</span> Head Master / Principal</td>
+                                        <td class="p-2"><input type="text"
+                                                class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all"
+                                                placeholder="Enter Name"></td>
+                                        <td class="p-2"><input type="text"
+                                                class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all"
+                                                placeholder="Mobile No."></td>
+                                        <td class="p-2"><input type="date"
+                                                class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600">
+                                        </td>
+                                        <td class="p-2"><input type="email"
+                                                class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all"
+                                                placeholder="Email Address"></td>
                                     </tr>
-                                    <tr class="hover:bg-slate-50 transition-colors">
-                                        <td class="p-3 font-semibold text-slate-700 border-r border-slate-100 flex items-center gap-2"><span>📐</span> Maths In-charge (IMO)</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
-                                    </tr>
-                                    <tr class="hover:bg-slate-50 transition-colors">
-                                        <td class="p-3 font-semibold text-slate-700 border-r border-slate-100 flex items-center gap-2"><span>🔤</span> English In-charge (EIO)</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
-                                    </tr>
-                                    <tr class="hover:bg-slate-50 transition-colors">
-                                        <td class="p-3 font-semibold text-slate-700 border-r border-slate-100 flex items-center gap-2"><span>🌍</span> GK In-charge (GKIO)</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
-                                    </tr>
-                                    <tr class="hover:bg-slate-50 transition-colors">
-                                        <td class="p-3 font-semibold text-slate-700 border-r border-slate-100 flex items-center gap-2"><span>💻</span> Computer In-charge (ICO)</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
-                                    </tr>
-                                    <tr class="hover:bg-slate-50 transition-colors">
-                                        <td class="p-3 font-semibold text-slate-700 border-r border-slate-100 flex items-center gap-2"><span>🎨</span> Drawing In-charge (IDO)</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
-                                    </tr>
-                                    <tr class="hover:bg-slate-50 transition-colors">
-                                        <td class="p-3 font-semibold text-slate-700 border-r border-slate-100 flex items-center gap-2"><span>📝</span> Essay In-charge (NESO)</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
-                                    </tr>
-                                    <tr class="hover:bg-slate-50 transition-colors">
-                                        <td class="p-3 font-semibold text-slate-700 border-r border-slate-100 flex items-center gap-2"><span>🏛️</span> Social Studies (NSSO)</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
-                                    </tr>
-                                    <tr class="hover:bg-slate-50 transition-colors">
-                                        <td class="p-3 font-semibold text-slate-700 border-r border-slate-100 flex items-center gap-2"><span>🪔</span> Hindi In-charge (NHO)</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
-                                    </tr>
-                                    <tr class="hover:bg-slate-50 transition-colors">
-                                        <td class="p-3 font-semibold text-slate-700 border-r border-slate-100 flex items-center gap-2"><span>🧠</span> Logical Reasoning (NLRO)</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
-                                    </tr>
-                                    <tr class="hover:bg-slate-50 transition-colors">
-                                        <td class="p-3 font-semibold text-slate-700 border-r border-slate-100 flex items-center gap-2"><span>📊</span> Commerce In-charge (CIO)</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
+                                    <tr class="hover:bg-blue-50/30 transition-colors">
+                                        <td
+                                            class="p-3 font-bold text-blue-900 bg-blue-50/50 border-r border-blue-100 flex items-center gap-2">
+                                            <span>⭐</span> Overall Co-ordinator</td>
+                                        <td class="p-2"><input type="text"
+                                                class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all"
+                                                placeholder="Enter Name"></td>
+                                        <td class="p-2"><input type="text"
+                                                class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all"
+                                                placeholder="Mobile No."></td>
+                                        <td class="p-2"><input type="date"
+                                                class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600">
+                                        </td>
+                                        <td class="p-2"><input type="email"
+                                                class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all"
+                                                placeholder="Email Address"></td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
                 </div>
-            </div> <div id="step3" class="step-content hidden animate-fade-in">
+            </div>
+            <div id="step3" class="step-content hidden animate-fade-in">
                 <div class="mb-10">
-                    <div class="flex flex-col md:flex-row md:items-center justify-between border-b-2 border-blue-100 pb-2 mb-6 gap-2">
+                    <div
+                        class="flex flex-col md:flex-row md:items-center justify-between border-b-2 border-blue-100 pb-2 mb-6 gap-2">
                         <h2 class="text-xl font-semibold text-slate-800 flex items-center gap-2">
-                            <span class="bg-blue-100 text-blue-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">3</span>
+                            <span
+                                class="bg-blue-100 text-blue-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">3</span>
                             Exams Summary (Subject-Wise Registrations)
                         </h2>
                         <div class="flex gap-2 self-start md:self-auto">
-                            <button type="button" onclick="expandAll()" class="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-bold px-3 py-1.5 rounded transition-all">
+                            <button type="button" onclick="expandAll()"
+                                class="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-bold px-3 py-1.5 rounded transition-all">
                                 Expand All
                             </button>
-                            <button type="button" onclick="collapseAll()" class="bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300 text-xs font-bold px-3 py-1.5 rounded transition-all">
+                            <button type="button" onclick="collapseAll()"
+                                class="bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300 text-xs font-bold px-3 py-1.5 rounded transition-all">
                                 Collapse All
                             </button>
                         </div>
                     </div>
-                    
+
                     <p class="text-sm text-slate-500 mb-6 bg-yellow-50 p-3 border border-yellow-200 rounded-lg">
-                        <strong>Instructions:</strong> Expand any subject to record class registration, select an exam date, and add student tallies. Collapsed subjects with active numbers will show live counts in the blue status pills.
+                        <strong>Instructions:</strong> Expand any subject to record class registration, select an exam
+                        date, and add student tallies. Collapsed subjects with active numbers will show live counts in
+                        the blue status pills.
                     </p>
 
                     <div id="subjectCardsContainer" class="space-y-4">
-                        </div>
+                    </div>
                 </div>
-            </div> <div id="step4" class="step-content hidden animate-fade-in">
+            </div>
+            <div id="step4" class="step-content hidden animate-fade-in">
                 <div class="mb-10">
-                    <h2 class="text-xl font-semibold text-slate-800 border-b-2 border-blue-100 pb-2 mb-6 flex items-center gap-2">
-                        <span class="bg-blue-100 text-blue-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">4</span>
+                    <h2
+                        class="text-xl font-semibold text-slate-800 border-b-2 border-blue-100 pb-2 mb-6 flex items-center gap-2">
+                        <span
+                            class="bg-blue-100 text-blue-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">4</span>
                         Fee Calculation & Mode of Payment
                     </h2>
 
@@ -300,25 +306,29 @@
                         <div class="bg-blue-50 rounded-xl p-5 border border-blue-200 flex flex-col justify-center">
                             <div class="flex justify-between items-center mb-4">
                                 <h3 class="text-sm font-bold text-blue-900 uppercase tracking-wide">Fee Calculator</h3>
-                                <select id="regionSelect" class="text-sm border border-blue-300 rounded p-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500" onchange="calculateTotal()">
+                                <select id="regionSelect"
+                                    class="text-sm border border-blue-300 rounded p-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    onchange="calculateTotal()">
                                     <option value="india">Schools in India (₹150)</option>
                                     <option value="outside">Schools Outside India ($8)</option>
                                 </select>
                             </div>
-                            
+
                             <div class="flex justify-between items-center mb-2">
                                 <span class="text-slate-600 text-sm">Total Registrations (A):</span>
                                 <span class="font-bold text-slate-800" id="totalStudentsDisplay">0</span>
                             </div>
                             <div class="flex justify-between items-center mb-2">
                                 <span class="text-slate-600 text-sm">Free Registrations (B):</span>
-                                <input type="number" id="freeRegInput" min="0" value="0" class="w-20 text-right rounded border border-slate-300 p-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" oninput="calculateTotal()">
+                                <input type="number" id="freeRegInput" min="0" value="0"
+                                    class="w-20 text-right rounded border border-slate-300 p-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    oninput="calculateTotal()">
                             </div>
                             <div class="flex justify-between items-center mb-4 pb-2 border-b border-blue-200">
                                 <span class="text-slate-600 text-sm">Total Paid Reg (A - B):</span>
                                 <span class="font-bold text-slate-800" id="paidRegDisplay">0</span>
                             </div>
-                            
+
                             <div class="flex justify-between items-center mt-auto">
                                 <span class="font-bold text-blue-900">Total Amount:</span>
                                 <span class="text-2xl font-bold text-blue-700" id="totalAmountDisplay">₹ 0</span>
@@ -332,89 +342,117 @@
                         <div class="lg:col-span-2 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <label class="block text-sm font-medium text-slate-700 mb-3">Mode of Payment</label>
                             <div class="flex flex-wrap gap-3 mb-5">
-                                <label class="flex items-center gap-2 cursor-pointer p-2 border rounded-lg hover:bg-slate-50 border-slate-200 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 has-[:checked]:ring-1 ring-blue-500 transition-all">
-                                    <input type="radio" name="payment_mode" value="dd" class="w-4 h-4 text-blue-600" onchange="togglePaymentFields()" checked>
+                                <label
+                                    class="flex items-center gap-2 cursor-pointer p-2 border rounded-lg hover:bg-slate-50 border-slate-200 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 has-[:checked]:ring-1 ring-blue-500 transition-all">
+                                    <input type="radio" name="payment_mode" value="dd" class="w-4 h-4 text-blue-600"
+                                        onchange="togglePaymentFields()" checked>
                                     <span class="text-sm font-medium">A. Demand Draft (DD)</span>
                                 </label>
-                                <label class="flex items-center gap-2 cursor-pointer p-2 border rounded-lg hover:bg-slate-50 border-slate-200 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 has-[:checked]:ring-1 ring-blue-500 transition-all">
-                                    <input type="radio" name="payment_mode" value="neft" class="w-4 h-4 text-blue-600" onchange="togglePaymentFields()">
+                                <label
+                                    class="flex items-center gap-2 cursor-pointer p-2 border rounded-lg hover:bg-slate-50 border-slate-200 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 has-[:checked]:ring-1 ring-blue-500 transition-all">
+                                    <input type="radio" name="payment_mode" value="neft" class="w-4 h-4 text-blue-600"
+                                        onchange="togglePaymentFields()">
                                     <span class="text-sm font-medium">B. NEFT/RTGS</span>
                                 </label>
-                                <label class="flex items-center gap-2 cursor-pointer p-2 border rounded-lg hover:bg-slate-50 border-slate-200 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 has-[:checked]:ring-1 ring-blue-500 transition-all">
-                                    <input type="radio" name="payment_mode" value="cash" class="w-4 h-4 text-blue-600" onchange="togglePaymentFields()">
+                                <label
+                                    class="flex items-center gap-2 cursor-pointer p-2 border rounded-lg hover:bg-slate-50 border-slate-200 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 has-[:checked]:ring-1 ring-blue-500 transition-all">
+                                    <input type="radio" name="payment_mode" value="cash" class="w-4 h-4 text-blue-600"
+                                        onchange="togglePaymentFields()">
                                     <span class="text-sm font-medium">C. Cash Deposit</span>
                                 </label>
-                                <label class="flex items-center gap-2 cursor-pointer p-2 border rounded-lg hover:bg-slate-50 border-slate-200 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 has-[:checked]:ring-1 ring-blue-500 transition-all">
-                                    <input type="radio" name="payment_mode" value="upi" class="w-4 h-4 text-blue-600" onchange="togglePaymentFields()">
+                                <label
+                                    class="flex items-center gap-2 cursor-pointer p-2 border rounded-lg hover:bg-slate-50 border-slate-200 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 has-[:checked]:ring-1 ring-blue-500 transition-all">
+                                    <input type="radio" name="payment_mode" value="upi" class="w-4 h-4 text-blue-600"
+                                        onchange="togglePaymentFields()">
                                     <span class="text-sm font-medium">D. QR Code / UPI</span>
                                 </label>
                             </div>
 
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="paymentFieldsContainer">
-                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div>
-                    <h2 class="text-xl font-semibold text-slate-800 border-b-2 border-blue-100 pb-2 mb-6 flex items-center gap-2">
-                        <span class="bg-blue-100 text-blue-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">5</span>
+                    <h2
+                        class="text-xl font-semibold text-slate-800 border-b-2 border-blue-100 pb-2 mb-6 flex items-center gap-2">
+                        <span
+                            class="bg-blue-100 text-blue-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">5</span>
                         Reference & Declaration
                     </h2>
-                    
+
                     <div class="bg-slate-50 p-5 rounded-lg border border-slate-200 mb-6">
-                        <label class="block text-sm font-medium text-slate-700 mb-2">Are you applying directly or through a reference?</label>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Are you applying directly or
+                            through a reference?</label>
                         <div class="flex gap-6 mb-4">
                             <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="radio" name="reference_type" value="direct" class="w-4 h-4 text-blue-600" checked>
+                                <input type="radio" name="reference_type" value="direct" class="w-4 h-4 text-blue-600"
+                                    checked>
                                 <span class="text-sm font-medium">Directly</span>
                             </label>
                             <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="radio" name="reference_type" value="coordinator" class="w-4 h-4 text-blue-600">
+                                <input type="radio" name="reference_type" value="coordinator"
+                                    class="w-4 h-4 text-blue-600">
                                 <span class="text-sm font-medium">Indian Talent Co-ordinator</span>
                             </label>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-sm text-slate-600 mb-1">Name of Co-ordinator (If any)</label>
-                                <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                                <input type="text"
+                                    class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                             </div>
                         </div>
                     </div>
 
-                    <div class="border-t border-slate-200 pt-6 flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div
+                        class="border-t border-slate-200 pt-6 flex flex-col md:flex-row items-center justify-between gap-6">
                         <label class="flex items-start gap-3 cursor-pointer max-w-3xl">
-                            <input type="checkbox" class="mt-1 w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500">
-                            <span class="text-sm text-slate-600 italic">"All the above filled information is correct as per my knowledge. We agree to any changes and decisions made by INDIAN TALENT OLYMPIAD regarding this examination. By providing contact numbers and emails, I permit ITO to send SMS/WhatsApp alerts."</span>
+                            <input type="checkbox"
+                                class="mt-1 w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500">
+                            <span class="text-sm text-slate-600 italic">"All the above filled information is correct as
+                                per my knowledge. We agree to any changes and decisions made by INDIAN TALENT OLYMPIAD
+                                regarding this examination. By providing contact numbers and emails, I permit ITO to
+                                send SMS/WhatsApp alerts."</span>
                         </label>
                     </div>
                 </div>
-            </div> <div class="border-t border-slate-200 mt-8 pt-6 flex items-center justify-between sticky bottom-0 bg-white py-4 -mx-8 px-8 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-10">
-                <button type="button" id="prevBtn" onclick="changeStep(-1)" class="hidden bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-2.5 px-6 rounded-lg shadow-sm transition-all focus:ring-2 focus:ring-slate-300 outline-none">
+            </div>
+            <div
+                class="border-t border-slate-200 mt-8 pt-6 flex items-center justify-between sticky bottom-0 bg-white py-4 -mx-8 px-8 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-10">
+                <button type="button" id="prevBtn" onclick="changeStep(-1)"
+                    class="hidden bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-2.5 px-6 rounded-lg shadow-sm transition-all focus:ring-2 focus:ring-slate-300 outline-none">
                     &larr; Previous
                 </button>
                 <div class="flex-grow"></div>
-                <button type="button" id="nextBtn" onclick="changeStep(1)" class="bg-blue-700 hover:bg-blue-800 text-white font-bold py-2.5 px-8 rounded-lg shadow-md hover:shadow-lg transition-all focus:ring-2 focus:ring-blue-500 outline-none">
+                <button type="button" id="nextBtn" onclick="changeStep(1)"
+                    class="bg-blue-700 hover:bg-blue-800 text-white font-bold py-2.5 px-8 rounded-lg shadow-md hover:shadow-lg transition-all focus:ring-2 focus:ring-blue-500 outline-none">
                     Save and Proceed &rarr;
                 </button>
-                <button type="submit" id="submitBtn" class="hidden bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md hover:shadow-lg transition-all focus:ring-2 focus:ring-green-500 whitespace-nowrap outline-none">
+                <button type="submit" id="submitBtn"
+                    class="hidden bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md hover:shadow-lg transition-all focus:ring-2 focus:ring-green-500 whitespace-nowrap outline-none">
                     Submit Registration ✓
                 </button>
             </div>
-            
+
         </form>
     </div>
 
-    <div id="successModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
-        <div class="bg-white max-w-md w-full rounded-2xl shadow-2xl p-6 text-center transform scale-95 opacity-0 transition-all duration-300" id="successModalCard">
+    <div id="successModal"
+        class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
+        <div class="bg-white max-w-md w-full rounded-2xl shadow-2xl p-6 text-center transform scale-95 opacity-0 transition-all duration-300"
+            id="successModalCard">
             <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
                 </svg>
             </div>
             <h3 class="text-xl font-bold text-slate-900 mb-2">Registration Submitted!</h3>
-            <p class="text-sm text-slate-500 mb-6">Your Indian Talent Olympiad registration data has been captured successfully. It is ready to map to your ERPNext School Registration ledger.</p>
-            <button onclick="closeSuccessModal()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-5 rounded-lg transition-colors outline-none">
+            <p class="text-sm text-slate-500 mb-6">Your Indian Talent Olympiad registration data has been captured
+                successfully. It is ready to map to your ERPNext School Registration ledger.</p>
+            <button onclick="closeSuccessModal()"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-5 rounded-lg transition-colors outline-none">
                 Close
             </button>
         </div>
@@ -428,21 +466,21 @@
         async function changeStep(direction) {
 
             if (direction === 1) {
-        
+
                 const saved = await saveCurrentStep();
-        
+
                 if (!saved) {
                     return;
                 }
             }
-        
+
             currentStep += direction;
-        
+
             if (currentStep < 1) currentStep = 1;
             if (currentStep > totalSteps) currentStep = totalSteps;
-        
+
             updateWizardUI();
-        
+
             document
                 .getElementById("registrationForm")
                 .scrollIntoView({
@@ -457,60 +495,60 @@
                 document.querySelectorAll(
                     "#step2 tbody tr"
                 );
-        
+
             for (const row of rows) {
-        
+
                 const role =
                     row.querySelector("td")
-                       ?.innerText
-                       ?.trim();
-        
+                        ?.innerText
+                        ?.trim();
+
                 const inputs =
                     row.querySelectorAll(
                         "input"
                     );
-        
+
                 if (inputs.length < 4) {
                     continue;
                 }
-        
+
                 const name =
                     inputs[0].value.trim();
-        
+
                 const mobile =
                     inputs[1].value.trim();
-        
+
                 const dob =
                     inputs[2].value.trim();
-        
+
                 const email =
                     inputs[3].value.trim();
-        
+
                 const hasAnyValue =
                     name ||
                     mobile ||
                     dob ||
                     email;
-        
+
                 if (!hasAnyValue) {
                     continue;
                 }
-        
-        
+
+
                 if (!mobile) {
                     alert(
                         `${role}: Mobile is mandatory`
                     );
                     return false;
                 }
-        
+
                 if (!dob) {
                     alert(
                         `${role}: DOB is mandatory`
                     );
                     return false;
                 }
-        
+
                 if (!email) {
                     alert(
                         `${role}: Email is mandatory`
@@ -518,93 +556,93 @@
                     return false;
                 }
             }
-        
+
             return true;
         }
 
         function validateStep3() {
 
             const exams = collectFormData().exams;
-        
+
             for (const [subject, rows] of Object.entries(exams)) {
-        
+
                 for (let i = 0; i < rows.length; i++) {
-        
+
                     const row = rows[i];
-        
+
                     const hasAnyValue =
                         row.class ||
                         row.teacher_name ||
                         row.whatsapp ||
                         row.students;
-        
+
                     if (!hasAnyValue) {
                         continue;
                     }
-        
+
                     if (!row.class) {
                         alert(`${subject}: Class is mandatory`);
                         return false;
                     }
-        
+
                     if (!row.teacher_name) {
                         alert(`${subject}: Teacher Name is mandatory`);
                         return false;
                     }
-        
+
                     if (!row.whatsapp) {
                         alert(`${subject}: WhatsApp Number is mandatory`);
                         return false;
                     }
-        
+
                     if (!row.students) {
                         alert(`${subject}: Number of Students is mandatory`);
                         return false;
                     }
                 }
             }
-        
+
             return true;
         }
 
         async function saveCurrentStep() {
 
             try {
-        
+
                 let payload = {};
-        
+
                 if (currentStep === 1) {
-        
+
                     payload = {
                         step: 1,
                         school_info: collectFormData().school_info
                     };
-        
+
                 } else if (currentStep === 2) {
 
                     if (!validateStep2()) {
                         return false;
                     }
-        
+
                     payload = {
                         step: 2,
                         coordinators: collectFormData().coordinators,
                         school_info: collectFormData().school_info
                     };
-        
+
                 } else if (currentStep === 3) {
                     if (!validateStep3()) { return false; }
-                    payload = { 
-                        step: 3, 
+                    payload = {
+                        step: 3,
                         exams: collectFormData().exams,
                         school_info: collectFormData().school_info
                     };
                 }
-        
+
                 if (window.current_user === "Guest") {
                     return true;
                 }
-        
+
                 const response = await fetch(
                     "/api/method/ito_customization.ito_customization.api.save_registration_step",
                     {
@@ -617,25 +655,25 @@
                         body: JSON.stringify(payload)
                     }
                 );
-        
+
                 const result = await response.json();
-        
+
                 if (!response.ok || (result.message && result.message.success === false)) {
                     throw new Error(result.message ? result.message.message : "Error saving step");
                 }
-        
+
                 return true;
-        
+
             } catch (e) {
 
                 console.error("Save Error:", e);
-            
+
                 alert(
                     "Unable to save current step."
                 );
             }
-                return false;
-            }
+            return false;
+        }
 
 
         function updateWizardUI() {
@@ -648,7 +686,7 @@
             document.querySelectorAll('.step-indicator').forEach((el) => {
                 const stepNum = parseInt(el.getAttribute('data-step'));
                 const label = el.nextElementSibling;
-                
+
                 if (stepNum < currentStep) {
                     el.className = 'step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow ring-4 ring-white transition-colors duration-300 bg-blue-600 text-white';
                     label.className = 'text-xs font-semibold text-blue-600 transition-colors duration-300';
@@ -666,29 +704,29 @@
             document.getElementById('submitBtn').classList.toggle('hidden', currentStep !== totalSteps);
         }
 
-        
+
 
         const cardsContainer = document.getElementById('subjectCardsContainer');
 
         function buildAllSubjectAccordions(examSummaries = []) {
 
             cardsContainer.innerHTML = '';
-        
+
             examSummaries.forEach(exam => {
-        
+
                 const subjectKey =
                     exam.subject
                         .replace(/[^a-zA-Z0-9]/g, "_");
-        
+
                 const cardId =
                     `subjectCard_${subjectKey}`;
-        
+
                 const datesHtml =
                     (exam.target_dates || [])
                         .map((date, dateIdx) => {
-        
+
                             const d = new Date(date);
-        
+
                             const formatted =
                                 d.toLocaleDateString(
                                     "en-GB",
@@ -697,7 +735,7 @@
                                         month: "short"
                                     }
                                 );
-        
+
                             return `
                                 <label class="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 border border-slate-200 rounded text-xs hover:bg-slate-50 has-[:checked]:border-blue-500 has-[:checked]:ring-1 ring-blue-500 transition-all outline-none">
                                     <input
@@ -714,7 +752,7 @@
                             `;
                         })
                         .join('');
-        
+
                 const cardHtml = `
                     <div id="${cardId}" data-subject="${exam.subject}" class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden transition-all duration-200">
         
@@ -835,12 +873,12 @@
         
                     </div>
                 `;
-        
+
                 cardsContainer.insertAdjacentHTML(
                     'beforeend',
                     cardHtml
                 );
-        
+
                 addClassRow(cardId);
             });
         }
@@ -862,21 +900,21 @@
             document
                 .querySelectorAll('[id^="subjectCard_"]')
                 .forEach(card => {
-        
+
                     const body =
                         card.querySelector(
                             '[id^="body_subjectCard_"]'
                         );
-        
+
                     const chevron =
                         card.querySelector(
                             '[id^="chevron_subjectCard_"]'
                         );
-        
+
                     if (body) {
                         body.classList.remove("hidden");
                     }
-        
+
                     if (chevron) {
                         chevron.classList.remove("-rotate-90");
                     }
@@ -888,21 +926,21 @@
             document
                 .querySelectorAll('[id^="subjectCard_"]')
                 .forEach(card => {
-        
+
                     const body =
                         card.querySelector(
                             '[id^="body_subjectCard_"]'
                         );
-        
+
                     const chevron =
                         card.querySelector(
                             '[id^="chevron_subjectCard_"]'
                         );
-        
+
                     if (body) {
                         body.classList.add("hidden");
                     }
-        
+
                     if (chevron) {
                         chevron.classList.add("-rotate-90");
                     }
@@ -916,7 +954,7 @@
                     <td class="p-2">
                         <select class="w-full rounded border border-transparent hover:border-slate-300 focus:border-blue-500 px-2 py-1.5 text-xs bg-slate-50 focus:bg-white transition-all outline-none">
                             <option value="" disabled selected>Class</option>
-                            ${[1,2,3,4,5,6,7,8,9,10,11,12].map(c => `<option value="${c}">${c}</option>`).join('')}
+                            ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(c => `<option value="${c}">${c}</option>`).join('')}
                         </select>
                     </td>
                     <td class="p-2">
@@ -938,7 +976,7 @@
 
         function removeClassRow(button, cardId) {
             const tbody = document.getElementById(`tbody_${cardId}`);
-            if(tbody.children.length > 1) {
+            if (tbody.children.length > 1) {
                 button.closest('tr').remove();
                 calculateTotal();
                 updateSubjectTotal(cardId);
@@ -953,7 +991,7 @@
 
         function updateSubjectTotal(cardId) {
             const card = document.getElementById(cardId);
-            if(!card) return;
+            if (!card) return;
             const inputs = card.querySelectorAll('.student-count');
             let subTotal = 0;
             inputs.forEach(input => {
@@ -961,9 +999,9 @@
                 if (!isNaN(val) && val > 0) subTotal += val;
             });
             document.getElementById(`total_${cardId}`).textContent = subTotal;
-            
+
             const statusPill = document.getElementById(`pill_${cardId}`);
-            if(subTotal > 0) {
+            if (subTotal > 0) {
                 statusPill.className = "text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200";
                 statusPill.textContent = `${subTotal} Students Registered`;
             } else {
@@ -976,7 +1014,7 @@
             const inputs = document.querySelectorAll('.student-count');
             const region = document.getElementById('regionSelect').value;
             const freeRegInput = parseInt(document.getElementById('freeRegInput').value) || 0;
-            
+
             let totalStudents = 0;
             inputs.forEach(input => {
                 const val = parseInt(input.value);
@@ -996,9 +1034,9 @@
         function togglePaymentFields() {
             const mode = document.querySelector('input[name="payment_mode"]:checked').value;
             const container = document.getElementById('paymentFieldsContainer');
-            
+
             let html = '';
-            
+
             if (mode === 'dd') {
                 html = `
                     <div><label class="block text-sm font-medium text-slate-700 mb-1">Bank Name</label><input type="text" class="w-full rounded border border-slate-300 p-2 text-sm outline-none focus:ring-1 ring-blue-500"></div>
@@ -1033,65 +1071,65 @@
                     <div><label class="block text-sm font-medium text-slate-700 mb-1">Amount</label><input type="number" class="w-full rounded border border-slate-300 p-2 text-sm outline-none focus:ring-1 ring-blue-500"></div>
                 `;
             }
-            
+
             container.innerHTML = html;
         }
 
 
-// Step 2: Use it in your form submission
-function getCsrfToken() {
-    // Already injected by Jinja at page load — use it directly
-    return window._csrf_token || "";
-}
-
-async function showSuccessModal(event) {
-    const data = collectFormData();
-    console.log("Final Form Data Object", data);
-    event.preventDefault();
-
-    const formData = collectFormData();
-    const csrfToken = getCsrfToken();
-
-    console.log("CSRF Token:", csrfToken);  // should now show a real token
-
-    try {
-        const response = await fetch(
-            "/api/method/ito_customization.ito_customization.api.save_ito_registration",
-            {
-                method: "POST",
-                credentials: "include",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-Frappe-CSRF-Token": csrfToken
-                },
-                body: JSON.stringify({
-                    registration_data: JSON.stringify(formData)
-                })
-            }
-        );
-
-        const data = await response.json();
-        console.log("Status:", response.status);
-        console.log("Response:", data);
-
-        if (!response.ok || (data.message && data.message.success === false)) {
-            throw new Error(data.message ? JSON.stringify(data.message) : JSON.stringify(data));
+        // Step 2: Use it in your form submission
+        function getCsrfToken() {
+            // Already injected by Jinja at page load — use it directly
+            return window._csrf_token || "";
         }
 
-        // Show success modal
-        const modal = document.getElementById('successModal');
-        const card = document.getElementById('successModalCard');
-        modal.classList.remove('hidden');
-        setTimeout(() => {
-            card.classList.remove('scale-95', 'opacity-0');
-            card.classList.add('scale-100', 'opacity-100');
-        }, 10);
+        async function showSuccessModal(event) {
+            const data = collectFormData();
+            console.log("Final Form Data Object", data);
+            event.preventDefault();
 
-    } catch (err) {
-        console.error("Submission error:", err);
-        alert("Submission failed. Please try again.");
-    }
-}
+            const formData = collectFormData();
+            const csrfToken = getCsrfToken();
+
+            console.log("CSRF Token:", csrfToken);  // should now show a real token
+
+            try {
+                const response = await fetch(
+                    "/api/method/ito_customization.ito_customization.api.save_ito_registration",
+                    {
+                        method: "POST",
+                        credentials: "include",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-Frappe-CSRF-Token": csrfToken
+                        },
+                        body: JSON.stringify({
+                            registration_data: JSON.stringify(formData)
+                        })
+                    }
+                );
+
+                const data = await response.json();
+                console.log("Status:", response.status);
+                console.log("Response:", data);
+
+                if (!response.ok || (data.message && data.message.success === false)) {
+                    throw new Error(data.message ? JSON.stringify(data.message) : JSON.stringify(data));
+                }
+
+                // Show success modal
+                const modal = document.getElementById('successModal');
+                const card = document.getElementById('successModalCard');
+                modal.classList.remove('hidden');
+                setTimeout(() => {
+                    card.classList.remove('scale-95', 'opacity-0');
+                    card.classList.add('scale-100', 'opacity-100');
+                }, 10);
+
+            } catch (err) {
+                console.error("Submission error:", err);
+                alert("Submission failed. Please try again.");
+            }
+        }
 
         function collectFormData() {
 
@@ -1101,15 +1139,15 @@ async function showSuccessModal(event) {
                 exams: {},
                 payment: {}
             };
-        
+
             // ----------------------------------
             // School Information (Step 1)
             // ----------------------------------
-        
+
             const schoolInputs = document.querySelectorAll(
                 '#step1 input, #step1 select, #step1 textarea'
             );
-        
+
             const schoolLabels = {
                 0: 'school_name',
                 1: 'ito_school_code',
@@ -1126,174 +1164,174 @@ async function showSuccessModal(event) {
                 12: 'school_phone2',
                 13: 'school_email'
             };
-        
+
             schoolInputs.forEach((input, index) => {
-        
+
                 if (schoolLabels[index]) {
-        
+
                     data.school_info[
                         schoolLabels[index]
                     ] = input.value;
                 }
             });
-        
+
             // ----------------------------------
             // Coordinators (Step 2)
             // ----------------------------------
-        
+
             // ----------------------------------
-// Coordinators (Step 2)
-// ----------------------------------
+            // Coordinators (Step 2)
+            // ----------------------------------
 
-const coordRows =
-document.querySelectorAll(
-    '#step2 tbody tr'
-);
+            const coordRows =
+                document.querySelectorAll(
+                    '#step2 tbody tr'
+                );
 
-data.coordinators = {};
+            data.coordinators = {};
 
-coordRows.forEach((row, index) => {
+            coordRows.forEach((row, index) => {
 
-const roleText =
-    row.querySelector("td")
-       ?.innerText
-       ?.trim() || "";
+                const roleText =
+                    row.querySelector("td")
+                        ?.innerText
+                        ?.trim() || "";
 
-const inputs =
-    row.querySelectorAll("input");
+                const inputs =
+                    row.querySelectorAll("input");
 
-if (inputs.length < 4) {
-    return;
-}
+                if (inputs.length < 4) {
+                    return;
+                }
 
-const roleKey =
-    roleText
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "_")
-        .replace(/^_|_$/g, "");
+                const roleKey =
+                    roleText
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]+/g, "_")
+                        .replace(/^_|_$/g, "");
 
-data.coordinators[
-    roleKey
-] = {
-    role: roleText,
-    name: inputs[0].value,
-    mobile: inputs[1].value,
-    dob: inputs[2].value,
-    email: inputs[3].value
-};
-});
-        
+                data.coordinators[
+                    roleKey
+                ] = {
+                    role: roleText,
+                    name: inputs[0].value,
+                    mobile: inputs[1].value,
+                    dob: inputs[2].value,
+                    email: inputs[3].value
+                };
+            });
+
             // ----------------------------------
             // Exams (Step 3)
             // ----------------------------------
-        
+
             document
-    .querySelectorAll(
-        '[id^="subjectCard_"]'
-    )
-    .forEach(card => {
+                .querySelectorAll(
+                    '[id^="subjectCard_"]'
+                )
+                .forEach(card => {
 
-        // Ignore hidden cards
-        if (card.style.display === "none") {
-            return;
-        }
+                    // Ignore hidden cards
+                    if (card.style.display === "none") {
+                        return;
+                    }
 
-        const subjectName =
-            card.dataset.subject;
+                    const subjectName =
+                        card.dataset.subject;
 
-        if (!subjectName) {
-            return;
-        }
+                    if (!subjectName) {
+                        return;
+                    }
 
-        const tbody =
-            card.querySelector("tbody");
+                    const tbody =
+                        card.querySelector("tbody");
 
-        if (!tbody) {
-            return;
-        }
+                    if (!tbody) {
+                        return;
+                    }
 
-        data.exams[subjectName] = [];
+                    data.exams[subjectName] = [];
 
-        tbody
-            .querySelectorAll("tr")
-            .forEach(row => {
+                    tbody
+                        .querySelectorAll("tr")
+                        .forEach(row => {
 
-                const cells =
-                    row.querySelectorAll(
-                        "input, select"
-                    );
+                            const cells =
+                                row.querySelectorAll(
+                                    "input, select"
+                                );
 
-                if (
-                    cells.length >= 4 &&
-                    (
-                        cells[0].value ||
-                        cells[1].value ||
-                        cells[2].value ||
-                        cells[3].value
-                    )
-                ) {
+                            if (
+                                cells.length >= 4 &&
+                                (
+                                    cells[0].value ||
+                                    cells[1].value ||
+                                    cells[2].value ||
+                                    cells[3].value
+                                )
+                            ) {
 
-                    data.exams[
-                        subjectName
-                    ].push({
-                        class:
-                            cells[0].value,
-                        teacher_name:
-                            cells[1].value,
-                        whatsapp:
-                            cells[2].value,
-                        students:
-                            cells[3].value
-                    });
-                }
-            });
+                                data.exams[
+                                    subjectName
+                                ].push({
+                                    class:
+                                        cells[0].value,
+                                    teacher_name:
+                                        cells[1].value,
+                                    whatsapp:
+                                        cells[2].value,
+                                    students:
+                                        cells[3].value
+                                });
+                            }
+                        });
 
-        // Remove empty subjects
-        if (
-            data.exams[
-                subjectName
-            ].length === 0
-        ) {
+                    // Remove empty subjects
+                    if (
+                        data.exams[
+                            subjectName
+                        ].length === 0
+                    ) {
 
-            delete data.exams[
-                subjectName
-            ];
-        }
-    });
+                        delete data.exams[
+                            subjectName
+                        ];
+                    }
+                });
 
-console.log(
-    "Collected Exams:",
-    data.exams
-);
-        
+            console.log(
+                "Collected Exams:",
+                data.exams
+            );
+
             // ----------------------------------
             // Payment (Step 4)
             // ----------------------------------
-        
+
             data.payment.mode =
                 document.querySelector(
                     'input[name="payment_mode"]:checked'
                 )?.value || '';
-        
+
             data.payment.reference =
                 document.querySelector(
                     'input[name="reference_type"]:checked'
                 )?.value || '';
-        
+
             data.payment.coordinator_name =
                 document.querySelector(
                     'input[name="reference_type"][value="coordinator"]'
                 )
-                ?.parentElement
-                ?.parentElement
-                ?.querySelector('input')
-                ?.value || '';
-        
+                    ?.parentElement
+                    ?.parentElement
+                    ?.querySelector('input')
+                    ?.value || '';
+
             console.log(
                 "Final Form Data",
                 data
             );
-        
+
             return data;
         }
 
@@ -1308,12 +1346,12 @@ console.log(
         }
 
         // Initialize form
-        window.onload = async function() {
+        window.onload = async function () {
 
             buildAllSubjectAccordions();
             togglePaymentFields();
-            
-        
+
+
             await loadCustomerData();
         };
 
@@ -1321,17 +1359,17 @@ console.log(
             if (window.current_user === "Guest") return;
 
             try {
-        
+
                 const response = await fetch(
                     "/api/method/ito_customization.ito_customization.api.get_customer_from_session_user"
                 );
-        
+
                 const result = await response.json();
-        
+
                 if (!result.message) {
                     return;
                 }
-                
+
                 console.log(
                     "FULL RESPONSE",
                     result.message
@@ -1355,8 +1393,8 @@ console.log(
                 populateExamSummaryData(
                     result.message.exam_summaries || []
                 );
-                
-        
+
+
             } catch (e) {
                 console.error(e);
             }
@@ -1372,7 +1410,7 @@ console.log(
 
                 const deadline =
                     new Date(data.application_deadline);
-            
+
                 document.getElementById(
                     "application-deadline"
                 ).innerText =
@@ -1390,15 +1428,15 @@ console.log(
 
                 const deadline =
                     new Date(data.application_deadline);
-            
+
                 deadline.setHours(
                     23, 59, 59, 999
                 );
-            
+
                 const today = new Date();
-            
+
                 if (today > deadline) {
-            
+
                     document.body.innerHTML = `
 <div class="min-h-screen bg-slate-50 flex items-center justify-center p-6">
 
@@ -1448,13 +1486,13 @@ console.log(
 
                     <p class="text-xl font-bold text-amber-900 mt-1">
                         ${deadline.toLocaleDateString(
-                            "en-IN",
-                            {
-                                day: "numeric",
-                                month: "long",
-                                year: "numeric"
-                            }
-                        )}
+                        "en-IN",
+                        {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric"
+                        }
+                    )}
                     </p>
                 </div>
 
@@ -1472,117 +1510,117 @@ console.log(
 
 </div>
 `;
-            
+
                     return;
                 }
             }
-        
+
             // School Name
             fields[0].value =
                 data.customer_name ||
                 data.customer?.customer_name ||
                 "";
-        
+
             // ITO School Code
             fields[1].value =
                 data.custom_ito_school_code ||
                 data.customer?.custom_ito_school_code ||
                 "";
-        
+
             // Complete School Address
             fields[2].value =
                 (data.address?.address_line1 || "") +
                 (data.address?.address_line2 ? "\n" + data.address.address_line2 : "");
-                
+
             // City
             fields[3].value =
                 data.address?.city ||
                 "";
-        
+
             // Taluka
             fields[4].value =
                 data.address?.custom_taluka ||
                 data.customer?.custom_taluka ||
                 "";
-        
+
             // District
             fields[5].value =
                 data.address?.custom_district ||
                 data.customer?.custom_district ||
                 "";
-        
+
             // State
             fields[6].value =
                 data.address?.state ||
                 "";
-        
+
             // Pincode
             fields[7].value =
                 data.address?.pincode ||
                 "";
-        
+
             // GST
             fields[8].value =
                 data.customer?.tax_id ||
                 data.customer?.gstin ||
                 "";
-        
+
             // Board
             fields[9].value =
                 data.customer?.custom_board ||
                 "";
-        
+
             // Student Strength
             fields[10].value =
                 data.customer?.custom_student_strength ||
                 "";
-        
-           // School Phone No. 1
+
+            // School Phone No. 1
             fields[11].value =
-            data.contact_mobile ||
-            data.customer?.mobile_no ||
-            "";
-        
+                data.contact_mobile ||
+                data.customer?.mobile_no ||
+                "";
+
             // School Phone 2
             fields[12].value =
                 data.customer?.custom_school_phone_2 ||
                 "";
-        
+
             // School Email ID
             fields[13].value =
-            data.contact_email ||
-            data.customer?.email_id ||
-            "";
+                data.contact_email ||
+                data.customer?.email_id ||
+                "";
         }
 
-    function populateTeacherDetails(teachers, examSummaries = []) {
-        const tbody = document.querySelector("#step2 tbody");
-        if (!tbody) return;
+        function populateTeacherDetails(teachers, examSummaries = []) {
+            const tbody = document.querySelector("#step2 tbody");
+            if (!tbody) return;
 
-        // Get all existing row titles to prevent duplicates
-        const existingRowTitles = Array.from(tbody.querySelectorAll("tr td:first-child")).map(td => td.innerText.trim());
+            // Get all existing row titles to prevent duplicates
+            const existingRowTitles = Array.from(tbody.querySelectorAll("tr td:first-child")).map(td => td.innerText.trim());
 
-        // Append missing subject rows dynamically
-        examSummaries.forEach(exam => {
-            const subjectName = exam.subject || "";
-            if (!subjectName) return;
+            // Append missing subject rows dynamically
+            examSummaries.forEach(exam => {
+                const subjectName = exam.subject || "";
+                if (!subjectName) return;
 
-            let matchString = subjectName;
-            const bracketMatch = subjectName.match(/\(([^)]+)\)/);
-            if (bracketMatch) {
-                matchString = bracketMatch[0]; // e.g. "(ISO)"
-            }
+                let matchString = subjectName;
+                const bracketMatch = subjectName.match(/\(([^)]+)\)/);
+                if (bracketMatch) {
+                    matchString = bracketMatch[0]; // e.g. "(ISO)"
+                }
 
-            const alreadyExists = existingRowTitles.some(text => text.includes(matchString));
+                const alreadyExists = existingRowTitles.some(text => text.includes(matchString));
 
-            if (!alreadyExists) {
-                const teacher = teachers?.find(t => t.subject === subjectName) || {};
+                if (!alreadyExists) {
+                    const teacher = teachers?.find(t => t.subject === subjectName) || {};
 
-                const row = document.createElement("tr");
-                row.className = "hover:bg-slate-50 transition-colors";
-                row.dataset.subject = subjectName;
+                    const row = document.createElement("tr");
+                    row.className = "hover:bg-slate-50 transition-colors";
+                    row.dataset.subject = subjectName;
 
-                row.innerHTML = `
+                    row.innerHTML = `
                     <td class="p-3 font-semibold text-slate-700 border-r border-slate-100">
                         ${subjectName} In-charge
                     </td>
@@ -1599,95 +1637,95 @@ console.log(
                         <input type="email" value="${teacher.email_id || ""}" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address">
                     </td>
                 `;
-                tbody.appendChild(row);
-                existingRowTitles.push(`${subjectName} In-charge`);
+                    tbody.appendChild(row);
+                    existingRowTitles.push(`${subjectName} In-charge`);
+                }
+            });
+        }
+
+        function populateExamSummaryData(examSummaries) {
+
+            console.log(
+                "populateExamSummaryData received:",
+                examSummaries
+            );
+
+            if (!Array.isArray(examSummaries) || !examSummaries.length) {
+
+                console.error(
+                    "No exam summaries received!"
+                );
+
+                return;
             }
-        });
-    }
 
-function populateExamSummaryData(examSummaries) {
+            // Hide all cards first
+            document
+                .querySelectorAll('[id^="subjectCard_"]')
+                .forEach(card => {
+                    card.style.display = "none";
+                });
 
-    console.log(
-        "populateExamSummaryData received:",
-        examSummaries
-    );
+            examSummaries.forEach(exam => {
 
-    if (!Array.isArray(examSummaries) || !examSummaries.length) {
+                if (!exam.subject) {
+                    return;
+                }
 
-        console.error(
-            "No exam summaries received!"
-        );
+                const subjectKey =
+                    exam.subject
+                        .replace(/[^a-zA-Z0-9]/g, "_");
 
-        return;
-    }
+                const cardId =
+                    `subjectCard_${subjectKey}`;
 
-    // Hide all cards first
-    document
-        .querySelectorAll('[id^="subjectCard_"]')
-        .forEach(card => {
-            card.style.display = "none";
-        });
+                const card =
+                    document.getElementById(cardId);
 
-    examSummaries.forEach(exam => {
+                if (!card) {
 
-        if (!exam.subject) {
-            return;
-        }
+                    console.warn(
+                        "Card not found:",
+                        cardId,
+                        exam.subject
+                    );
 
-        const subjectKey =
-            exam.subject
-                .replace(/[^a-zA-Z0-9]/g, "_");
+                    return;
+                }
 
-        const cardId =
-            `subjectCard_${subjectKey}`;
+                card.style.display = "";
 
-        const card =
-            document.getElementById(cardId);
+                // -------------------------
+                // Target Dates
+                // -------------------------
 
-        if (!card) {
+                const dateContainer =
+                    card.querySelector(
+                        ".flex.flex-wrap.gap-2"
+                    );
 
-            console.warn(
-                "Card not found:",
-                cardId,
-                exam.subject
-            );
+                if (
+                    dateContainer &&
+                    Array.isArray(exam.target_dates)
+                ) {
 
-            return;
-        }
+                    dateContainer.innerHTML =
+                        exam.target_dates
+                            .map((date, idx) => {
 
-        card.style.display = "";
+                                const d =
+                                    new Date(date);
 
-        // -------------------------
-        // Target Dates
-        // -------------------------
+                                const formatted =
+                                    d.toLocaleDateString(
+                                        "en-GB",
+                                        {
+                                            day: "2-digit",
+                                            month: "short"
+                                        }
+                                    );
 
-        const dateContainer =
-            card.querySelector(
-                ".flex.flex-wrap.gap-2"
-            );
-
-        if (
-            dateContainer &&
-            Array.isArray(exam.target_dates)
-        ) {
-
-            dateContainer.innerHTML =
-                exam.target_dates
-                    .map((date, idx) => {
-
-                        const d =
-                            new Date(date);
-
-                        const formatted =
-                            d.toLocaleDateString(
-                                "en-GB",
-                                {
-                                    day: "2-digit",
-                                    month: "short"
-                                }
-                            );
-
-                        return `
+                                return `
                             <label class="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 border border-slate-200 rounded text-xs">
                                 <input
                                     type="radio"
@@ -1700,206 +1738,206 @@ function populateExamSummaryData(examSummaries) {
                                 </span>
                             </label>
                         `;
-                    })
-                    .join("");
-        }
+                            })
+                            .join("");
+                }
 
-        // -------------------------
-        // Existing Rows
-        // -------------------------
+                // -------------------------
+                // Existing Rows
+                // -------------------------
 
-        const tbody =
-            document.getElementById(
-                `tbody_${cardId}`
-            );
+                const tbody =
+                    document.getElementById(
+                        `tbody_${cardId}`
+                    );
 
-        if (!tbody) {
-            return;
-        }
-
-        tbody.innerHTML = "";
-
-        const rows =
-            Array.isArray(exam.rows)
-                ? exam.rows
-                : [];
-
-        if (!rows.length) {
-
-            addClassRow(cardId);
-
-        } else {
-
-            rows.forEach(row => {
-
-                addClassRow(cardId);
-
-                const lastRow =
-                    tbody.lastElementChild;
-
-                if (!lastRow) {
+                if (!tbody) {
                     return;
                 }
 
+                tbody.innerHTML = "";
+
+                const rows =
+                    Array.isArray(exam.rows)
+                        ? exam.rows
+                        : [];
+
+                if (!rows.length) {
+
+                    addClassRow(cardId);
+
+                } else {
+
+                    rows.forEach(row => {
+
+                        addClassRow(cardId);
+
+                        const lastRow =
+                            tbody.lastElementChild;
+
+                        if (!lastRow) {
+                            return;
+                        }
+
+                        const inputs =
+                            lastRow.querySelectorAll(
+                                "input, select"
+                            );
+
+                        if (inputs[0])
+                            inputs[0].value =
+                                row.class || "";
+
+                        if (inputs[1])
+                            inputs[1].value =
+                                row.teacher_name || "";
+
+                        if (inputs[2])
+                            inputs[2].value =
+                                row.whatsapp_no || "";
+
+                        if (inputs[3])
+                            inputs[3].value =
+                                row.no_of_students || "";
+                    });
+                }
+
+                updateSubjectTotal(cardId);
+            });
+
+            calculateTotal();
+        }
+
+        function populateCoordinatorData(
+            coordinators,
+            examSummaries = []
+        ) {
+
+            if (!coordinators) return;
+
+            const rows = document.querySelectorAll(
+                "#step2 tbody tr"
+            );
+
+            // Hide all subject rows first
+            rows.forEach((row, index) => {
+
+                // Keep Principal and Overall Coordinator visible
+                if (index <= 1) {
+                    row.style.display = "";
+                    return;
+                }
+
+                row.style.display = "none";
+            });
+
+            // Unhide rows that correspond to subjects in the Exam Summary
+            examSummaries.forEach(exam => {
+                const subjectName = exam.subject || "";
+                if (!subjectName) return;
+
+                let matchString = subjectName;
+                const bracketMatch = subjectName.match(/\(([^)]+)\)/);
+                if (bracketMatch) {
+                    matchString = bracketMatch[0]; // e.g. "(ISO)"
+                }
+
+                rows.forEach(row => {
+                    const firstCell = row.querySelector("td");
+                    if (!firstCell) return;
+                    const rowTitle = firstCell.innerText.trim();
+
+                    if (rowTitle.includes(matchString)) {
+                        row.style.display = "";
+                    }
+                });
+            });
+
+            Object.values(coordinators).forEach(data => {
+
+                const roleTitle =
+                    (data.role || "").trim();
+
+                let matchedRow = null;
+
+                rows.forEach(row => {
+
+                    const firstCell =
+                        row.querySelector("td");
+
+                    if (!firstCell) return;
+
+                    const rowTitle =
+                        firstCell.innerText.trim();
+
+                    if (rowTitle === roleTitle) {
+                        matchedRow = row;
+                    }
+                });
+
+                console.log(
+                    "COORDINATORS RECEIVED",
+                    coordinators
+                );
+
+                console.log(
+                    "EXAM SUMMARIES RECEIVED",
+                    examSummaries
+                );
+
+                if (!matchedRow) {
+                    console.warn(
+                        "No matching row found:",
+                        roleTitle
+                    );
+                    return;
+                }
+
+                matchedRow.style.display = "";
+
                 const inputs =
-                    lastRow.querySelectorAll(
-                        "input, select"
+                    matchedRow.querySelectorAll(
+                        "input"
                     );
 
                 if (inputs[0])
                     inputs[0].value =
-                        row.class || "";
+                        data.name || "";
 
                 if (inputs[1])
                     inputs[1].value =
-                        row.teacher_name || "";
+                        data.mobile || "";
 
                 if (inputs[2])
                     inputs[2].value =
-                        row.whatsapp_no || "";
+                        formatDateForInput(
+                            data.dob
+                        );
 
                 if (inputs[3])
                     inputs[3].value =
-                        row.no_of_students || "";
+                        data.email || "";
             });
         }
 
-        updateSubjectTotal(cardId);
-    });
+        function formatDateForInput(dateStr) {
 
-    calculateTotal();
-}
+            if (!dateStr) return "";
 
-        function populateCoordinatorData(
-    coordinators,
-    examSummaries = []
-) {
+            const d = new Date(dateStr);
 
-    if (!coordinators) return;
+            const day = String(
+                d.getDate()
+            ).padStart(2, "0");
 
-    const rows = document.querySelectorAll(
-        "#step2 tbody tr"
-    );
+            const month = String(
+                d.getMonth() + 1
+            ).padStart(2, "0");
 
-    // Hide all subject rows first
-    rows.forEach((row, index) => {
+            const year = d.getFullYear();
 
-        // Keep Principal and Overall Coordinator visible
-        if (index <= 1) {
-            row.style.display = "";
-            return;
+            return `${year}-${month}-${day}`;
         }
-
-        row.style.display = "none";
-    });
-
-    // Unhide rows that correspond to subjects in the Exam Summary
-    examSummaries.forEach(exam => {
-        const subjectName = exam.subject || "";
-        if (!subjectName) return;
-
-        let matchString = subjectName;
-        const bracketMatch = subjectName.match(/\(([^)]+)\)/);
-        if (bracketMatch) {
-            matchString = bracketMatch[0]; // e.g. "(ISO)"
-        }
-
-        rows.forEach(row => {
-            const firstCell = row.querySelector("td");
-            if (!firstCell) return;
-            const rowTitle = firstCell.innerText.trim();
-            
-            if (rowTitle.includes(matchString)) {
-                row.style.display = "";
-            }
-        });
-    });
-
-    Object.values(coordinators).forEach(data => {
-
-        const roleTitle =
-            (data.role || "").trim();
-
-        let matchedRow = null;
-
-        rows.forEach(row => {
-
-            const firstCell =
-                row.querySelector("td");
-
-            if (!firstCell) return;
-
-            const rowTitle =
-                firstCell.innerText.trim();
-
-            if (rowTitle === roleTitle) {
-                matchedRow = row;
-            }
-        });
-
-            console.log(
-            "COORDINATORS RECEIVED",
-            coordinators
-        );
-
-        console.log(
-            "EXAM SUMMARIES RECEIVED",
-            examSummaries
-        );
-
-        if (!matchedRow) {
-            console.warn(
-                "No matching row found:",
-                roleTitle
-            );
-            return;
-        }
-
-        matchedRow.style.display = "";
-
-        const inputs =
-            matchedRow.querySelectorAll(
-                "input"
-            );
-
-        if (inputs[0])
-            inputs[0].value =
-                data.name || "";
-
-        if (inputs[1])
-            inputs[1].value =
-                data.mobile || "";
-
-        if (inputs[2])
-            inputs[2].value =
-                formatDateForInput(
-                    data.dob
-                );
-
-        if (inputs[3])
-            inputs[3].value =
-                data.email || "";
-    });
-}
-        
-function formatDateForInput(dateStr) {
-
-    if (!dateStr) return "";
-
-    const d = new Date(dateStr);
-
-    const day = String(
-        d.getDate()
-    ).padStart(2, "0");
-
-    const month = String(
-        d.getMonth() + 1
-    ).padStart(2, "0");
-
-    const year = d.getFullYear();
-
-    return `${year}-${month}-${day}`;
-}
 
         function buildCoordinatorRows(examSummaries = []) {
 
@@ -1907,24 +1945,24 @@ function formatDateForInput(dateStr) {
                 document.querySelector(
                     "#step2 tbody"
                 );
-        
+
             const rows =
                 tbody.querySelectorAll("tr");
-        
+
             // Keep first two rows
             rows.forEach((row, index) => {
                 if (index > 1) {
                     row.remove();
                 }
             });
-        
+
             examSummaries.forEach(exam => {
-        
+
                 const role =
                     `${exam.subject} In-charge`;
-        
+
                 const row = document.createElement("tr");
-        
+
                 row.innerHTML = `
                     <td>${role}</td>
                     <td><input type="text"></td>
@@ -1932,7 +1970,7 @@ function formatDateForInput(dateStr) {
                     <td><input type="date"></td>
                     <td><input type="email"></td>
                 `;
-        
+
                 tbody.appendChild(row);
             });
         }
@@ -1940,4 +1978,5 @@ function formatDateForInput(dateStr) {
 
     </script>
 </body>
+
 </html>
