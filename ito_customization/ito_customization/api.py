@@ -23,7 +23,6 @@ def ensure_subject_exists(subject_name):
 def save_ito_registration(registration_data):
 
     try:
-
         data = (
             json.loads(registration_data)
             if isinstance(registration_data, str)
@@ -32,242 +31,41 @@ def save_ito_registration(registration_data):
         
         frappe.log_error("Registration Data", json.dumps(data, indent=2))
         
-        customer = create_or_update_customer(
-            data.get("school_info", {})
-        )
+        # FIX: Set global ignore_permissions
+        original_flag = frappe.flags.ignore_permissions
+        frappe.flags.ignore_permissions = True
+        
+        try:
+            # Clean GSTIN
+            school_info = data.get("school_info", {})
+            gstin = school_info.get("gst_no", "").strip().upper()
+            if gstin and len(gstin) != 15:
+                gstin = ""
+            school_info["gst_no"] = gstin
 
-        create_or_update_address(
-            customer,
-            data.get("school_info", {})
-        )
+            customer = create_or_update_customer(school_info)
+            create_or_update_address(customer, school_info)
 
-        # Create Principal as Contact
-        if data.get("coordinators", {}).get("principal"):
-            create_or_update_principal(
-                data["coordinators"]["principal"],
-                customer
-            )
-
-        # Create all teachers (including principal) in Teacher doctype
-        create_or_update_teachers(
-            data.get("coordinators", {}),
-            customer
-        )
-
-        # --------------------------------------------------
-        # Update Exams Summary
-        # --------------------------------------------------
-
-        exams_data = data.get("exams", {})
-
-        if exams_data:
-
-            es_name = frappe.db.get_value(
-                "Exams Summary",
-                {
-                    "customer": customer
-                }
-            )
-
-            if es_name:
-
-                es_doc = frappe.get_doc(
-                    "Exams Summary",
-                    es_name
+            if data.get("coordinators", {}).get("principal"):
+                create_or_update_principal(
+                    data["coordinators"]["principal"],
+                    customer
                 )
-
-                # Clear existing rows
-
-                es_doc.exam_summary = []
-
-                subject_map = {
-                    
-                }
-
-                for subject_code, rows in exams_data.items():
-
-                    subject_name = subject_map.get(
-                        subject_code,
-                        subject_code
-                    )
-
-                    for row in rows:
-
-                        es_doc.append(
-                            "exam_summary",
-                            {
-                                "subject": subject_name,
-                                "class": row.get("class"),
-                                "teacher_name": row.get("teacher_name"),
-                                "whatsapp_no": row.get("whatsapp"),
-                                "no_of_students": row.get("students")
-                            }
-                        )
-
-                es_doc.save(
-                    ignore_permissions=True
-                )
-
-        frappe.log_error(
-            title="ITO Registration Payload",
-            message=json.dumps(
-                data,
-                indent=2
-            )
-        )
-
-        frappe.db.commit()
-
-        return {
-            "success": True,
-            "customer": customer
-        }
-
-    except Exception:
-
-        frappe.db.rollback()
-
-        frappe.log_error(
-            frappe.get_traceback(),
-            "ITO Registration Error"
-        )
-
-        return {
-            "success": False,
-            "message": frappe.get_traceback()
-        }
-
-
-
-@frappe.whitelist(allow_guest=True)
-def save_registration_step():
-
-    if frappe.session.user == "Guest":
-        data = frappe.request.get_json() or {}
-        return {
-            "success": True,
-            "step": cint(data.get("step"))
-        }
-
-    try:
-
-        data = frappe.request.get_json() or {}
-
-        step = cint(data.get("step"))
-
-        # --------------------------------------------------
-        # STEP 1 : School Information
-        # --------------------------------------------------
-
-        if step == 1:
-
-            school_info = data.get(
-                "school_info",
-                {}
-            )
-
-            customer = create_or_update_customer(
-                school_info
-            )
-
-            create_or_update_address(
-                customer,
-                school_info
-            )
-
-            frappe.cache().set_value(
-                f"ito_customer_{frappe.session.user}",
-                customer
-            )
-
-            frappe.db.commit()
-
-            return {
-                "success": True,
-                "step": 1,
-                "customer": customer
-            }
-
-        # --------------------------------------------------
-        # STEP 2 : Principal + Coordinators
-        # --------------------------------------------------
-
-        elif step == 2:
-
-            customer = frappe.cache().get_value(
-                f"ito_customer_{frappe.session.user}"
-            )
-
-            if not customer:
-
-                frappe.throw(
-                    "Please save School Information first."
-                )
-
-            coordinators = data.get(
-                "coordinators",
-                {}
-            )
-            
-            frappe.log_error(
-                title="STEP 2 COORDINATORS",
-                message=frappe.as_json(coordinators)
-            )
 
             create_or_update_teachers(
-                coordinators,
+                data.get("coordinators", {}),
                 customer
             )
 
-            frappe.db.commit()
-
-            return {
-                "success": True,
-                "step": 2
-            }
-
-        # --------------------------------------------------
-        # STEP 3 : Exams Summary
-        # --------------------------------------------------
-
-        elif step == 3:
-
-            customer = frappe.cache().get_value(
-                f"ito_customer_{frappe.session.user}"
-            )
-
-            if not customer:
-
-                frappe.throw(
-                    "Please save School Information first."
-                )
-
-            exams_data = data.get(
-                "exams",
-                {}
-            )
-
-            frappe.log_error(
-                title="STEP 3 EXAMS DATA",
-                message=frappe.as_json(exams_data)
-            )
-
+            exams_data = data.get("exams", {})
             if exams_data:
-
                 es_name = frappe.db.get_value(
                     "Exams Summary",
-                    {
-                        "customer": customer
-                    }
+                    {"customer": customer}
                 )
 
                 if es_name:
-
-                    es_doc = frappe.get_doc(
-                        "Exams Summary",
-                        es_name
-                    )
-
+                    es_doc = frappe.get_doc("Exams Summary", es_name)
                     es_doc.exam_summary = []
 
                     subject_map = {
@@ -285,56 +83,174 @@ def save_registration_step():
                     }
 
                     for subject_code, rows in exams_data.items():
-
-                        subject_name = subject_map.get(
-                            subject_code,
-                            subject_code
-                        )
-
+                        subject_name = subject_map.get(subject_code, subject_code)
                         for row in rows:
+                            es_doc.append("exam_summary", {
+                                "subject": subject_name,
+                                "class": row.get("class"),
+                                "teacher_name": row.get("teacher_name"),
+                                "whatsapp_no": row.get("whatsapp"),
+                                "no_of_students": row.get("students")
+                            })
 
-                            es_doc.append(
-                                "exam_summary",
-                                {
+                    es_doc.save(ignore_permissions=True)
+
+            frappe.db.commit()
+            return {"success": True, "customer": customer}
+
+        finally:
+            frappe.flags.ignore_permissions = original_flag
+
+    except Exception:
+        frappe.db.rollback()
+        frappe.flags.ignore_permissions = False
+        
+        frappe.log_error(
+            frappe.get_traceback(),
+            "ITO Registration Error"
+        )
+        return {"success": False, "message": frappe.get_traceback()}
+
+
+
+@frappe.whitelist(allow_guest=True)
+def save_registration_step():
+
+    if frappe.session.user == "Guest":
+        data = frappe.request.get_json() or {}
+        return {"success": True, "step": cint(data.get("step"))}
+
+    try:
+        data = frappe.request.get_json() or {}
+        step = cint(data.get("step"))
+
+        # FIX: Set global ignore_permissions BEFORE any doc operations
+        original_flag = frappe.flags.ignore_permissions
+        frappe.flags.ignore_permissions = True
+
+        try:
+            # --------------------------------------------------
+            # STEP 1 : School Information
+            # --------------------------------------------------
+            if step == 1:
+                school_info = data.get("school_info", {})
+                
+                # Clean GSTIN to prevent India Compliance validation error
+                gstin = school_info.get("gst_no", "").strip().upper()
+                if gstin and len(gstin) != 15:
+                    gstin = ""  # Clear invalid GSTIN
+                
+                school_info["gst_no"] = gstin
+
+                customer = create_or_update_customer(school_info)
+                create_or_update_address(customer, school_info)
+
+                frappe.cache().set_value(
+                    f"ito_customer_{frappe.session.user}",
+                    customer
+                )
+
+                frappe.db.commit()
+                return {"success": True, "step": 1, "customer": customer}
+
+            # --------------------------------------------------
+            # STEP 2 : Principal + Coordinators
+            # --------------------------------------------------
+            elif step == 2:
+                customer = frappe.cache().get_value(
+                    f"ito_customer_{frappe.session.user}"
+                )
+
+                if not customer:
+                    frappe.throw("Please save School Information first.")
+
+                coordinators = data.get("coordinators", {})
+                
+                frappe.log_error(
+                    title="STEP 2 COORDINATORS",
+                    message=frappe.as_json(coordinators)
+                )
+
+                create_or_update_teachers(coordinators, customer)
+                frappe.db.commit()
+
+                return {"success": True, "step": 2}
+
+            # --------------------------------------------------
+            # STEP 3 : Exams Summary
+            # --------------------------------------------------
+            elif step == 3:
+                customer = frappe.cache().get_value(
+                    f"ito_customer_{frappe.session.user}"
+                )
+
+                if not customer:
+                    frappe.throw("Please save School Information first.")
+
+                exams_data = data.get("exams", {})
+
+                frappe.log_error(
+                    title="STEP 3 EXAMS DATA",
+                    message=frappe.as_json(exams_data)
+                )
+
+                if exams_data:
+                    es_name = frappe.db.get_value(
+                        "Exams Summary",
+                        {"customer": customer}
+                    )
+
+                    if es_name:
+                        es_doc = frappe.get_doc("Exams Summary", es_name)
+                        es_doc.exam_summary = []
+
+                        subject_map = {
+                            "IDO": "Drawing Olympiad (IDO)",
+                            "NESO": "Essay Olympiad (NESO)",
+                            "EIO": "English Olympiad (EIO)",
+                            "IMO": "Maths Olympiad (IMO)",
+                            "ISO": "Science Olympiad (ISO)",
+                            "GKIO": "General Knowledge (GKIO)",
+                            "ICO": "Computer Olympiad (ICO)",
+                            "NSSO": "Social Studies (NSSO)",
+                            "NHO": "Hindi Olympiad (NHO)",
+                            "NLRO": "Logical Reasoning (NLRO)",
+                            "CIO": "Commerce Olympiad (CIO)"
+                        }
+
+                        for subject_code, rows in exams_data.items():
+                            subject_name = subject_map.get(subject_code, subject_code)
+                            for row in rows:
+                                es_doc.append("exam_summary", {
                                     "subject": subject_name,
                                     "class": row.get("class"),
                                     "teacher_name": row.get("teacher_name"),
                                     "whatsapp_no": row.get("whatsapp"),
                                     "no_of_students": row.get("students")
-                                }
-                            )
+                                })
 
-                    es_doc.save(
-                        ignore_permissions=True
-                    )
+                        es_doc.save(ignore_permissions=True)
 
-            frappe.db.commit()
+                frappe.db.commit()
+                return {"success": True, "step": 3}
 
-            return {
-                "success": True,
-                "step": 3
-            }
+            else:
+                frappe.throw(f"Invalid step: {step}")
 
-        else:
-
-            frappe.throw(
-                f"Invalid step: {step}"
-            )
+        finally:
+            # CRITICAL: Always reset the flag
+            frappe.flags.ignore_permissions = original_flag
 
     except Exception:
-
         frappe.db.rollback()
-
+        frappe.flags.ignore_permissions = False  # Safety reset
+        
         frappe.log_error(
             frappe.get_traceback(),
             "Save Registration Step Error"
         )
-
-        return {
-            "success": False,
-            "message": frappe.get_traceback()
-        }
-
+        return {"success": False, "message": frappe.get_traceback()}
+    
 def create_or_update_customer(school_info):
 
     school_name = school_info.get("school_name")
@@ -386,6 +302,12 @@ def create_or_update_customer(school_info):
 
     if hasattr(customer, "custom_customer_category"):
         customer.custom_customer_category = "School Customer"
+
+    if hasattr(customer, "custom_taluka"):
+        customer.custom_taluka = school_info.get("taluka")
+
+    if hasattr(customer, "custom_district"):
+        customer.custom_district = school_info.get("district")
         
     if customer.is_new():
         customer.insert(ignore_permissions=True)
@@ -433,6 +355,12 @@ def create_or_update_address(customer_name, school_info):
     address.state = school_info.get("state")
     address.pincode = school_info.get("pincode")
     address.country = "India"
+
+    if hasattr(address, "custom_taluka"):
+        address.custom_taluka = school_info.get("taluka")
+        
+    if hasattr(address, "custom_district"):
+        address.custom_district = school_info.get("district")
 
     if address.is_new():
         address.insert(ignore_permissions=True)
@@ -749,12 +677,22 @@ def get_customer_from_session_user():
 
     for row in customer.custom_school_teacher_details:
 
-        if row.subject == "Principal":
-            role_text = "👑 Head Master / Principal"
-        elif row.subject == "Overall Coordinator":
-            role_text = "⭐ Overall Co-ordinator"
-        else:
-            role_text = f"{row.subject} In-charge"
+        role_map = {
+            "Science Olympiad (ISO)": "🔬 Science In-charge (ISO)",
+            "Maths Olympiad (IMO)": "📐 Maths In-charge (IMO)",
+            "English Olympiad (EIO)": "🔤 English In-charge (EIO)",
+            "General Knowledge Olympiad (GKIO)": "🌍 GK In-charge (GKIO)",
+            "Computer Olympiad (ICO)": "💻 Computer In-charge (ICO)",
+            "Drawing Olympiad (IDO)": "🎨 Drawing In-charge (IDO)",
+            "Essay Olympiad (NESO)": "📝 Essay In-charge (NESO)",
+            "Social Studies Olympiad (NSSO)": "🏛️ Social Studies (NSSO)",
+            "Hindi Olympiad (NHO)": "🪔 Hindi In-charge (NHO)",
+            "Logical Reasoning Olympiad (NLRO)": "🧠 Logical Reasoning (NLRO)",
+            "Commerce Olympiad (CIO)": "📊 Commerce In-charge (CIO)",
+            "Principal": "👑 Head Master / Principal",
+            "Overall Coordinator": "⭐ Overall Co-ordinator"
+        }
+        role_text = role_map.get(row.subject, f"{row.subject} In-charge")
 
         coordinators_data[row.subject] = {
             "role": role_text,
@@ -888,6 +826,9 @@ def get_customer_from_session_user():
         "contact_email": contact_email,
         "contact_mobile": contact_mobile,
         "application_deadline": customer.custom_application_deadline,
+        "school_code": customer.custom_school_code,
+        "registration_date_1": customer.custom_last_date_of_reg,
+        "registration_date_2": customer.custom_last_date_of_reg_2,
         "coordinators": coordinators_data,
         "exam_summaries": exam_summaries_data,
         "session_user": frappe.session.user,
@@ -932,6 +873,16 @@ def save_little_champ_registration(registration_data):
         customer_doc.custom_school_code = (
             data.get("school_info", {})
             .get("school_code")
+        )
+
+        customer_doc.custom_taluka = (
+            data.get("school_info", {})
+            .get("taluka")
+        )
+
+        customer_doc.custom_district = (
+            data.get("school_info", {})
+            .get("district")
         )
 
         customer_doc.save(

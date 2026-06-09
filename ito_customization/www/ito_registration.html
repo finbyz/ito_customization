@@ -1550,94 +1550,55 @@ console.log(
             "";
         }
 
-            function populateTeacherDetails(
-        teachers,
-        examSummaries = []
-    ) {
+    function populateTeacherDetails(teachers, examSummaries = []) {
+        const tbody = document.querySelector("#step2 tbody");
+        if (!tbody) return;
 
-    const tbody =
-        document.querySelector(
-            "#step2 tbody"
-        );
+        // Get all existing row titles to prevent duplicates
+        const existingRowTitles = Array.from(tbody.querySelectorAll("tr td:first-child")).map(td => td.innerText.trim());
 
-    if (!tbody) return;
+        // Append missing subject rows dynamically
+        examSummaries.forEach(exam => {
+            const subjectName = exam.subject || "";
+            if (!subjectName) return;
 
-    // Keep Principal + Overall Coordinator
-    const fixedRows =
-        Array.from(
-            tbody.querySelectorAll("tr")
-        ).slice(0, 2);
+            let matchString = subjectName;
+            const bracketMatch = subjectName.match(/\(([^)]+)\)/);
+            if (bracketMatch) {
+                matchString = bracketMatch[0]; // e.g. "(ISO)"
+            }
 
-    // Remove all subject rows
-    tbody.innerHTML = "";
+            const alreadyExists = existingRowTitles.some(text => text.includes(matchString));
 
-    fixedRows.forEach(row => {
-        tbody.appendChild(row);
-    });
+            if (!alreadyExists) {
+                const teacher = teachers?.find(t => t.subject === subjectName) || {};
 
-    // Create subject rows dynamically
-    examSummaries.forEach(exam => {
+                const row = document.createElement("tr");
+                row.className = "hover:bg-slate-50 transition-colors";
+                row.dataset.subject = subjectName;
 
-        const subjectName =
-            exam.subject || "";
-
-        const teacher =
-            teachers?.find(
-                t => t.subject === subjectName
-            ) || {};
-
-        const row = document.createElement("tr");
-
-        row.className =
-            "hover:bg-slate-50 transition-colors";
-
-        row.dataset.subject =
-            subjectName;
-
-        row.innerHTML = `
-            <td class="p-3 font-semibold text-slate-700 border-r border-slate-100">
-                ${subjectName} In-charge
-            </td>
-
-            <td class="p-2">
-                <input
-                    type="text"
-                    value="${teacher.name1 || ""}"
-                    class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all"
-                    placeholder="Enter Name"
-                >
-            </td>
-
-            <td class="p-2">
-                <input
-                    type="text"
-                    value="${teacher.phone_number || ""}"
-                    class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all"
-                    placeholder="Mobile No."
-                >
-            </td>
-
-            <td class="p-2">
-                <input
-                    type="date"
-                    value="${teacher.date_of_birth || ""}"
-                    class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all"
-                >
-            </td>
-
-            <td class="p-2">
-                <input
-                    type="email"
-                    value="${teacher.email_id || ""}"
-                    class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all"
-                    placeholder="Email Address"
-                >
-            </td>
-        `;
-
-        tbody.appendChild(row);
-    });
-}
+                row.innerHTML = `
+                    <td class="p-3 font-semibold text-slate-700 border-r border-slate-100">
+                        ${subjectName} In-charge
+                    </td>
+                    <td class="p-2">
+                        <input type="text" value="${teacher.name1 || ""}" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name">
+                    </td>
+                    <td class="p-2">
+                        <input type="text" value="${teacher.phone_number || ""}" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No.">
+                    </td>
+                    <td class="p-2">
+                        <input type="date" value="${teacher.date_of_birth || ""}" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all">
+                    </td>
+                    <td class="p-2">
+                        <input type="email" value="${teacher.email_id || ""}" class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address">
+                    </td>
+                `;
+                tbody.appendChild(row);
+                existingRowTitles.push(`${subjectName} In-charge`);
+            }
+        });
+    }
 
 function populateExamSummaryData(examSummaries) {
 
@@ -1825,6 +1786,28 @@ function populateExamSummaryData(examSummaries) {
         }
 
         row.style.display = "none";
+    });
+
+    // Unhide rows that correspond to subjects in the Exam Summary
+    examSummaries.forEach(exam => {
+        const subjectName = exam.subject || "";
+        if (!subjectName) return;
+
+        let matchString = subjectName;
+        const bracketMatch = subjectName.match(/\(([^)]+)\)/);
+        if (bracketMatch) {
+            matchString = bracketMatch[0]; // e.g. "(ISO)"
+        }
+
+        rows.forEach(row => {
+            const firstCell = row.querySelector("td");
+            if (!firstCell) return;
+            const rowTitle = firstCell.innerText.trim();
+            
+            if (rowTitle.includes(matchString)) {
+                row.style.display = "";
+            }
+        });
     });
 
     Object.values(coordinators).forEach(data => {
