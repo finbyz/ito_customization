@@ -40,8 +40,7 @@
    "in_list_view": 1,
    "label": "Academic Year",
    "options": "School Academic Year",
-   "reqd": 1,
-   "unique": 1
+   "reqd": 1
   },
   {
    "fieldname": "posting_date",
@@ -72,8 +71,8 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-06-06 11:14:40.010056",
- "modified_by": "punitsharma9998@gmail.com",
+ "modified": "2026-06-09 12:27:33.069310",
+ "modified_by": "puneet@yopmail.com",
  "module": "ITO Customization",
  "name": "Yearly Exam Date",
  "owner": "Administrator",

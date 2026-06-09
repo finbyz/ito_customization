@@ -344,6 +344,7 @@
 
     <script>
         // --- WIZARD LOGIC ---
+        let subjectData = [];
         let currentStep = 1;
         const totalSteps = 4;
 
@@ -386,36 +387,31 @@
 
         // --- LITTLE CHAMP EXAMS ACCORDION DATA & LOGIC ---
         // Specific dates pulled from PDF Page 3 (Slot 1 and Slot 2)
-        const lcSubjectDates = {
-            "LCAO": ["07th Dec, 26 (Slot 1)", "18th Jan, 27 (Slot 2)"],
-            "LCHO": ["07th Dec, 26 (Slot 1)", "18th Jan, 27 (Slot 2)"],
-            "LCEVSO": ["08th Dec, 26 (Slot 1)", "19th Jan, 27 (Slot 2)"],
-            "LCEO": ["09th Dec, 26 (Slot 1)", "20th Jan, 27 (Slot 2)"],
-            "LCDO": ["10th Dec, 26 (Slot 1)", "21st Jan, 27 (Slot 2)"],
-            "LCMO": ["11th Dec, 26 (Slot 1)", "22nd Jan, 27 (Slot 2)"]
-        };
-
-        const lcSubjectNames = {
-            "LCMO": "Little Champ Maths (LCMO)",
-            "LCEVSO": "Little Champ EVS (LCEVSO)",
-            "LCEO": "Little Champ English (LCEO)",
-            "LCHO": "Little Champ Hindi (LCHO)",
-            "LCDO": "Little Champ Drawing (LCDO)",
-            "LCAO": "Little Champ Abacus (LCAO)"
-        };
-
+       
         const lcClasses = ["Nursery", "Junior KG", "Senior KG"];
 
         const cardsContainer = document.getElementById('subjectCardsContainer');
 
         // Render all collapsible subject child tables on page load
-        function buildAllSubjectAccordions() {
+        function buildAllSubjectAccordions(subjects = []) {
             cardsContainer.innerHTML = '';
             
-            Object.keys(lcSubjectNames).forEach((subjectCode, index) => {
-                const dates = lcSubjectDates[subjectCode];
-                const fullName = lcSubjectNames[subjectCode];
-                const cardId = `lcSubjectCard_${subjectCode}`;
+            subjects.forEach((subject, index) => {
+
+                const dates =
+                    subject.target_dates || [];
+            
+                const fullName =
+                    subject.subject || "";
+            
+                const subjectKey =
+                    fullName.replace(
+                        /[^a-zA-Z0-9]/g,
+                        "_"
+                    );
+            
+                const cardId =
+                    `subjectCard_${subjectKey}`;
 
                 // Generate date options
                 const datesHtml = dates.map((date, dateIdx) => `
@@ -433,7 +429,7 @@
                                 <svg id="chevron_${cardId}" class="w-5 h-5 text-slate-500 transform transition-transform duration-200 -rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path>
                                 </svg>
-                                <span class="font-bold text-slate-800 text-sm md:text-base">${fullName}</span>
+                                <span class="subject-name font-bold text-slate-800 text-sm md:text-base">${fullName}</span>
                             </div>
                             
                             <div class="flex items-center gap-2">
@@ -502,23 +498,55 @@
         }
 
         function expandAll() {
-            Object.keys(lcSubjectNames).forEach(subjectCode => {
-                const cardId = `lcSubjectCard_${subjectCode}`;
-                const body = document.getElementById(`body_${cardId}`);
-                const chevron = document.getElementById(`chevron_${cardId}`);
-                body.classList.remove('hidden');
-                chevron.classList.remove('-rotate-90');
-            });
-        }
 
+            document
+                .querySelectorAll('[id^="subjectCard_"]')
+                .forEach(card => {
+        
+                    const body =
+                        card.querySelector(
+                            '[id^="body_subjectCard_"]'
+                        );
+        
+                    const chevron =
+                        card.querySelector(
+                            '[id^="chevron_subjectCard_"]'
+                        );
+        
+                    if (body) {
+                        body.classList.remove("hidden");
+                    }
+        
+                    if (chevron) {
+                        chevron.classList.remove("-rotate-90");
+                    }
+                });
+        }
+        
         function collapseAll() {
-            Object.keys(lcSubjectNames).forEach(subjectCode => {
-                const cardId = `lcSubjectCard_${subjectCode}`;
-                const body = document.getElementById(`body_${cardId}`);
-                const chevron = document.getElementById(`chevron_${cardId}`);
-                body.classList.add('hidden');
-                chevron.classList.add('-rotate-90');
-            });
+        
+            document
+                .querySelectorAll('[id^="subjectCard_"]')
+                .forEach(card => {
+        
+                    const body =
+                        card.querySelector(
+                            '[id^="body_subjectCard_"]'
+                        );
+        
+                    const chevron =
+                        card.querySelector(
+                            '[id^="chevron_subjectCard_"]'
+                        );
+        
+                    if (body) {
+                        body.classList.add("hidden");
+                    }
+        
+                    if (chevron) {
+                        chevron.classList.add("-rotate-90");
+                    }
+                });
         }
 
         // Add a row to a specific subject card
@@ -750,7 +778,7 @@
                     '#step2 tbody tr'
                 );
         
-                const coordRoles = [
+            const coordRoles = [
                 'principal',
                 'overall_coordinator',
                 'maths',
@@ -786,77 +814,85 @@
             });
         
             // ----------------------------------
-// Exams (Step 3)
-// ----------------------------------
-
-document
-.querySelectorAll('[id^="lcSubjectCard_"]')
-.forEach(card => {
-
-    const cardId = card.id;
-
-    const subjectCode =
-        cardId.replace(
-            'lcSubjectCard_',
-            ''
-        );
-
-    const tbody =
-        card.querySelector('tbody');
-
-    if (!tbody) return;
-
-    const selectedDate =
-        card.querySelector(
-            `input[name="date_${cardId}"]:checked`
-        )?.value || '';
-
-    data.exams[subjectCode] = {
-        exam_date: selectedDate,
-        registrations: []
-    };
-
-    tbody
-        .querySelectorAll('tr')
-        .forEach(row => {
-
-            const cells =
-                row.querySelectorAll(
-                    'input, select'
-                );
-
-            if (
-                cells.length >= 4 &&
-                (
-                    cells[0].value ||
-                    cells[1].value ||
-                    cells[2].value ||
-                    cells[3].value
+            // Exams (Step 3) - Dynamic
+            // ----------------------------------
+        
+            document
+                .querySelectorAll(
+                    '[id^="subjectCard_"]'
                 )
-            ) {
-
-                data.exams[
-                    subjectCode
-                ].registrations.push({
-                    class: cells[0].value,
-                    teacher_name: cells[1].value,
-                    whatsapp: cells[2].value,
-                    students: cells[3].value
+                .forEach(card => {
+        
+                    const cardId = card.id;
+        
+                    const subjectKey =
+                        cardId.replace(
+                            'subjectCard_',
+                            ''
+                        );
+        
+                    const subjectName =
+                        card.querySelector(
+                            '.subject-name'
+                        )?.innerText || '';
+        
+                    const tbody =
+                        card.querySelector('tbody');
+        
+                    if (!tbody) return;
+        
+                    const selectedDate =
+                        card.querySelector(
+                            `input[name="date_${cardId}"]:checked`
+                        )?.value || '';
+        
+                    data.exams[subjectKey] = {
+                        subject: subjectName,
+                        exam_date: selectedDate,
+                        registrations: []
+                    };
+        
+                    tbody
+                        .querySelectorAll('tr')
+                        .forEach(row => {
+        
+                            const cells =
+                                row.querySelectorAll(
+                                    'input, select'
+                                );
+        
+                            if (
+                                cells.length >= 4 &&
+                                (
+                                    cells[0].value ||
+                                    cells[1].value ||
+                                    cells[2].value ||
+                                    cells[3].value
+                                )
+                            ) {
+        
+                                data.exams[
+                                    subjectKey
+                                ].registrations.push({
+                                    class: cells[0].value,
+                                    teacher_name: cells[1].value,
+                                    whatsapp: cells[2].value,
+                                    students: cells[3].value
+                                });
+                            }
+                        });
+        
+                    if (
+                        data.exams[
+                            subjectKey
+                        ].registrations.length === 0
+                    ) {
+        
+                        delete data.exams[
+                            subjectKey
+                        ];
+                    }
                 });
-            }
-        });
-
-    if (
-        data.exams[
-            subjectCode
-        ].registrations.length === 0
-    ) {
-
-        delete data.exams[
-            subjectCode
-        ];
-    }
-});
         
             // ----------------------------------
             // Payment (Step 4)
@@ -901,48 +937,496 @@ document
 
         // --- PAGE INIT ---
         window.onload = async function() {
-            buildAllSubjectAccordions();
             togglePaymentFields();
 
             await loadCustomerData();
 
         };
 
-        async function loadCustomerData() {
+        function populateSchoolInfo(data) {
 
-            try {
-        
-                const response = await fetch(
-                    "/api/method/ito_customization.ito_customization.api.get_customer_from_session_user"
-                );
-        
-                const result = await response.json();
-        
-                if (!result.message) {
-                    return;
-                }
-        
-                // ONLY FOR LITTLE CHAMP SCHOOLS
-                if (!result.message.is_little_champ) {
-                    return;
-                }
-        
-                populateSchoolInfo(result.message);
-        
-                populateCoordinatorData(
-                    result.message.coordinators || {}
-                );
-        
-                populateExamSummaryData(
-                    result.message.exam_summaries || []
-                );
-        
-            } catch (e) {
-        
-                console.error(e);
-        
+            populateTeacherDetails(
+                data.customer.custom_school_teacher_details || []
+            );
+
+            const fields = document.querySelectorAll(
+                '#step1 input, #step1 select, #step1 textarea'
+            );
+
+            if (data.application_deadline) {
+
+                const deadline =
+                    new Date(data.application_deadline);
+            
+                document.getElementById(
+                    "application-deadline"
+                ).innerText =
+                    deadline.toLocaleDateString(
+                        "en-IN",
+                        {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric"
+                        }
+                    );
             }
+
+            if (data.application_deadline) {
+
+                const deadline =
+                    new Date(data.application_deadline);
+            
+                deadline.setHours(
+                    23, 59, 59, 999
+                );
+            
+                const today = new Date();
+            
+                if (today > deadline) {
+            
+                    document.body.innerHTML = `
+<div class="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+
+    <div class="max-w-2xl w-full">
+
+        <div class="bg-white rounded-3xl shadow-lg border border-slate-200 overflow-hidden">
+
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6">
+                <h1 class="text-3xl font-bold text-white">
+                    Indian Talent Olympiad
+                </h1>
+                <p class="text-blue-100 mt-1">
+                    School Registration Portal
+                </p>
+            </div>
+
+            <div class="p-10 text-center">
+
+                <div class="mx-auto w-20 h-20 rounded-full bg-amber-100 flex items-center justify-center mb-6">
+                    <svg
+                        class="w-10 h-10 text-amber-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M12 8v4m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z"
+                        />
+                    </svg>
+                </div>
+
+                <h2 class="text-3xl font-bold text-slate-800 mb-3">
+                    Registration Closed
+                </h2>
+
+                <p class="text-slate-600 text-lg mb-6">
+                    The registration window for the current academic session has ended.
+                </p>
+
+                <div class="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-6">
+                    <p class="text-sm uppercase tracking-wide text-amber-700 font-semibold">
+                        Application Deadline
+                    </p>
+
+                    <p class="text-xl font-bold text-amber-900 mt-1">
+                        ${deadline.toLocaleDateString(
+                            "en-IN",
+                            {
+                                day: "numeric",
+                                month: "long",
+                                year: "numeric"
+                            }
+                        )}
+                    </p>
+                </div>
+
+                <p class="text-slate-500 leading-relaxed">
+                    If you believe this is an error or require assistance,
+                    please contact the Indian Talent Olympiad support team
+                    for further guidance regarding registrations.
+                </p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+`;
+            
+                    return;
+                }
+            }
+        
+            // School Name
+            fields[0].value =
+                data.customer_name ||
+                data.customer?.customer_name ||
+                "";
+        
+            // ITO School Code
+            fields[1].value =
+                data.custom_ito_school_code ||
+                data.customer?.custom_ito_school_code ||
+                "";
+        
+            // Complete School Address
+            fields[2].value =
+                (data.address?.address_line1 || "") +
+                (data.address?.address_line2 ? "\n" + data.address.address_line2 : "");
+                
+            // City
+            fields[3].value =
+                data.address?.city ||
+                "";
+        
+            // Taluka
+            fields[4].value =
+                data.address?.custom_taluka ||
+                data.customer?.custom_taluka ||
+                "";
+        
+            // District
+            fields[5].value =
+                data.address?.custom_district ||
+                data.customer?.custom_district ||
+                "";
+        
+            // State
+            fields[6].value =
+                data.address?.state ||
+                "";
+        
+            // Pincode
+            fields[7].value =
+                data.address?.pincode ||
+                "";
+        
+            // GST
+            fields[8].value =
+            data.customer?.tax_id ||
+            data.customer?.gstin ||
+            "";
+
+            // STD Code
+            fields[9].value =
+            data.customer?.custom_std_code ||
+            "";
+
+            // Phone 1
+            fields[10].value =
+            data.contact_mobile ||
+            data.customer?.mobile_no ||
+            "";
+
+            // WhatsApp
+            fields[11].value =
+            data.customer?.custom_whatsapp_no ||
+            "";
+
+            // School Email
+            fields[12].value =
+            data.contact_email ||
+            data.customer?.email_id
         }
+
+        function populateTeacherDetails(teachers) {
+
+            if (!teachers || !teachers.length) {
+                return;
+            }
+        
+            const subjectRowMap = {
+                "Principal": 0,
+                "Overall Coordinator": 1,
+                "Little Champ Maths (LCMO)": 2,
+                "Little Champ English (LCEO)": 3,
+                "Little Champ EVS (LCEVSO)": 4,
+                "Little Champ Drawing (LCDO)": 5,
+                "Little Champ Hindi (LCHO)": 6,
+                "Little Champ Abacus (LCAO)": 7
+            };
+        
+            const rows = document.querySelectorAll(
+                "#step2 tbody tr"
+            );
+        
+            teachers.forEach(teacher => {
+        
+                const rowIndex =
+                    subjectRowMap[teacher.subject];
+        
+                if (
+                    rowIndex === undefined ||
+                    !rows[rowIndex]
+                ) {
+                    return;
+                }
+        
+                const inputs =
+                    rows[rowIndex].querySelectorAll("input");
+        
+                if (inputs.length < 4) {
+                    return;
+                }
+        
+                // Name
+                inputs[0].value =
+                    teacher.name1 || "";
+        
+                // Mobile
+                inputs[1].value =
+                    teacher.phone_number || "";
+        
+                // DOB
+                inputs[2].value =
+                    teacher.date_of_birth || "";
+        
+                // Email
+                inputs[3].value =
+                    teacher.email_id || "";
+            });
+        
+        }
+
+        function populateExamSummaryData(examSummaries) {
+
+            document
+        .querySelectorAll('[id^="subjectCard_"]')
+        .forEach(card => {
+            card.style.display = "none";
+        });
+
+            examSummaries.forEach(exam => {
+        
+                // Find subject code from subject name
+                const match = exam.subject.match(/\((.*?)\)/);
+        
+                if (!match) return;
+        
+                const subjectCode = match[1];
+        
+                const subjectKey =
+                    exam.subject
+                        .replace(/[^a-zA-Z0-9]/g, "_");
+
+                const cardId =
+                    `subjectCard_${subjectKey}`;
+        
+                // Card exists?
+                const card = document.getElementById(cardId);
+        
+                if (!card) return;
+                // Show only subjects that exist
+                card.style.display = "";
+                        
+                // ----------------------------------
+                // Replace Target Dates
+                // ----------------------------------
+        
+                const dateContainer =
+                    card.querySelector(
+                        '.flex.flex-wrap.gap-2'
+                    );
+        
+                if (dateContainer) {
+        
+                    dateContainer.innerHTML =
+                        exam.target_dates.map(
+                            (date, idx) => {
+        
+                                const d = new Date(date);
+        
+                                const formatted =
+                                    d.toLocaleDateString(
+                                        'en-GB',
+                                        {
+                                            day: '2-digit',
+                                            month: 'short'
+                                        }
+                                    );
+        
+                                return `
+                                    <label class="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 border border-slate-200 rounded text-xs hover:bg-slate-50 has-[:checked]:border-blue-500 has-[:checked]:ring-1 ring-blue-500 transition-all outline-none">
+                                        <input
+                                            type="radio"
+                                            name="date_${cardId}"
+                                            value="${date}"
+                                            class="w-3.5 h-3.5 text-blue-600"
+                                            ${idx === 0 ? 'checked' : ''}
+                                        >
+                                        <span class="font-medium text-slate-700">
+                                            ${formatted}
+                                        </span>
+                                    </label>
+                                `;
+                            }
+                        ).join('');
+                }
+        
+                // ----------------------------------
+                // Populate Existing Rows
+                // ----------------------------------
+        
+                const tbody =
+                    document.getElementById(
+                        `tbody_${cardId}`
+                    );
+        
+                if (!tbody) return;
+        
+                tbody.innerHTML = '';
+        
+                exam.rows.forEach(row => {
+        
+                    addClassRow(cardId);
+        
+                    const lastRow =
+                        tbody.lastElementChild;
+        
+                    if (!lastRow) return;
+        
+                    const inputs =
+                        lastRow.querySelectorAll(
+                            'input, select'
+                        );
+        
+                    if (inputs[0])
+                        inputs[0].value =
+                            row.class || '';
+        
+                    if (inputs[1])
+                        inputs[1].value =
+                            row.teacher_name || '';
+        
+                    if (inputs[2])
+                        inputs[2].value =
+                            row.whatsapp_no || '';
+        
+                    if (inputs[3])
+                        inputs[3].value =
+                            row.no_of_students || 0;
+                });
+        
+                calculateTotal(cardId);
+            });
+        }
+
+        function populateCoordinatorData(
+    coordinators
+) {
+
+    if (!coordinators) return;
+
+    const roleIndexMap = {
+        overall_coordinator: 1,
+        maths: 2,
+        english: 3,
+        evs: 4,
+        drawing: 5,
+        hindi: 6,
+        abacus: 7
+    };
+
+    const rows =
+        document.querySelectorAll(
+            "#step2 tbody tr"
+        );
+
+    Object.entries(coordinators)
+        .forEach(([role, data]) => {
+
+            const rowIndex =
+                roleIndexMap[role];
+
+            if (
+                rowIndex === undefined ||
+                !rows[rowIndex]
+            ) {
+                return;
+            }
+
+            const inputs =
+                rows[rowIndex]
+                .querySelectorAll(
+                    "input"
+                );
+
+            if (inputs[0])
+                inputs[0].value =
+                    data.name || "";
+
+            if (inputs[1])
+                inputs[1].value =
+                    data.mobile || "";
+
+            if (inputs[2])
+                inputs[2].value =
+                    formatDateForInput(
+                        data.dob
+                    );
+
+            if (inputs[3])
+                inputs[3].value =
+                    data.email || "";
+        });
+}
+
+async function loadCustomerData() {
+
+    console.log("loadCustomerData called");
+
+    try {
+
+        const response = await fetch(
+            "/api/method/ito_customization.ito_customization.api.get_customer_from_session_user"
+        );
+
+        const result = await response.json();
+
+        console.log("API Result", result);
+
+        if (!result.message) {
+            return;
+        }
+
+        console.log(
+            "Customer Data",
+            result.message
+        );
+
+        const examSummaries =
+            result.message.exam_summaries || [];
+
+        buildAllSubjectAccordions(
+            examSummaries
+        );
+
+        populateSchoolInfo(
+            result.message
+        );
+
+        populateCoordinatorData(
+            result.message.coordinators || {}
+        );
+
+        populateExamSummaryData(
+            examSummaries
+        );
+
+    } catch (e) {
+
+        console.error(
+            "Load Customer Error",
+            e
+        );
+
+    }
+}
 
     </script>
 </body>

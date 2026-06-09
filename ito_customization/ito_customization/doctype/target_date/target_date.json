@@ -1,32 +1,30 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "field:registration_from",
- "creation": "2026-05-28 18:47:02.739638",
+ "creation": "2026-06-01 18:32:01.413272",
  "doctype": "DocType",
+ "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "registration_from"
+  "date"
  ],
  "fields": [
   {
-   "fieldname": "registration_from",
-   "fieldtype": "Link",
+   "fieldname": "date",
+   "fieldtype": "Date",
    "in_list_view": 1,
-   "label": "Registration From",
-   "options": "School Academic Year",
-   "unique": 1
+   "label": "Date",
+   "reqd": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-06-06 11:08:17.954911",
- "modified_by": "punitsharma9998@gmail.com",
+ "modified": "2026-06-01 18:34:07.713756",
+ "modified_by": "Administrator",
  "module": "ITO Customization",
- "name": "Academic Years",
- "naming_rule": "By fieldname",
+ "name": "Target Date",
  "owner": "Administrator",
  "permissions": [],
  "row_format": "Dynamic",

@@ -19,7 +19,7 @@ def ensure_subject_exists(subject_name):
             pass  # Subject was created by another process
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=True)
 def save_ito_registration(registration_data):
 
     try:
@@ -30,6 +30,8 @@ def save_ito_registration(registration_data):
             else registration_data
         )
         
+        frappe.log_error("Registration Data", json.dumps(data, indent=2))
+        
         customer = create_or_update_customer(
             data.get("school_info", {})
         )
@@ -39,6 +41,14 @@ def save_ito_registration(registration_data):
             data.get("school_info", {})
         )
 
+        # Create Principal as Contact
+        if data.get("coordinators", {}).get("principal"):
+            create_or_update_principal(
+                data["coordinators"]["principal"],
+                customer
+            )
+
+        # Create all teachers (including principal) in Teacher doctype
         create_or_update_teachers(
             data.get("coordinators", {}),
             customer
@@ -71,17 +81,7 @@ def save_ito_registration(registration_data):
                 es_doc.exam_summary = []
 
                 subject_map = {
-                    "IDO": "Drawing Olympiad (IDO)",
-                    "NESO": "Essay Olympiad (NESO)",
-                    "EIO": "English Olympiad (EIO)",
-                    "IMO": "Maths Olympiad (IMO)",
-                    "ISO": "Science Olympiad (ISO)",
-                    "GKIO": "General Knowledge (GKIO)",
-                    "ICO": "Computer Olympiad (ICO)",
-                    "NSSO": "Social Studies (NSSO)",
-                    "NHO": "Hindi Olympiad (NHO)",
-                    "NLRO": "Logical Reasoning (NLRO)",
-                    "CIO": "Commerce Olympiad (CIO)"
+                    
                 }
 
                 for subject_code, rows in exams_data.items():
@@ -139,8 +139,15 @@ def save_ito_registration(registration_data):
 
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=True)
 def save_registration_step():
+
+    if frappe.session.user == "Guest":
+        data = frappe.request.get_json() or {}
+        return {
+            "success": True,
+            "step": cint(data.get("step"))
+        }
 
     try:
 
@@ -200,6 +207,11 @@ def save_registration_step():
             coordinators = data.get(
                 "coordinators",
                 {}
+            )
+            
+            frappe.log_error(
+                title="STEP 2 COORDINATORS",
+                message=frappe.as_json(coordinators)
             )
 
             create_or_update_teachers(
@@ -483,41 +495,31 @@ def create_or_update_principal(principal, customer_name):
         contact.save(ignore_permissions=True)
 
 
-def create_or_update_teachers(
-    coordinators,
-    customer_name
-):
-
+def create_or_update_teachers(coordinators, customer_name):
+    
     customer = frappe.get_doc(
         "Customer",
         customer_name
     )
 
     subject_map = {
-        "principal": "Principal",
-        "overall_coordinator": "Overall Coordinator",
         "iso": "Science Olympiad (ISO)",
         "imo": "Maths Olympiad (IMO)",
         "eio": "English Olympiad (EIO)",
-        "gkio": "General Knowledge (GKIO)",
+        "gkio": "General Knowledge Olympiad (GKIO)",
         "ico": "Computer Olympiad (ICO)",
         "ido": "Drawing Olympiad (IDO)",
         "neso": "Essay Olympiad (NESO)",
-        "nsso": "Social Studies (NSSO)",
+        "nsso": "Social Studies Olympiad (NSSO)",
         "nho": "Hindi Olympiad (NHO)",
-        "nlro": "Logical Reasoning (NLRO)",
+        "nlro": "Logical Reasoning Olympiad (NLRO)",
         "cio": "Commerce Olympiad (CIO)"
     }
 
-    # ----------------------------------
-    # Ensure Subjects Exist
-    # ----------------------------------
-
+    # Ensure all subjects exist in School Subject doctype
+    ensure_subject_exists("Principal")
     for subject_name in subject_map.values():
-
-        ensure_subject_exists(
-            subject_name
-        )
+        ensure_subject_exists(subject_name)
 
     # ----------------------------------
     # Clear Customer Child Table
@@ -525,101 +527,103 @@ def create_or_update_teachers(
 
     customer.custom_school_teacher_details = []
 
-    for role, coordinator in coordinators.items():
+    for role_key, coordinator in coordinators.items():
 
         if not coordinator.get("name"):
             continue
 
-        subject = subject_map.get(role)
+        role_text = coordinator.get("role", "").strip()
 
-        if not subject:
+        # Skip overall_coordinator (not a teacher role)
+        if "overall" in role_text.lower() or "overall" in role_key.lower():
             continue
 
-        # ----------------------------------
+        subject = None
+
+        if "principal" in role_text.lower() or "principal" in role_key.lower():
+            subject = "Principal"
+        else:
+            # 1. Try to match from hardcoded HTML rows which contain (ISO), (IMO)
+            for code, sub_name in subject_map.items():
+                if f"({code.upper()})" in role_text:
+                    subject = sub_name
+                    break
+            
+            # 2. Try to match dynamic rows ending in " In-charge"
+            if not subject and role_text.endswith(" In-charge"):
+                subject = role_text[:-10].strip()
+                
+            # 3. Try to match by role_key (fallback)
+            if not subject:
+                subject = subject_map.get(role_key)
+            
+        if not subject:
+            frappe.log_error("Unmatched Coordinator Role", f"Role Key: {role_key}, Role Text: {role_text}")
+            continue
+            
+        ensure_subject_exists(subject)
+
+        # --------------------------
         # Find Existing Teacher
-        # ----------------------------------
+        # --------------------------
 
         teacher_name = frappe.db.get_value(
             "Teacher",
             {
-                "name1": coordinator.get("name")
+                "name1": coordinator.get("name"),
+                "customer_reference": customer.name
             }
         )
 
         if teacher_name:
-
             teacher = frappe.get_doc(
                 "Teacher",
                 teacher_name
             )
-
         else:
-
             teacher = frappe.new_doc(
                 "Teacher"
             )
 
-        # ----------------------------------
+        # --------------------------
         # Teacher Master
-        # ----------------------------------
+        # --------------------------
 
         teacher.name1 = coordinator.get("name")
-
-        teacher.phone_number = (
-            coordinator.get("mobile")
-        )
-
-        teacher.email_id = (
-            coordinator.get("email")
-        )
-
+        teacher.phone_number = coordinator.get("mobile")
+        teacher.email_id = coordinator.get("email")
         teacher.date_of_birth = (
             coordinator.get("dob")
             or "2000-01-01"
         )
-
         teacher.subject = subject
-
         teacher.status = "Active"
-
         teacher.experience = "Experienced"
-
-        teacher.customer_reference = (
-            customer.name
-        )
+        teacher.customer_reference = customer.name
 
         if teacher.is_new():
-
             teacher.insert(
                 ignore_permissions=True
             )
-
         else:
-
             teacher.save(
                 ignore_permissions=True
             )
 
-        # ----------------------------------
+        # --------------------------
         # Customer Child Table
-        # ----------------------------------
+        # --------------------------
 
         customer.append(
             "custom_school_teacher_details",
             {
                 "name1": teacher.name,
-                "date_of_birth":
-                    teacher.date_of_birth,
-                "phone_number":
-                    teacher.phone_number,
-                "status":
-                    teacher.status,
-                "email_id":
-                    teacher.email_id,
-                "subject":
-                    teacher.subject,
-                "experience":
-                    teacher.experience
+                "date_of_birth": teacher.date_of_birth,
+                "phone_number": teacher.phone_number,
+                "status": teacher.status,
+                "email_id": teacher.email_id,
+                "subject": teacher.subject,
+                "experience": teacher.experience
             }
         )
 
@@ -628,7 +632,7 @@ def create_or_update_teachers(
     )
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=True)
 def get_customer_from_session_user():
 
     if frappe.session.user == "Guest":
@@ -747,14 +751,15 @@ def get_customer_from_session_user():
         "Science Olympiad (ISO)": "iso",
         "Maths Olympiad (IMO)": "imo",
         "English Olympiad (EIO)": "eio",
-        "General Knowledge (GKIO)": "gkio",
+        "General Knowledge Olympiad (GKIO)": "gkio",
         "Computer Olympiad (ICO)": "ico",
         "Drawing Olympiad (IDO)": "ido",
         "Essay Olympiad (NESO)": "neso",
-        "Social Studies (NSSO)": "nsso",
+        "Social Studies Olympiad (NSSO)": "nsso",
         "Hindi Olympiad (NHO)": "nho",
-        "Logical Reasoning (NLRO)": "nlro",
-        "Commerce Olympiad (CIO)": "cio"
+        "Logical Reasoning Olympiad (NLRO)": "nlro",
+        "Commerce Olympiad (CIO)": "cio",
+        "Principal": "principal"
     }
 
     for row in customer.custom_school_teacher_details:
@@ -771,7 +776,7 @@ def get_customer_from_session_user():
             "dob": str(row.date_of_birth) if row.date_of_birth else ""
         }
 
-   
+    
         # --------------------------------------------------
     # Exam Summary Data (Step 3)
     # --------------------------------------------------
@@ -862,6 +867,32 @@ def get_customer_from_session_user():
         exam_summaries_data.extend(
             subject_map.values()
         )
+        
+    teachers_data = []
+
+    es_name = frappe.db.get_value(
+        "Exams Summary",
+        {
+            "customer": customer.name
+        }
+    )
+
+    if es_name:
+
+        es_doc = frappe.get_doc(
+            "Exams Summary",
+            es_name
+        )
+
+        for row in es_doc.exam_summary:
+
+            teachers_data.append({
+                "subject": row.subject,
+                "class": getattr(row, "class", ""),
+                "teacher_name": row.teacher_name,
+                "whatsapp_no": row.whatsapp_no,
+                "no_of_students": row.no_of_students
+            })
 
     return {
         "customer": customer.as_dict(),
@@ -871,7 +902,8 @@ def get_customer_from_session_user():
         "application_deadline": customer.custom_application_deadline,
         "coordinators": coordinators_data,
         "exam_summaries": exam_summaries_data,
-        "session_user": frappe.session.user
+        "session_user": frappe.session.user,
+         "teachers": teachers_data
     }
 
 
@@ -909,6 +941,11 @@ def save_little_champ_registration(registration_data):
 
         customer_doc.custom_is_little_champ = 1
 
+        customer_doc.custom_school_code = (
+            data.get("school_info", {})
+            .get("school_code")
+        )
+
         customer_doc.save(
             ignore_permissions=True
         )
@@ -922,7 +959,86 @@ def save_little_champ_registration(registration_data):
             data.get("school_info", {})
         )
 
-        frappe.db.commit()
+        # ----------------------------------
+        # Coordinators / Teachers
+        # ----------------------------------
+
+        create_or_update_little_champ_teachers(
+            data.get("coordinators", {}),
+            customer_doc.name
+        )
+
+        # ----------------------------------
+        # Little Champ Exam Summary
+        # ----------------------------------
+
+        exams_data = data.get("exams", {})
+
+        if exams_data:
+
+            es_name = frappe.db.get_value(
+                "Exams Summary",
+                {"customer": customer_doc.name}
+            )
+
+            if es_name:
+
+                es_doc = frappe.get_doc(
+                    "Exams Summary",
+                    es_name
+                )
+
+            else:
+
+                es_doc = frappe.new_doc(
+                    "Exams Summary"
+                )
+
+                es_doc.customer = customer_doc.name
+
+            # Clear old rows
+            es_doc.exam_summary = []
+
+            for subject_key, subject_data in exams_data.items():
+
+                # Get subject name dynamically
+                subject_name = (
+                    subject_data.get("subject")
+                    or subject_data.get("subject_name")
+                    or subject_key
+                )
+
+                registrations = subject_data.get(
+                    "registrations",
+                    []
+                )
+
+                for row in registrations:
+
+                    es_doc.append(
+                        "exam_summary",
+                        {
+                            "subject": subject_name,
+                            "class": row.get("class"),
+                            "teacher_name": row.get("teacher_name"),
+                            "whatsapp_no": row.get("whatsapp"),
+                            "no_of_students": row.get("students")
+                        }
+                    )
+
+            if es_doc.is_new():
+
+                es_doc.insert(
+                    ignore_permissions=True
+                )
+
+            else:
+
+                es_doc.save(
+                    ignore_permissions=True
+                )
+                
+                frappe.db.commit()
 
         return {
             "success": True,
@@ -942,3 +1058,129 @@ def save_little_champ_registration(registration_data):
             "success": False,
             "message": frappe.get_traceback()
         }
+
+
+def create_or_update_little_champ_teachers(
+        coordinators,
+        customer_name
+    ):
+
+    customer = frappe.get_doc(
+        "Customer",
+        customer_name
+    )
+
+    subject_map = {
+        "maths": "Little Champ Maths (LCMO)",
+        "english": "Little Champ English (LCEO)",
+        "evs": "Little Champ EVS (LCEVSO)",
+        "drawing": "Little Champ Drawing (LCDO)",
+        "hindi": "Little Champ Hindi (LCHO)",
+        "abacus": "Little Champ Abacus (LCAO)"
+    }
+
+    # Clear existing rows
+    customer.custom_school_teacher_details = []
+
+    for role, coordinator in coordinators.items():
+
+        if not coordinator.get("name"):
+            continue
+
+        if role == "principal":
+
+            subject = "Principal"
+
+        elif role == "overall_coordinator":
+
+            subject = "Overall Coordinator"
+
+        else:
+
+            subject = subject_map.get(role)
+
+        if not subject:
+            continue
+
+        teacher_name = frappe.db.get_value(
+            "Teacher",
+            {
+                "name1": coordinator.get("name"),
+                "customer_reference": customer.name
+            }
+        )
+
+        if teacher_name:
+
+            teacher = frappe.get_doc(
+                "Teacher",
+                teacher_name
+            )
+
+        else:
+
+            teacher = frappe.new_doc(
+                "Teacher"
+            )
+
+        teacher.name1 = (
+            coordinator.get("name")
+        )
+
+        teacher.phone_number = (
+            coordinator.get("mobile")
+        )
+
+        teacher.email_id = (
+            coordinator.get("email")
+        )
+
+        teacher.date_of_birth = (
+            coordinator.get("dob")
+            or "2000-01-01"
+        )
+
+        teacher.subject = subject
+
+        teacher.status = "Active"
+
+        teacher.experience = "Experienced"
+
+        teacher.customer_reference = (
+            customer.name
+        )
+
+        if teacher.is_new():
+
+            teacher.insert(
+                ignore_permissions=True
+            )
+
+        else:
+
+            teacher.save(
+                ignore_permissions=True
+            )
+
+        customer.append(
+            "custom_school_teacher_details",
+            {
+                "name1": teacher.name,
+                "date_of_birth":
+                    teacher.date_of_birth,
+                "phone_number":
+                    teacher.phone_number,
+                "status":
+                    teacher.status,
+                "email_id":
+                    teacher.email_id,
+                "subject":
+                    teacher.subject,
+                "experience":
+                    teacher.experience
+            }
+        )
+
+    customer.save(
+        ignore_permissions=True
+    )

@@ -453,37 +453,68 @@
 
         function validateStep2() {
 
-            const coordinators = collectFormData().coordinators;
+            const rows =
+                document.querySelectorAll(
+                    "#step2 tbody tr"
+                );
         
-            for (const [role, coordinator] of Object.entries(coordinators)) {
+            for (const row of rows) {
+        
+                const role =
+                    row.querySelector("td")
+                       ?.innerText
+                       ?.trim();
+        
+                const inputs =
+                    row.querySelectorAll(
+                        "input"
+                    );
+        
+                if (inputs.length < 4) {
+                    continue;
+                }
+        
+                const name =
+                    inputs[0].value.trim();
+        
+                const mobile =
+                    inputs[1].value.trim();
+        
+                const dob =
+                    inputs[2].value.trim();
+        
+                const email =
+                    inputs[3].value.trim();
         
                 const hasAnyValue =
-                    coordinator.name ||
-                    coordinator.mobile ||
-                    coordinator.email ||
-                    coordinator.dob;
+                    name ||
+                    mobile ||
+                    dob ||
+                    email;
         
                 if (!hasAnyValue) {
                     continue;
                 }
         
-                if (!coordinator.name) {
-                    alert(`Please enter Name for ${role.replaceAll("_", " ")}`);
+        
+                if (!mobile) {
+                    alert(
+                        `${role}: Mobile is mandatory`
+                    );
                     return false;
                 }
         
-                if (!coordinator.mobile) {
-                    alert(`Please enter Mobile Number for ${role.replaceAll("_", " ")}`);
+                if (!dob) {
+                    alert(
+                        `${role}: DOB is mandatory`
+                    );
                     return false;
                 }
         
-                if (!coordinator.dob) {
-                    alert(`Please enter Date of Birth for ${role.replaceAll("_", " ")}`);
-                    return false;
-                }
-        
-                if (!coordinator.email) {
-                    alert(`Please enter Email for ${role.replaceAll("_", " ")}`);
+                if (!email) {
+                    alert(
+                        `${role}: Email is mandatory`
+                    );
                     return false;
                 }
             }
@@ -561,15 +592,12 @@
                     };
         
                 } else if (currentStep === 3) {
-
-                    if (!validateStep3()) {
-                        return false;
-                    }
+                    if (!validateStep3()) { return false; }
+                    payload = { step: 3, exams: collectFormData().exams };
+                }
         
-                    payload = {
-                        step: 3,
-                        exams: collectFormData().exams
-                    };
+                if (window.current_user === "Guest") {
+                    return true;
                 }
         
                 const response = await fetch(
@@ -587,23 +615,23 @@
         
                 const result = await response.json();
         
-                if (!response.ok) {
-                    throw new Error();
+                if (!response.ok || (result.message && result.message.success === false)) {
+                    throw new Error(result.message ? result.message.message : "Error saving step");
                 }
         
                 return true;
         
             } catch (e) {
-        
-                frappe.msgprint({
-                    title: "Save Failed",
-                    message: "Unable to save current step.",
-                    indicator: "red"
-                });
-        
+
+                console.error("Save Error:", e);
+            
+                alert(
+                    "Unable to save current step."
+                );
+            }
                 return false;
             }
-        }
+
 
         function updateWizardUI() {
             document.querySelectorAll('.step-content').forEach(el => el.classList.add('hidden'));
@@ -633,102 +661,181 @@
             document.getElementById('submitBtn').classList.toggle('hidden', currentStep !== totalSteps);
         }
 
-        // --- EXAMS ACCORDION DATA & LOGIC ---
-        const subjectDates = {
-            "ISO": ["29th Sept", "19th Nov", "05th Jan"],
-            "IMO": ["07th Oct", "30th Nov", "11th Jan"],
-            "EIO": ["05th Oct", "26th Nov", "16th Dec"],
-            "GKIO": ["28th Sept", "18th Nov", "15th Dec"],
-            "ICO": ["09th Oct", "02nd Dec", "18th Dec"],
-            "IDO": ["08th Oct", "01st Dec", "17th Dec"],
-            "NESO": ["06th Oct", "27th Nov", "08th Jan"],
-            "NSSO": ["06th Oct", "27th Nov", "08th Jan"],
-            "NHO": ["01st Oct", "25th Nov", "07th Jan"],
-            "NLRO": ["30th Sept", "20th Nov", "06th Jan"],
-            "CIO": ["09th Dec", "12th Jan"]
-        };
-
-        const subjectNames = {
-            "ISO": "Science Olympiad (ISO)",
-            "IMO": "Maths Olympiad (IMO)",
-            "EIO": "English Olympiad (EIO)",
-            "GKIO": "General Knowledge (GKIO)",
-            "ICO": "Computer Olympiad (ICO)",
-            "IDO": "Drawing Olympiad (IDO)",
-            "NESO": "Essay Olympiad (NESO)",
-            "NSSO": "Social Studies (NSSO)",
-            "NHO": "Hindi Olympiad (NHO)",
-            "NLRO": "Logical Reasoning (NLRO)",
-            "CIO": "Commerce Olympiad (CIO)"
-        };
+        
 
         const cardsContainer = document.getElementById('subjectCardsContainer');
 
-        function buildAllSubjectAccordions() {
+        function buildAllSubjectAccordions(examSummaries = []) {
+
             cardsContainer.innerHTML = '';
-            
-            Object.keys(subjectNames).forEach((subjectCode, index) => {
-                const dates = subjectDates[subjectCode];
-                const fullName = subjectNames[subjectCode];
-                const cardId = `subjectCard_${subjectCode}`;
-
-                const datesHtml = dates.map((date, dateIdx) => `
-                    <label class="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 border border-slate-200 rounded text-xs hover:bg-slate-50 has-[:checked]:border-blue-500 has-[:checked]:ring-1 ring-blue-500 transition-all outline-none">
-                        <input type="radio" name="date_${cardId}" value="${date}" class="w-3.5 h-3.5 text-blue-600" ${dateIdx === 0 ? 'checked' : ''}>
-                        <span class="font-medium text-slate-700">${date}</span>
-                    </label>
-                `).join('');
-
+        
+            examSummaries.forEach(exam => {
+        
+                const subjectKey =
+                    exam.subject
+                        .replace(/[^a-zA-Z0-9]/g, "_");
+        
+                const cardId =
+                    `subjectCard_${subjectKey}`;
+        
+                const datesHtml =
+                    (exam.target_dates || [])
+                        .map((date, dateIdx) => {
+        
+                            const d = new Date(date);
+        
+                            const formatted =
+                                d.toLocaleDateString(
+                                    "en-GB",
+                                    {
+                                        day: "2-digit",
+                                        month: "short"
+                                    }
+                                );
+        
+                            return `
+                                <label class="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 border border-slate-200 rounded text-xs hover:bg-slate-50 has-[:checked]:border-blue-500 has-[:checked]:ring-1 ring-blue-500 transition-all outline-none">
+                                    <input
+                                        type="radio"
+                                        name="date_${cardId}"
+                                        value="${date}"
+                                        class="w-3.5 h-3.5 text-blue-600"
+                                        ${dateIdx === 0 ? 'checked' : ''}
+                                    >
+                                    <span class="font-medium text-slate-700">
+                                        ${formatted}
+                                    </span>
+                                </label>
+                            `;
+                        })
+                        .join('');
+        
                 const cardHtml = `
-                    <div id="${cardId}" class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden transition-all duration-200">
-                        <div onclick="toggleAccordion('${cardId}')" class="bg-slate-50 border-b border-slate-200/60 p-4 flex justify-between items-center cursor-pointer hover:bg-slate-100/60 transition-colors select-none">
+                    <div id="${cardId}" data-subject="${exam.subject}" class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden transition-all duration-200">
+        
+                        <div onclick="toggleAccordion('${cardId}')"
+                            class="bg-slate-50 border-b border-slate-200/60 p-4 flex justify-between items-center cursor-pointer hover:bg-slate-100/60 transition-colors select-none">
+        
                             <div class="flex items-center gap-3">
-                                <svg id="chevron_${cardId}" class="w-5 h-5 text-slate-500 transform transition-transform duration-200 -rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path>
+                                <svg id="chevron_${cardId}"
+                                    class="w-5 h-5 text-slate-500 transform transition-transform duration-200 -rotate-90"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24">
+        
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2.5"
+                                        d="M19 9l-7 7-7-7">
+                                    </path>
+        
                                 </svg>
-                                <span class="font-bold text-slate-800 text-sm md:text-base">${fullName}</span>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span id="pill_${cardId}" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-200/80 text-slate-600">
-                                    No Registrations
+        
+                                <span class="font-bold text-slate-800 text-sm md:text-base">
+                                    ${exam.subject}
                                 </span>
                             </div>
+        
+                            <div class="flex items-center gap-2">
+        
+                                <span id="pill_${cardId}"
+                                    class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-200/80 text-slate-600">
+        
+                                    No Registrations
+        
+                                </span>
+        
+                            </div>
+        
                         </div>
-
-                        <div id="body_${cardId}" class="hidden border-t border-slate-100 p-4 bg-white">
+        
+                        <div id="body_${cardId}"
+                            class="hidden border-t border-slate-100 p-4 bg-white">
+        
                             <div class="mb-4 pb-4 border-b border-slate-100">
-                                <span class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Select Target Exam Date:</span>
+        
+                                <span class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                                    Select Target Exam Date:
+                                </span>
+        
                                 <div class="flex flex-wrap gap-2">
                                     ${datesHtml}
                                 </div>
+        
                             </div>
+        
                             <div class="overflow-x-auto table-container">
+        
                                 <table class="w-full text-left border-collapse">
+        
                                     <thead class="bg-slate-50 rounded-t-lg">
+        
                                         <tr>
-                                            <th class="p-3 text-xs font-semibold text-slate-600 uppercase tracking-wider rounded-tl-lg w-[120px]">Class</th>
-                                            <th class="p-3 text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[200px]">Teacher In-charge</th>
-                                            <th class="p-3 text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[150px]">WhatsApp No.</th>
-                                            <th class="p-3 text-xs font-semibold text-slate-600 uppercase tracking-wider w-[150px]">No. of Students</th>
-                                            <th class="p-3 text-xs font-semibold text-slate-600 uppercase tracking-wider rounded-tr-lg w-[60px]"></th>
+        
+                                            <th class="p-3 text-xs font-semibold text-slate-600 uppercase tracking-wider rounded-tl-lg w-[120px]">
+                                                Class
+                                            </th>
+        
+                                            <th class="p-3 text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[200px]">
+                                                Teacher In-charge
+                                            </th>
+        
+                                            <th class="p-3 text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[150px]">
+                                                WhatsApp No.
+                                            </th>
+        
+                                            <th class="p-3 text-xs font-semibold text-slate-600 uppercase tracking-wider w-[150px]">
+                                                No. of Students
+                                            </th>
+        
+                                            <th class="p-3 text-xs font-semibold text-slate-600 uppercase tracking-wider rounded-tr-lg w-[60px]">
+                                            </th>
+        
                                         </tr>
+        
                                     </thead>
-                                    <tbody id="tbody_${cardId}" class="divide-y divide-slate-100">
+        
+                                    <tbody id="tbody_${cardId}"
+                                        class="divide-y divide-slate-100">
                                     </tbody>
+        
                                 </table>
+        
                             </div>
+        
                             <div class="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center">
-                                <button type="button" onclick="addClassRow('${cardId}')" class="text-xs text-blue-600 font-bold hover:text-blue-800 flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors outline-none">
+        
+                                <button type="button"
+                                    onclick="addClassRow('${cardId}')"
+                                    class="text-xs text-blue-600 font-bold hover:text-blue-800 flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors outline-none">
+        
                                     + Add Class Row
+        
                                 </button>
+        
                                 <div class="text-xs font-bold text-slate-700 bg-slate-50 px-3 py-1.5 rounded-md border border-slate-200">
-                                    Registered: <span id="total_${cardId}" class="text-blue-700">0</span> Students
+        
+                                    Registered:
+                                    <span id="total_${cardId}" class="text-blue-700">
+                                        0
+                                    </span>
+                                    Students
+        
                                 </div>
+        
                             </div>
+        
                         </div>
+        
                     </div>
                 `;
-                cardsContainer.insertAdjacentHTML('beforeend', cardHtml);
+        
+                cardsContainer.insertAdjacentHTML(
+                    'beforeend',
+                    cardHtml
+                );
+        
                 addClassRow(cardId);
             });
         }
@@ -746,19 +853,55 @@
         }
 
         function expandAll() {
-            Object.keys(subjectNames).forEach(subjectCode => {
-                const cardId = `subjectCard_${subjectCode}`;
-                document.getElementById(`body_${cardId}`).classList.remove('hidden');
-                document.getElementById(`chevron_${cardId}`).classList.remove('-rotate-90');
-            });
+
+            document
+                .querySelectorAll('[id^="subjectCard_"]')
+                .forEach(card => {
+        
+                    const body =
+                        card.querySelector(
+                            '[id^="body_subjectCard_"]'
+                        );
+        
+                    const chevron =
+                        card.querySelector(
+                            '[id^="chevron_subjectCard_"]'
+                        );
+        
+                    if (body) {
+                        body.classList.remove("hidden");
+                    }
+        
+                    if (chevron) {
+                        chevron.classList.remove("-rotate-90");
+                    }
+                });
         }
 
         function collapseAll() {
-            Object.keys(subjectNames).forEach(subjectCode => {
-                const cardId = `subjectCard_${subjectCode}`;
-                document.getElementById(`body_${cardId}`).classList.add('hidden');
-                document.getElementById(`chevron_${cardId}`).classList.add('-rotate-90');
-            });
+
+            document
+                .querySelectorAll('[id^="subjectCard_"]')
+                .forEach(card => {
+        
+                    const body =
+                        card.querySelector(
+                            '[id^="body_subjectCard_"]'
+                        );
+        
+                    const chevron =
+                        card.querySelector(
+                            '[id^="chevron_subjectCard_"]'
+                        );
+        
+                    if (body) {
+                        body.classList.add("hidden");
+                    }
+        
+                    if (chevron) {
+                        chevron.classList.add("-rotate-90");
+                    }
+                });
         }
 
         function addClassRow(cardId) {
@@ -897,6 +1040,8 @@ function getCsrfToken() {
 }
 
 async function showSuccessModal(event) {
+    const data = collectFormData();
+    console.log("Final Form Data Object", data);
     event.preventDefault();
 
     const formData = collectFormData();
@@ -924,8 +1069,8 @@ async function showSuccessModal(event) {
         console.log("Status:", response.status);
         console.log("Response:", data);
 
-        if (!response.ok) {
-            throw new Error(JSON.stringify(data));
+        if (!response.ok || (data.message && data.message.success === false)) {
+            throw new Error(data.message ? JSON.stringify(data.message) : JSON.stringify(data));
         }
 
         // Show success modal
@@ -991,138 +1136,130 @@ async function showSuccessModal(event) {
             // Coordinators (Step 2)
             // ----------------------------------
         
-            const coordRows =
-                document.querySelectorAll(
-                    '#step2 tbody tr'
-                );
-        
-            const coordRoles = [
-                'principal',
-                'overall_coordinator',
-                'iso',
-                'imo',
-                'eio',
-                'gkio',
-                'ico',
-                'ido',
-                'neso',
-                'nsso',
-                'nho',
-                'nlro',
-                'cio'
-            ];
-        
-            coordRows.forEach((row, index) => {
-        
-                const cells =
-                    row.querySelectorAll(
-                        'input, select'
-                    );
-        
-                if (
-                    cells.length >= 4 &&
-                    cells[0].value
-                ) {
-        
-                    data.coordinators[
-                        coordRoles[index] ||
-                        `coord_${index}`
-                    ] = {
-                        name: cells[0].value,
-                        mobile: cells[1].value,
-                        dob: cells[2].value,
-                        email: cells[3].value
-                    };
-                }
-            });
+            // ----------------------------------
+// Coordinators (Step 2)
+// ----------------------------------
+
+const coordRows =
+document.querySelectorAll(
+    '#step2 tbody tr'
+);
+
+data.coordinators = {};
+
+coordRows.forEach((row, index) => {
+
+const roleText =
+    row.querySelector("td")
+       ?.innerText
+       ?.trim() || "";
+
+const inputs =
+    row.querySelectorAll("input");
+
+if (inputs.length < 4) {
+    return;
+}
+
+const roleKey =
+    roleText
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, "");
+
+data.coordinators[
+    roleKey
+] = {
+    role: roleText,
+    name: inputs[0].value,
+    mobile: inputs[1].value,
+    dob: inputs[2].value,
+    email: inputs[3].value
+};
+});
         
             // ----------------------------------
             // Exams (Step 3)
             // ----------------------------------
         
             document
-                .querySelectorAll(
-                    '[id^="subjectCard_"]'
-                )
-                .forEach(card => {
-        
-                    // Ignore hidden cards
-        
-                    if (
-                        card.style.display === "none"
-                    ) {
-                        return;
-                    }
-        
-                    const cardId = card.id;
-        
-                    const subjectCode =
-                        cardId.replace(
-                            'subjectCard_',
-                            ''
-                        );
-        
-                    const tbody =
-                        card.querySelector('tbody');
-        
-                    if (!tbody) return;
-        
+    .querySelectorAll(
+        '[id^="subjectCard_"]'
+    )
+    .forEach(card => {
+
+        // Ignore hidden cards
+        if (card.style.display === "none") {
+            return;
+        }
+
+        const subjectName =
+            card.dataset.subject;
+
+        if (!subjectName) {
+            return;
+        }
+
+        const tbody =
+            card.querySelector("tbody");
+
+        if (!tbody) {
+            return;
+        }
+
+        data.exams[subjectName] = [];
+
+        tbody
+            .querySelectorAll("tr")
+            .forEach(row => {
+
+                const cells =
+                    row.querySelectorAll(
+                        "input, select"
+                    );
+
+                if (
+                    cells.length >= 4 &&
+                    (
+                        cells[0].value ||
+                        cells[1].value ||
+                        cells[2].value ||
+                        cells[3].value
+                    )
+                ) {
+
                     data.exams[
-                        subjectCode
-                    ] = [];
-        
-                    tbody
-                        .querySelectorAll('tr')
-                        .forEach(row => {
-        
-                            const cells =
-                                row.querySelectorAll(
-                                    'input, select'
-                                );
-        
-                            if (
-                                cells.length >= 4 &&
-                                (
-                                    cells[0].value ||
-                                    cells[1].value ||
-                                    cells[2].value ||
-                                    cells[3].value
-                                )
-                            ) {
-        
-                                data.exams[
-                                    subjectCode
-                                ].push({
-                                    class:
-                                        cells[0].value,
-                                    teacher_name:
-                                        cells[1].value,
-                                    whatsapp:
-                                        cells[2].value,
-                                    students:
-                                        cells[3].value
-                                });
-                            }
-                        });
-        
-                    // Remove empty subjects
-        
-                    if (
-                        data.exams[
-                            subjectCode
-                        ].length === 0
-                    ) {
-        
-                        delete data.exams[
-                            subjectCode
-                        ];
-                    }
-                });
-        
-            console.log(
-                "Collected Exams:",
-                data.exams
-            );
+                        subjectName
+                    ].push({
+                        class:
+                            cells[0].value,
+                        teacher_name:
+                            cells[1].value,
+                        whatsapp:
+                            cells[2].value,
+                        students:
+                            cells[3].value
+                    });
+                }
+            });
+
+        // Remove empty subjects
+        if (
+            data.exams[
+                subjectName
+            ].length === 0
+        ) {
+
+            delete data.exams[
+                subjectName
+            ];
+        }
+    });
+
+console.log(
+    "Collected Exams:",
+    data.exams
+);
         
             // ----------------------------------
             // Payment (Step 4)
@@ -1176,6 +1313,7 @@ async function showSuccessModal(event) {
         };
 
         async function loadCustomerData() {
+            if (window.current_user === "Guest") return;
 
             try {
         
@@ -1188,21 +1326,38 @@ async function showSuccessModal(event) {
                 if (!result.message) {
                     return;
                 }
-        
+                
+                console.log(
+                    "FULL RESPONSE",
+                    result.message
+                );
                 populateSchoolInfo(result.message);
-                populateTeacherDetails(
-                    result.message.customer
-                        ?.custom_school_teacher_details || []
+
+                buildCoordinatorRows(
+                    result.message.exam_summaries || []
                 );
 
                 populateCoordinatorData(
-                    result.message.coordinators || {},
+                    result.message.coordinators || [],
+                    result.message.exam_summaries || []
+                );
+
+                console.log(
+                    "TEACHERS RECEIVED",
+                    result.message.teachers
+                );
+
+                populateTeacherDetails(
+                    result.message.teachers || [],
+                    result.message.exam_summaries || []
+                );
+
+                buildAllSubjectAccordions(
                     result.message.exam_summaries || []
                 );
 
                 populateExamSummaryData(
                     result.message.exam_summaries || []
-
                 );
                 
         
@@ -1408,191 +1563,259 @@ async function showSuccessModal(event) {
             "";
         }
 
-        function populateTeacherDetails(teachers) {
+            function populateTeacherDetails(
+        teachers,
+        examSummaries = []
+    ) {
 
-            if (!teachers || !teachers.length) {
-                return;
-            }
-        
-            const subjectRowMap = {
-                "Science Olympiad (ISO)": 2,
-                "Math Olympiad (IMO)": 3,
-                "English Olympiad (EIO)": 4,
-                "General Knowledge Olympiad (GKIO)": 5,
-                "Computer Olympiad (ICO)": 6,
-                "Drawing Olympiad (IDO)": 7,
-                "Essay Olympiad (NESO)": 8,
-                "Social Studies Olympiad (NSSO)": 9,
-                "Hindi Olympiad (NHO)": 10,
-                "Logical Reasoning Olympiad (NLRO)": 11,
-                "Commerce Olympiad (CIO)": 12
-            };
-        
-            const rows = document.querySelectorAll(
-                "#step2 tbody tr"
+    const tbody =
+        document.querySelector(
+            "#step2 tbody"
+        );
+
+    if (!tbody) return;
+
+    // Keep Principal + Overall Coordinator
+    const fixedRows =
+        Array.from(
+            tbody.querySelectorAll("tr")
+        ).slice(0, 2);
+
+    // Remove all subject rows
+    tbody.innerHTML = "";
+
+    fixedRows.forEach(row => {
+        tbody.appendChild(row);
+    });
+
+    // Create subject rows dynamically
+    examSummaries.forEach(exam => {
+
+        const subjectName =
+            exam.subject || "";
+
+        const teacher =
+            teachers?.find(
+                t => t.subject === subjectName
+            ) || {};
+
+        const row = document.createElement("tr");
+
+        row.className =
+            "hover:bg-slate-50 transition-colors";
+
+        row.dataset.subject =
+            subjectName;
+
+        row.innerHTML = `
+            <td class="p-3 font-semibold text-slate-700 border-r border-slate-100">
+                ${subjectName} In-charge
+            </td>
+
+            <td class="p-2">
+                <input
+                    type="text"
+                    value="${teacher.name1 || ""}"
+                    class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all"
+                    placeholder="Enter Name"
+                >
+            </td>
+
+            <td class="p-2">
+                <input
+                    type="text"
+                    value="${teacher.phone_number || ""}"
+                    class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all"
+                    placeholder="Mobile No."
+                >
+            </td>
+
+            <td class="p-2">
+                <input
+                    type="date"
+                    value="${teacher.date_of_birth || ""}"
+                    class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all"
+                >
+            </td>
+
+            <td class="p-2">
+                <input
+                    type="email"
+                    value="${teacher.email_id || ""}"
+                    class="w-full rounded-md border-2 border-transparent hover:border-slate-300 focus:border-blue-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all"
+                    placeholder="Email Address"
+                >
+            </td>
+        `;
+
+        tbody.appendChild(row);
+    });
+}
+
+function populateExamSummaryData(examSummaries) {
+
+    console.log(
+        "populateExamSummaryData received:",
+        examSummaries
+    );
+
+    if (!Array.isArray(examSummaries) || !examSummaries.length) {
+
+        console.error(
+            "No exam summaries received!"
+        );
+
+        return;
+    }
+
+    // Hide all cards first
+    document
+        .querySelectorAll('[id^="subjectCard_"]')
+        .forEach(card => {
+            card.style.display = "none";
+        });
+
+    examSummaries.forEach(exam => {
+
+        if (!exam.subject) {
+            return;
+        }
+
+        const subjectKey =
+            exam.subject
+                .replace(/[^a-zA-Z0-9]/g, "_");
+
+        const cardId =
+            `subjectCard_${subjectKey}`;
+
+        const card =
+            document.getElementById(cardId);
+
+        if (!card) {
+
+            console.warn(
+                "Card not found:",
+                cardId,
+                exam.subject
             );
-        
-            teachers.forEach(teacher => {
-        
-                const rowIndex =
-                    subjectRowMap[teacher.subject];
-        
-                if (
-                    rowIndex === undefined ||
-                    !rows[rowIndex]
-                ) {
+
+            return;
+        }
+
+        card.style.display = "";
+
+        // -------------------------
+        // Target Dates
+        // -------------------------
+
+        const dateContainer =
+            card.querySelector(
+                ".flex.flex-wrap.gap-2"
+            );
+
+        if (
+            dateContainer &&
+            Array.isArray(exam.target_dates)
+        ) {
+
+            dateContainer.innerHTML =
+                exam.target_dates
+                    .map((date, idx) => {
+
+                        const d =
+                            new Date(date);
+
+                        const formatted =
+                            d.toLocaleDateString(
+                                "en-GB",
+                                {
+                                    day: "2-digit",
+                                    month: "short"
+                                }
+                            );
+
+                        return `
+                            <label class="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 border border-slate-200 rounded text-xs">
+                                <input
+                                    type="radio"
+                                    name="date_${cardId}"
+                                    value="${date}"
+                                    ${idx === 0 ? "checked" : ""}
+                                >
+                                <span>
+                                    ${formatted}
+                                </span>
+                            </label>
+                        `;
+                    })
+                    .join("");
+        }
+
+        // -------------------------
+        // Existing Rows
+        // -------------------------
+
+        const tbody =
+            document.getElementById(
+                `tbody_${cardId}`
+            );
+
+        if (!tbody) {
+            return;
+        }
+
+        tbody.innerHTML = "";
+
+        const rows =
+            Array.isArray(exam.rows)
+                ? exam.rows
+                : [];
+
+        if (!rows.length) {
+
+            addClassRow(cardId);
+
+        } else {
+
+            rows.forEach(row => {
+
+                addClassRow(cardId);
+
+                const lastRow =
+                    tbody.lastElementChild;
+
+                if (!lastRow) {
                     return;
                 }
-        
+
                 const inputs =
-                    rows[rowIndex].querySelectorAll("input");
-        
-                if (inputs.length < 4) {
-                    return;
-                }
-        
-                // Name
-                inputs[0].value =
-                    teacher.name1 || "";
-        
-                // Mobile
-                inputs[1].value =
-                    teacher.phone_number || "";
-        
-                // DOB
-                inputs[2].value =
-                    teacher.date_of_birth || "";
-        
-                // Email
-                inputs[3].value =
-                    teacher.email_id || "";
+                    lastRow.querySelectorAll(
+                        "input, select"
+                    );
+
+                if (inputs[0])
+                    inputs[0].value =
+                        row.class || "";
+
+                if (inputs[1])
+                    inputs[1].value =
+                        row.teacher_name || "";
+
+                if (inputs[2])
+                    inputs[2].value =
+                        row.whatsapp_no || "";
+
+                if (inputs[3])
+                    inputs[3].value =
+                        row.no_of_students || "";
             });
-        
         }
 
-        function populateExamSummaryData(examSummaries) {
+        updateSubjectTotal(cardId);
+    });
 
-            // Hide all subject cards first
-            Object.keys(subjectNames).forEach(subjectCode => {
-
-                const card = document.getElementById(
-                    `subjectCard_${subjectCode}`
-                );
-
-                if (card) {
-                    card.style.display = "none";
-                }
-            });
-
-            examSummaries.forEach(exam => {
-        
-                // Find subject code from subject name
-                const match = exam.subject.match(/\((.*?)\)/);
-        
-                if (!match) return;
-        
-                const subjectCode = match[1];
-        
-                const cardId = `subjectCard_${subjectCode}`;
-        
-                // Card exists?
-                const card = document.getElementById(cardId);
-        
-                if (!card) return;
-                // Show only subjects that exist
-                card.style.display = "";
-                        
-                // ----------------------------------
-                // Replace Target Dates
-                // ----------------------------------
-        
-                const dateContainer =
-                    card.querySelector(
-                        '.flex.flex-wrap.gap-2'
-                    );
-        
-                if (dateContainer) {
-        
-                    dateContainer.innerHTML =
-                        exam.target_dates.map(
-                            (date, idx) => {
-        
-                                const d = new Date(date);
-        
-                                const formatted =
-                                    d.toLocaleDateString(
-                                        'en-GB',
-                                        {
-                                            day: '2-digit',
-                                            month: 'short'
-                                        }
-                                    );
-        
-                                return `
-                                    <label class="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 border border-slate-200 rounded text-xs hover:bg-slate-50 has-[:checked]:border-blue-500 has-[:checked]:ring-1 ring-blue-500 transition-all outline-none">
-                                        <input
-                                            type="radio"
-                                            name="date_${cardId}"
-                                            value="${date}"
-                                            class="w-3.5 h-3.5 text-blue-600"
-                                            ${idx === 0 ? 'checked' : ''}
-                                        >
-                                        <span class="font-medium text-slate-700">
-                                            ${formatted}
-                                        </span>
-                                    </label>
-                                `;
-                            }
-                        ).join('');
-                }
-        
-                // ----------------------------------
-                // Populate Existing Rows
-                // ----------------------------------
-        
-                const tbody =
-                    document.getElementById(
-                        `tbody_${cardId}`
-                    );
-        
-                if (!tbody) return;
-        
-                tbody.innerHTML = '';
-        
-                exam.rows.forEach(row => {
-        
-                    addClassRow(cardId);
-        
-                    const lastRow =
-                        tbody.lastElementChild;
-        
-                    if (!lastRow) return;
-        
-                    const inputs =
-                        lastRow.querySelectorAll(
-                            'input, select'
-                        );
-        
-                    if (inputs[0])
-                        inputs[0].value =
-                            row.class || '';
-        
-                    if (inputs[1])
-                        inputs[1].value =
-                            row.teacher_name || '';
-        
-                    if (inputs[2])
-                        inputs[2].value =
-                            row.whatsapp_no || '';
-        
-                    if (inputs[3])
-                        inputs[3].value =
-                            row.no_of_students || 0;
-                });
-        
-                calculateTotal(cardId);
-            });
-        }
+    calculateTotal();
+}
 
         function populateCoordinatorData(
     coordinators,
@@ -1601,128 +1824,142 @@ async function showSuccessModal(event) {
 
     if (!coordinators) return;
 
-    const roleIndexMap = {
-        overall_coordinator: 1,
-        iso: 2,
-        imo: 3,
-        eio: 4,
-        gkio: 5,
-        ico: 6,
-        ido: 7,
-        neso: 8,
-        nsso: 9,
-        nho: 10,
-        nlro: 11,
-        cio: 12
-    };
-
-    const roleSubjectMap = {
-        iso: "Science Olympiad (ISO)",
-        imo: "Maths Olympiad (IMO)",
-        eio: "English Olympiad (EIO)",
-        gkio: "General Knowledge (GKIO)",
-        ico: "Computer Olympiad (ICO)",
-        ido: "Drawing Olympiad (IDO)",
-        neso: "Essay Olympiad (NESO)",
-        nsso: "Social Studies (NSSO)",
-        nho: "Hindi Olympiad (NHO)",
-        nlro: "Logical Reasoning (NLRO)",
-        cio: "Commerce Olympiad (CIO)"
-    };
-
-    const visibleSubjects = new Set(
-        examSummaries.map(row => row.subject)
-    );
-
     const rows = document.querySelectorAll(
         "#step2 tbody tr"
     );
 
     // Hide all subject rows first
-    Object.entries(roleIndexMap).forEach(
-        ([role, rowIndex]) => {
+    rows.forEach((row, index) => {
 
-            if (
-                role !== "overall_coordinator" &&
-                rows[rowIndex]
-            ) {
-
-                const subject =
-                    roleSubjectMap[role];
-
-                if (
-                    subject &&
-                    !visibleSubjects.has(subject)
-                ) {
-                    rows[rowIndex].style.display =
-                        "none";
-                } else {
-                    rows[rowIndex].style.display =
-                        "";
-                }
-            }
+        // Keep Principal and Overall Coordinator visible
+        if (index <= 1) {
+            row.style.display = "";
+            return;
         }
-    );
 
-    Object.entries(coordinators)
-        .forEach(([role, data]) => {
+        row.style.display = "none";
+    });
 
-            const rowIndex =
-                roleIndexMap[role];
+    Object.values(coordinators).forEach(data => {
 
-            if (
-                rowIndex === undefined ||
-                !rows[rowIndex]
-            ) {
-                return;
+        const roleTitle =
+            (data.role || "").trim();
+
+        let matchedRow = null;
+
+        rows.forEach(row => {
+
+            const firstCell =
+                row.querySelector("td");
+
+            if (!firstCell) return;
+
+            const rowTitle =
+                firstCell.innerText.trim();
+
+            if (rowTitle === roleTitle) {
+                matchedRow = row;
             }
+        });
 
-            const inputs =
-                rows[rowIndex]
-                .querySelectorAll(
-                    "input"
+            console.log(
+            "COORDINATORS RECEIVED",
+            coordinators
+        );
+
+        console.log(
+            "EXAM SUMMARIES RECEIVED",
+            examSummaries
+        );
+
+        if (!matchedRow) {
+            console.warn(
+                "No matching row found:",
+                roleTitle
+            );
+            return;
+        }
+
+        matchedRow.style.display = "";
+
+        const inputs =
+            matchedRow.querySelectorAll(
+                "input"
+            );
+
+        if (inputs[0])
+            inputs[0].value =
+                data.name || "";
+
+        if (inputs[1])
+            inputs[1].value =
+                data.mobile || "";
+
+        if (inputs[2])
+            inputs[2].value =
+                formatDateForInput(
+                    data.dob
                 );
 
-            if (inputs[0])
-                inputs[0].value =
-                    data.name || "";
-
-            if (inputs[1])
-                inputs[1].value =
-                    data.mobile || "";
-
-            if (inputs[2])
-                inputs[2].value =
-                    formatDateForInput(
-                        data.dob
-                    );
-
-            if (inputs[3])
-                inputs[3].value =
-                    data.email || "";
-        });
+        if (inputs[3])
+            inputs[3].value =
+                data.email || "";
+    });
 }
         
-        function formatDateForInput(dateStr) {
+function formatDateForInput(dateStr) {
+
+    if (!dateStr) return "";
+
+    const d = new Date(dateStr);
+
+    const day = String(
+        d.getDate()
+    ).padStart(2, "0");
+
+    const month = String(
+        d.getMonth() + 1
+    ).padStart(2, "0");
+
+    const year = d.getFullYear();
+
+    return `${year}-${month}-${day}`;
+}
+
+        function buildCoordinatorRows(examSummaries = []) {
+
+            const tbody =
+                document.querySelector(
+                    "#step2 tbody"
+                );
         
-            if (!dateStr) return "";
+            const rows =
+                tbody.querySelectorAll("tr");
         
-            const d = new Date(dateStr);
+            // Keep first two rows
+            rows.forEach((row, index) => {
+                if (index > 1) {
+                    row.remove();
+                }
+            });
         
-            const day =
-                String(
-                    d.getDate()
-                ).padStart(2, "0");
+            examSummaries.forEach(exam => {
         
-            const month =
-                String(
-                    d.getMonth() + 1
-                ).padStart(2, "0");
+                const role =
+                    `${exam.subject} In-charge`;
         
-            const year =
-                d.getFullYear();
+                const row = document.createElement("tr");
         
-            return `${day}/${month}/${year}`;
+                row.innerHTML = `
+                    <td>${role}</td>
+                    <td><input type="text"></td>
+                    <td><input type="text"></td>
+                    <td><input type="date"></td>
+                    <td><input type="email"></td>
+                `;
+        
+                tbody.appendChild(row);
+            });
         }
 
 
