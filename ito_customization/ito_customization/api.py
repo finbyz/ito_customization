@@ -747,29 +747,17 @@ def get_customer_from_session_user():
 
     coordinators_data = {}
 
-    subject_role_map = {
-        "Science Olympiad (ISO)": "iso",
-        "Maths Olympiad (IMO)": "imo",
-        "English Olympiad (EIO)": "eio",
-        "General Knowledge Olympiad (GKIO)": "gkio",
-        "Computer Olympiad (ICO)": "ico",
-        "Drawing Olympiad (IDO)": "ido",
-        "Essay Olympiad (NESO)": "neso",
-        "Social Studies Olympiad (NSSO)": "nsso",
-        "Hindi Olympiad (NHO)": "nho",
-        "Logical Reasoning Olympiad (NLRO)": "nlro",
-        "Commerce Olympiad (CIO)": "cio",
-        "Principal": "principal"
-    }
-
     for row in customer.custom_school_teacher_details:
 
-        role = subject_role_map.get(row.subject)
+        if row.subject == "Principal":
+            role_text = "👑 Head Master / Principal"
+        elif row.subject == "Overall Coordinator":
+            role_text = "⭐ Overall Co-ordinator"
+        else:
+            role_text = f"{row.subject} In-charge"
 
-        if not role:
-            continue
-
-        coordinators_data[role] = {
+        coordinators_data[row.subject] = {
+            "role": role_text,
             "name": row.name1,
             "mobile": row.phone_number,
             "email": row.email_id,

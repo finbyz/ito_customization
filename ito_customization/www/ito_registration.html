@@ -1333,22 +1333,13 @@ console.log(
                 );
                 populateSchoolInfo(result.message);
 
-                buildCoordinatorRows(
+                populateTeacherDetails(
+                    result.message.customer.custom_school_teacher_details || [],
                     result.message.exam_summaries || []
                 );
 
                 populateCoordinatorData(
                     result.message.coordinators || [],
-                    result.message.exam_summaries || []
-                );
-
-                console.log(
-                    "TEACHERS RECEIVED",
-                    result.message.teachers
-                );
-
-                populateTeacherDetails(
-                    result.message.teachers || [],
                     result.message.exam_summaries || []
                 );
 
@@ -1367,10 +1358,6 @@ console.log(
         }
 
         function populateSchoolInfo(data) {
-
-            populateTeacherDetails(
-                data.customer.custom_school_teacher_details || []
-            );
 
             const fields = document.querySelectorAll(
                 '#step1 input, #step1 select, #step1 textarea'

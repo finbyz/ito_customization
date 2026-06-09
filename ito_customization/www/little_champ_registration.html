@@ -394,9 +394,18 @@
 
         // Render all collapsible subject child tables on page load
         function buildAllSubjectAccordions(subjects = []) {
+            console.log(
+    "Building subjects:",
+    subjects
+);
             cardsContainer.innerHTML = '';
             
             subjects.forEach((subject, index) => {
+
+                console.log(
+        "Rendering subject:",
+        subject.subject
+    );
 
                 const dates =
                     subject.target_dates || [];
