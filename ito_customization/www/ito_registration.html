@@ -588,12 +588,17 @@
         
                     payload = {
                         step: 2,
-                        coordinators: collectFormData().coordinators
+                        coordinators: collectFormData().coordinators,
+                        school_info: collectFormData().school_info
                     };
         
                 } else if (currentStep === 3) {
                     if (!validateStep3()) { return false; }
-                    payload = { step: 3, exams: collectFormData().exams };
+                    payload = { 
+                        step: 3, 
+                        exams: collectFormData().exams,
+                        school_info: collectFormData().school_info
+                    };
                 }
         
                 if (window.current_user === "Guest") {

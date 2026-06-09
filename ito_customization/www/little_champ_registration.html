@@ -35,9 +35,25 @@
                 <p class="text-purple-200 text-sm mt-1">Nursery, Junior KG & Senior KG</p>
             </div>
             <div class="bg-purple-800/40 backdrop-blur-sm border border-purple-500 rounded-lg p-3 text-sm flex flex-col gap-1 text-center md:text-right shadow-inner">
-                <span class="font-semibold text-white uppercase tracking-wider text-xs">Last Date Of Registration</span>
-                <span class="text-lg font-bold text-amber-300">10th Oct 2026 <span class="text-xs font-normal text-purple-100">(Slot 1)</span></span>
-                <span class="text-lg font-bold text-amber-300">16th Nov 2026 <span class="text-xs font-normal text-purple-100">(Slot 2)</span></span>
+
+                <span class="font-semibold text-white uppercase tracking-wider text-xs">
+                    Last Date Of Registration
+                </span>
+            
+                <span
+                    id="slot1Date"
+                    class="text-lg font-bold text-amber-300"
+                >
+                    -
+                </span>
+            
+                <span
+                    id="slot2Date"
+                    class="text-lg font-bold text-amber-300"
+                >
+                    -
+                </span>
+            
             </div>
         </div>
 
@@ -115,12 +131,9 @@
                         </div>
                         
                         <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+                            
                             <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-1">STD Code</label>
-                                <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-1">Phone 1</label>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Phone</label>
                                 <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none">
                             </div>
                             <div>
@@ -154,7 +167,7 @@
                                         <th class="p-4 text-xs font-black text-purple-900 uppercase tracking-wider w-1/4">Email ID</th>
                                     </tr>
                                 </thead>
-                                <tbody class="divide-y divide-purple-50">
+                                <tbody id="coordinatorTableBody"class="divide-y divide-purple-50">
                                     
                                     <tr class="hover:bg-purple-50/50 transition-colors">
                                         <td class="p-3 font-bold text-amber-900 bg-amber-50/50 border-r border-amber-100 flex items-center gap-2"><span class="text-lg">👑</span> Head Master / Principal</td>
@@ -165,49 +178,6 @@
                                     </tr>
                                     <tr class="hover:bg-purple-50/50 transition-colors">
                                         <td class="p-3 font-bold text-amber-900 bg-amber-50/50 border-r border-amber-100 flex items-center gap-2"><span class="text-lg">⭐</span> Overall Co-ordinator</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
-                                    </tr>
-
-                                    <tr class="hover:bg-fuchsia-50/50 transition-colors">
-                                        <td class="p-3 font-bold text-purple-900 bg-fuchsia-50/30 border-r border-fuchsia-100 flex items-center gap-2"><span>🧮</span> Maths In-charge</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
-                                    </tr>
-                                    <tr class="hover:bg-fuchsia-50/50 transition-colors">
-                                        <td class="p-3 font-bold text-purple-900 bg-fuchsia-50/30 border-r border-fuchsia-100 flex items-center gap-2"><span>🔤</span> English In-charge</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
-                                    </tr>
-                                    <tr class="hover:bg-fuchsia-50/50 transition-colors">
-                                        <td class="p-3 font-bold text-purple-900 bg-fuchsia-50/30 border-r border-fuchsia-100 flex items-center gap-2"><span>🌿</span> EVS In-charge</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
-                                    </tr>
-                                    <tr class="hover:bg-fuchsia-50/50 transition-colors">
-                                        <td class="p-3 font-bold text-purple-900 bg-fuchsia-50/30 border-r border-fuchsia-100 flex items-center gap-2"><span>🎨</span> Drawing In-charge</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
-                                    </tr>
-                                    <tr class="hover:bg-fuchsia-50/50 transition-colors">
-                                        <td class="p-3 font-bold text-purple-900 bg-fuchsia-50/30 border-r border-fuchsia-100 flex items-center gap-2"><span>🪔</span> Hindi In-charge</td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
-                                        <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
-                                        <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
-                                        <td class="p-2"><input type="email" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Email Address"></td>
-                                    </tr>
-                                    <tr class="hover:bg-fuchsia-50/50 transition-colors">
-                                        <td class="p-3 font-bold text-purple-900 bg-fuchsia-50/30 border-r border-fuchsia-100 flex items-center gap-2"><span>📿</span> Abacus In-charge</td>
                                         <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Enter Name"></td>
                                         <td class="p-2"><input type="text" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all" placeholder="Mobile No."></td>
                                         <td class="p-2"><input type="date" class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none transition-all text-slate-600"></td>
@@ -762,10 +732,9 @@
                 6: 'state',
                 7: 'pincode',
                 8: 'gst_no',
-                9: 'std_code',
-                10: 'phone_no',
-                11: 'whatsapp_no',
-                12: 'school_email'
+                9: 'phone_no',
+                10: 'whatsapp_no',
+                11: 'school_email'
             };
         
             schoolInputs.forEach((input, index) => {
@@ -781,45 +750,40 @@
             // ----------------------------------
             // Coordinators (Step 2)
             // ----------------------------------
-        
+
             const coordRows =
-                document.querySelectorAll(
-                    '#step2 tbody tr'
-                );
-        
-            const coordRoles = [
-                'principal',
-                'overall_coordinator',
-                'maths',
-                'english',
-                'evs',
-                'drawing',
-                'hindi',
-                'abacus'
-            ];
-        
+            document.querySelectorAll(
+                '#step2 tbody tr'
+            );
+
             coordRows.forEach((row, index) => {
-        
-                const cells =
-                    row.querySelectorAll(
-                        'input, select'
-                    );
-        
-                if (
-                    cells.length >= 4 &&
-                    cells[0].value
-                ) {
-        
-                    data.coordinators[
-                        coordRoles[index] ||
-                        `coord_${index}`
-                    ] = {
-                        name: cells[0].value,
-                        mobile: cells[1].value,
-                        dob: cells[2].value,
-                        email: cells[3].value
-                    };
-                }
+
+            const cells =
+                row.querySelectorAll(
+                    'input, select'
+                );
+
+            const role =
+                row.querySelector(
+                    'td:first-child'
+                )?.innerText
+                ?.replace(' In-charge', '')
+                ?.trim();
+
+            if (
+                cells.length >= 4 &&
+                cells[0].value
+            ) {
+
+                data.coordinators[
+                    role || `coord_${index}`
+                ] = {
+                    name: cells[0].value,
+                    mobile: cells[1].value,
+                    dob: cells[2].value,
+                    email: cells[3].value
+                };
+            }
             });
         
             // ----------------------------------
@@ -1077,11 +1041,11 @@
                 data.customer?.customer_name ||
                 "";
         
-            // ITO School Code
+            
+            // School Code
             fields[1].value =
-                data.custom_ito_school_code ||
-                data.customer?.custom_ito_school_code ||
-                "";
+            data.customer?.custom_school_code ||
+            "";
         
             // Complete School Address
             fields[2].value =
@@ -1121,44 +1085,178 @@
             data.customer?.gstin ||
             "";
 
-            // STD Code
-            fields[9].value =
-            data.customer?.custom_std_code ||
-            "";
-
             // Phone 1
-            fields[10].value =
+            fields[9].value =
             data.contact_mobile ||
             data.customer?.mobile_no ||
             "";
 
             // WhatsApp
-            fields[11].value =
+            fields[10].value =
             data.customer?.custom_whatsapp_no ||
             "";
 
             // School Email
-            fields[12].value =
+            fields[11].value =
             data.contact_email ||
-            data.customer?.email_id
-        }
+            data.customer?.email_id ||
+            "";
 
+// ----------------------------------
+// Slot Registration Dates
+// ----------------------------------
+
+const today = new Date();
+
+let slot1Expired = false;
+let slot2Expired = false;
+
+// Slot 1
+
+if (data.customer?.custom_last_date_of_reg) {
+
+const slot1 =
+    new Date(
+        data.customer.custom_last_date_of_reg
+    );
+
+slot1.setHours(
+    23, 59, 59, 999
+);
+
+slot1Expired =
+    today > slot1;
+
+document.getElementById(
+    "slot1Date"
+).innerHTML = slot1Expired
+    ? `
+        <span class="text-red-300">
+            Expired
+        </span>
+        <span class="text-xs font-normal text-purple-100">
+            (Slot 1)
+        </span>
+    `
+    : `
+        ${slot1.toLocaleDateString(
+            "en-IN",
+            {
+                day: "numeric",
+                month: "short",
+                year: "numeric"
+            }
+        )}
+        <span class="text-xs font-normal text-purple-100">
+            (Slot 1)
+        </span>
+    `;
+}
+
+// Slot 2
+
+if (data.customer?.custom_last_date_of_reg_2) {
+
+const slot2 =
+    new Date(
+        data.customer.custom_last_date_of_reg_2
+    );
+
+slot2.setHours(
+    23, 59, 59, 999
+);
+
+slot2Expired =
+    today > slot2;
+
+document.getElementById(
+    "slot2Date"
+).innerHTML = slot2Expired
+    ? `
+        <span class="text-red-300">
+            Expired
+        </span>
+        <span class="text-xs font-normal text-purple-100">
+            (Slot 2)
+        </span>
+    `
+    : `
+        ${slot2.toLocaleDateString(
+            "en-IN",
+            {
+                day: "numeric",
+                month: "short",
+                year: "numeric"
+            }
+        )}
+        <span class="text-xs font-normal text-purple-100">
+            (Slot 2)
+        </span>
+    `;
+}
+
+// ----------------------------------
+// Both Slots Expired
+// ----------------------------------
+
+if (
+slot1Expired &&
+slot2Expired
+) {
+
+document.body.innerHTML = `
+<div class="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+
+<div class="max-w-2xl w-full">
+
+    <div class="bg-white rounded-3xl shadow-lg border border-slate-200 overflow-hidden">
+
+        <div class="bg-gradient-to-r from-purple-600 to-fuchsia-600 px-8 py-6">
+            <h1 class="text-3xl font-bold text-white">
+                Little Champ Registration
+            </h1>
+            <p class="text-purple-100 mt-1">
+                Registration Portal
+            </p>
+        </div>
+
+        <div class="p-10 text-center">
+
+            <div class="mx-auto w-20 h-20 rounded-full bg-red-100 flex items-center justify-center mb-6">
+                ⛔
+            </div>
+
+            <h2 class="text-3xl font-bold text-slate-800 mb-3">
+                Registration Closed
+            </h2>
+
+            <p class="text-slate-600 text-lg mb-6">
+                Both Slot 1 and Slot 2 registration windows have expired.
+            </p>
+
+            <div class="bg-red-50 border border-red-200 rounded-2xl p-5">
+                <p class="font-semibold text-red-700">
+                    No further registrations are being accepted.
+                </p>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+</div>
+`;
+
+return;
+}
+        }
         function populateTeacherDetails(teachers) {
 
             if (!teachers || !teachers.length) {
                 return;
             }
-        
-            const subjectRowMap = {
-                "Principal": 0,
-                "Overall Coordinator": 1,
-                "Little Champ Maths (LCMO)": 2,
-                "Little Champ English (LCEO)": 3,
-                "Little Champ EVS (LCEVSO)": 4,
-                "Little Champ Drawing (LCDO)": 5,
-                "Little Champ Hindi (LCHO)": 6,
-                "Little Champ Abacus (LCAO)": 7
-            };
         
             const rows = document.querySelectorAll(
                 "#step2 tbody tr"
@@ -1166,18 +1264,58 @@
         
             teachers.forEach(teacher => {
         
-                const rowIndex =
-                    subjectRowMap[teacher.subject];
+                const subject =
+                (
+                    teacher.role ||
+                    teacher.subject ||
+                    ""
+                )
+                .replace(" In-charge", "")
+                .replace("👑 ", "")
+                .replace("⭐ ", "")
+                .trim();
         
-                if (
-                    rowIndex === undefined ||
-                    !rows[rowIndex]
-                ) {
+                let matchingRow = null;
+        
+                rows.forEach(row => {
+        
+                    const roleCell =
+                        row.querySelector("td");
+        
+                    if (!roleCell) {
+                        return;
+                    }
+        
+                    const rowSubject =
+                        roleCell.innerText
+                            .replace(" In-charge", "")
+                            .trim();
+        
+                    if (
+                        rowSubject === subject ||
+                        (
+                            rowSubject ===
+                                "Head Master / Principal" &&
+                            subject === "Principal"
+                        ) ||
+                        (
+                            rowSubject ===
+                                "Overall Co-ordinator" &&
+                            subject === "Overall Coordinator"
+                        )
+                    ) {
+                        matchingRow = row;
+                    }
+                });
+        
+                if (!matchingRow) {
                     return;
                 }
         
                 const inputs =
-                    rows[rowIndex].querySelectorAll("input");
+                    matchingRow.querySelectorAll(
+                        "input"
+                    );
         
                 if (inputs.length < 4) {
                     return;
@@ -1185,39 +1323,30 @@
         
                 // Name
                 inputs[0].value =
-                    teacher.name1 || "";
+                    teacher.name || "";
         
                 // Mobile
                 inputs[1].value =
-                    teacher.phone_number || "";
+                    teacher.mobile || "";
         
                 // DOB
                 inputs[2].value =
-                    teacher.date_of_birth || "";
+                    teacher.dob || "";
         
                 // Email
                 inputs[3].value =
                     teacher.email_id || "";
             });
-        
         }
 
         function populateExamSummaryData(examSummaries) {
 
-            document
-        .querySelectorAll('[id^="subjectCard_"]')
-        .forEach(card => {
-            card.style.display = "none";
-        });
+          
 
             examSummaries.forEach(exam => {
         
                 // Find subject code from subject name
-                const match = exam.subject.match(/\((.*?)\)/);
-        
-                if (!match) return;
-        
-                const subjectCode = match[1];
+                
         
                 const subjectKey =
                     exam.subject
@@ -1331,16 +1460,6 @@
 
     if (!coordinators) return;
 
-    const roleIndexMap = {
-        overall_coordinator: 1,
-        maths: 2,
-        english: 3,
-        evs: 4,
-        drawing: 5,
-        hindi: 6,
-        abacus: 7
-    };
-
     const rows =
         document.querySelectorAll(
             "#step2 tbody tr"
@@ -1349,40 +1468,133 @@
     Object.entries(coordinators)
         .forEach(([role, data]) => {
 
-            const rowIndex =
-                roleIndexMap[role];
+            let matchingRow = null;
 
-            if (
-                rowIndex === undefined ||
-                !rows[rowIndex]
-            ) {
+            rows.forEach(row => {
+
+                const firstCell =
+                    row.querySelector("td");
+
+                if (!firstCell) {
+                    return;
+                }
+
+                const rowRole =
+                    firstCell.innerText
+                        .replace(" In-charge", "")
+                        .replace("👑 ", "")
+                        .replace("⭐ ", "")
+                        .trim();
+
+                const coordinatorRole =
+                    role
+                        .replace("👑 ", "")
+                        .replace("⭐ ", "")
+                        .trim();
+
+                if (
+                    rowRole === coordinatorRole
+                ) {
+                    matchingRow = row;
+                }
+            });
+
+            if (!matchingRow) {
+                console.log(
+                    "No matching row found:",
+                    role
+                );
                 return;
             }
 
             const inputs =
-                rows[rowIndex]
-                .querySelectorAll(
+                matchingRow.querySelectorAll(
                     "input"
                 );
 
-            if (inputs[0])
+            if (inputs[0]) {
                 inputs[0].value =
                     data.name || "";
+            }
 
-            if (inputs[1])
+            if (inputs[1]) {
                 inputs[1].value =
                     data.mobile || "";
+            }
 
-            if (inputs[2])
+            if (inputs[2]) {
                 inputs[2].value =
                     formatDateForInput(
                         data.dob
                     );
+            }
 
-            if (inputs[3])
+            if (inputs[3]) {
                 inputs[3].value =
                     data.email || "";
+            }
         });
+}
+
+function buildCoordinatorRows(subjects = []) {
+
+    const tbody =
+        document.getElementById(
+            "coordinatorTableBody"
+        );
+
+    // remove old dynamic rows
+    tbody
+        .querySelectorAll(
+            ".dynamic-subject-row"
+        )
+        .forEach(row => row.remove());
+
+    subjects.forEach(subject => {
+
+        const row = `
+            <tr class="dynamic-subject-row hover:bg-fuchsia-50/50 transition-colors">
+
+                <td class="p-3 font-bold text-purple-900 bg-fuchsia-50/30 border-r border-fuchsia-100">
+                    ${subject.subject} In-charge
+                </td>
+
+                <td class="p-2">
+                    <input
+                        type="text"
+                        class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none"
+                    >
+                </td>
+
+                <td class="p-2">
+                    <input
+                        type="text"
+                        class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none"
+                    >
+                </td>
+
+                <td class="p-2">
+                    <input
+                        type="date"
+                        class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none"
+                    >
+                </td>
+
+                <td class="p-2">
+                    <input
+                        type="email"
+                        class="w-full rounded-md border-2 border-transparent hover:border-purple-200 focus:border-purple-500 px-3 py-1.5 text-sm bg-slate-50 focus:bg-white outline-none"
+                    >
+                </td>
+
+            </tr>
+        `;
+
+        tbody.insertAdjacentHTML(
+            "beforeend",
+            row
+        );
+    });
 }
 
 async function loadCustomerData() {
@@ -1415,6 +1627,10 @@ async function loadCustomerData() {
             examSummaries
         );
 
+        buildCoordinatorRows(
+            examSummaries
+        );
+
         populateSchoolInfo(
             result.message
         );
@@ -1435,6 +1651,25 @@ async function loadCustomerData() {
         );
 
     }
+}
+
+function formatDateForInput(dateStr) {
+
+    if (!dateStr) return "";
+
+    const d = new Date(dateStr);
+
+    const day = String(
+        d.getDate()
+    ).padStart(2, "0");
+
+    const month = String(
+        d.getMonth() + 1
+    ).padStart(2, "0");
+
+    const year = d.getFullYear();
+
+    return `${year}-${month}-${day}`;
 }
 
     </script>

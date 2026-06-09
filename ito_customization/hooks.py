@@ -188,6 +188,10 @@ doc_events = {
 # 	"Task": "ito_customization.custom.task.CustomTaskMixin"
 # }
 
+override_doctype_class = {
+	"Customer": "ito_customization.ito_customization.custom_customer.CustomCustomer"
+}
+
 # Overriding Methods
 # ------------------------------
 #

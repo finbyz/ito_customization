@@ -13,6 +13,7 @@
   "amended_from",
   "naming_series",
   "section_break_wfzd",
+  "column_break_aglh",
   "target_dates"
  ],
  "fields": [
@@ -65,13 +66,18 @@
    "fieldtype": "Table",
    "label": "Target Dates",
    "options": "Yearly Exam Date CT"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "column_break_aglh",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-06-09 12:27:33.069310",
+ "modified": "2026-06-09 15:55:44.521036",
  "modified_by": "puneet@yopmail.com",
  "module": "ITO Customization",
  "name": "Yearly Exam Date",

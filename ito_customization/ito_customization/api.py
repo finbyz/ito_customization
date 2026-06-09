@@ -100,11 +100,9 @@ def save_ito_registration(registration_data):
 
         finally:
             frappe.flags.ignore_permissions = original_flag
-
     except Exception:
         frappe.db.rollback()
-        frappe.flags.ignore_permissions = False
-        
+        frappe.flags.ignore_permissions = False        
         frappe.log_error(
             frappe.get_traceback(),
             "ITO Registration Error"
@@ -153,13 +151,19 @@ def save_registration_step():
                 frappe.db.commit()
                 return {"success": True, "step": 1, "customer": customer}
 
-            # --------------------------------------------------
-            # STEP 2 : Principal + Coordinators
-            # --------------------------------------------------
             elif step == 2:
                 customer = frappe.cache().get_value(
                     f"ito_customer_{frappe.session.user}"
                 )
+
+                if not customer and frappe.session.user != "Guest":
+                    customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+
+                if not customer:
+                    school_info = data.get("school_info", {})
+                    if school_info and school_info.get("school_name"):
+                        customer = create_or_update_customer(school_info)
+                        create_or_update_address(customer, school_info)
 
                 if not customer:
                     frappe.throw("Please save School Information first.")
@@ -183,6 +187,15 @@ def save_registration_step():
                 customer = frappe.cache().get_value(
                     f"ito_customer_{frappe.session.user}"
                 )
+
+                if not customer and frappe.session.user != "Guest":
+                    customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+
+                if not customer:
+                    school_info = data.get("school_info", {})
+                    if school_info and school_info.get("school_name"):
+                        customer = create_or_update_customer(school_info)
+                        create_or_update_address(customer, school_info)
 
                 if not customer:
                     frappe.throw("Please save School Information first.")
@@ -462,14 +475,12 @@ def create_or_update_teachers(coordinators, customer_name):
 
         role_text = coordinator.get("role", "").strip()
 
-        # Skip overall_coordinator (not a teacher role)
-        if "overall" in role_text.lower() or "overall" in role_key.lower():
-            continue
-
         subject = None
 
         if "principal" in role_text.lower() or "principal" in role_key.lower():
             subject = "Principal"
+        elif "overall" in role_text.lower() or "overall" in role_key.lower():
+            subject = "Overall Coordinator"
         else:
             # 1. Try to match from hardcoded HTML rows which contain (ISO), (IMO)
             for code, sub_name in subject_map.items():
@@ -890,8 +901,32 @@ def save_little_champ_registration(registration_data):
         )
 
         # ----------------------------------
-        # Address
+        # Address and Contact
         # ----------------------------------
+
+        if customer_doc.customer_primary_contact:
+
+            contact = frappe.get_doc(
+                "Contact",
+                customer_doc.customer_primary_contact
+            )
+
+            school_info = data.get(
+                "school_info",
+                {}
+            )
+
+            contact.mobile_no = (
+                school_info.get("phone_no")
+            )
+
+            contact.custom_whatsapp_no = (
+                school_info.get("whatsapp_no")
+            )
+
+            contact.save(
+                ignore_permissions=True
+            )
 
         create_or_update_address(
             customer_doc.name,
@@ -1009,16 +1044,6 @@ def create_or_update_little_champ_teachers(
         customer_name
     )
 
-    subject_map = {
-        "maths": "Little Champ Maths (LCMO)",
-        "english": "Little Champ English (LCEO)",
-        "evs": "Little Champ EVS (LCEVSO)",
-        "drawing": "Little Champ Drawing (LCDO)",
-        "hindi": "Little Champ Hindi (LCHO)",
-        "abacus": "Little Champ Abacus (LCAO)"
-    }
-
-    # Clear existing rows
     customer.custom_school_teacher_details = []
 
     for role, coordinator in coordinators.items():
@@ -1026,20 +1051,28 @@ def create_or_update_little_champ_teachers(
         if not coordinator.get("name"):
             continue
 
-        if role == "principal":
+        role_lower = role.strip().lower()
+
+        if role_lower in [
+            "head master / principal",
+            "principal"
+        ]:
 
             subject = "Principal"
 
-        elif role == "overall_coordinator":
+        elif role_lower in [
+            "overall co-ordinator",
+            "overall coordinator"
+        ]:
 
             subject = "Overall Coordinator"
 
         else:
 
-            subject = subject_map.get(role)
-
-        if not subject:
-            continue
+            subject = role.replace(
+                " In-charge",
+                ""
+            ).strip()
 
         teacher_name = frappe.db.get_value(
             "Teacher",
