@@ -189,7 +189,7 @@ doc_events = {
 # }
 
 override_doctype_class = {
-	"Customer": "ito_customization.ito_customization.custom_customer.CustomCustomer"
+	"Customer": "ito_customization.ito_customization.doc_events.custom_customer.CustomCustomer"
 }
 
 # Overriding Methods
