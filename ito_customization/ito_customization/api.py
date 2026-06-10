@@ -688,22 +688,12 @@ def get_customer_from_session_user():
 
     for row in customer.custom_school_teacher_details:
 
-        role_map = {
-            "Science Olympiad (ISO)": "🔬 Science In-charge (ISO)",
-            "Maths Olympiad (IMO)": "📐 Maths In-charge (IMO)",
-            "English Olympiad (EIO)": "🔤 English In-charge (EIO)",
-            "General Knowledge Olympiad (GKIO)": "🌍 GK In-charge (GKIO)",
-            "Computer Olympiad (ICO)": "💻 Computer In-charge (ICO)",
-            "Drawing Olympiad (IDO)": "🎨 Drawing In-charge (IDO)",
-            "Essay Olympiad (NESO)": "📝 Essay In-charge (NESO)",
-            "Social Studies Olympiad (NSSO)": "🏛️ Social Studies (NSSO)",
-            "Hindi Olympiad (NHO)": "🪔 Hindi In-charge (NHO)",
-            "Logical Reasoning Olympiad (NLRO)": "🧠 Logical Reasoning (NLRO)",
-            "Commerce Olympiad (CIO)": "📊 Commerce In-charge (CIO)",
-            "Principal": "👑 Head Master / Principal",
-            "Overall Coordinator": "⭐ Overall Co-ordinator"
-        }
-        role_text = role_map.get(row.subject, f"{row.subject} In-charge")
+        if row.subject == "Principal":
+            role_text = "👑 Head Master / Principal"
+        elif row.subject == "Overall Coordinator":
+            role_text = "⭐ Overall Co-ordinator"
+        else:
+            role_text = f"{row.subject} In-charge"
 
         coordinators_data[row.subject] = {
             "role": role_text,
@@ -736,6 +726,25 @@ def get_customer_from_session_user():
         )
 
         if not es_doc.exam_detail:
+            subject_map = {}
+            for exam_row in es_doc.exam_summary:
+                subject = exam_row.subject
+                if subject not in subject_map:
+                    subject_map[subject] = {
+                        "exam_summary_name": es_doc.name,
+                        "yearly_exam_date": "",
+                        "academic_year": "",
+                        "subject": subject,
+                        "target_dates": [],
+                        "rows": []
+                    }
+                subject_map[subject]["rows"].append({
+                    "class": getattr(exam_row, "class", ""),
+                    "teacher_name": getattr(exam_row, "teacher_name", ""),
+                    "whatsapp_no": getattr(exam_row, "whatsapp_no", ""),
+                    "no_of_students": getattr(exam_row, "no_of_students", 0)
+                })
+            exam_summaries_data.extend(subject_map.values())
             continue
 
         yearly_exam = frappe.get_doc(
@@ -937,8 +946,14 @@ def save_little_champ_registration(registration_data):
         # Coordinators / Teachers
         # ----------------------------------
 
+        coordinators_data = data.get("coordinators", {})
+        for role_key, coord_data in coordinators_data.items():
+            role_text = coord_data.get("role", role_key).strip().lower()
+            if "principal" in role_text or "head master" in role_text:
+                create_or_update_principal(coord_data, customer_doc.name)
+
         create_or_update_little_champ_teachers(
-            data.get("coordinators", {}),
+            coordinators_data,
             customer_doc.name
         )
 
@@ -1282,11 +1297,14 @@ def save_little_champ_step():
                         "Please save School Information first."
                     )
 
+                coordinators_data = data.get("coordinators", {})
+                for role_key, coord_data in coordinators_data.items():
+                    role_text = coord_data.get("role", role_key).strip().lower()
+                    if "principal" in role_text or "head master" in role_text:
+                        create_or_update_principal(coord_data, customer)
+
                 create_or_update_little_champ_teachers(
-                    data.get(
-                        "coordinators",
-                        {}
-                    ),
+                    coordinators_data,
                     customer
                 )
 

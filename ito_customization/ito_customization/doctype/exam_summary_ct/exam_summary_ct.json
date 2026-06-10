@@ -1,0 +1,64 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-06-03 16:50:58.415206",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "class",
+  "subject",
+  "teacher_name",
+  "whatsapp_no",
+  "no_of_students"
+ ],
+ "fields": [
+  {
+   "fieldname": "class",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Class",
+   "options": "\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12"
+  },
+  {
+   "fieldname": "subject",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Subject",
+   "options": "School Subject"
+  },
+  {
+   "fieldname": "teacher_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Teacher In-charge"
+  },
+  {
+   "fieldname": "whatsapp_no",
+   "fieldtype": "Phone",
+   "in_list_view": 1,
+   "label": "Whatsapp No"
+  },
+  {
+   "fieldname": "no_of_students",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "No of Students"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-10 13:27:55.224499",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "Exam Summary CT",
+ "owner": "punitsharma9998@gmail.com",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

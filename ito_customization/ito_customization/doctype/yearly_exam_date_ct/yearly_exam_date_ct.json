@@ -1,0 +1,56 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-06-05 16:05:21.283364",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "subject",
+  "tg_date_1",
+  "tg_date_2",
+  "tg_date_3"
+ ],
+ "fields": [
+  {
+   "fieldname": "subject",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Subject",
+   "options": "School Subject"
+  },
+  {
+   "fieldname": "tg_date_1",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "TG Date 1"
+  },
+  {
+   "fieldname": "tg_date_2",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "TG Date 2"
+  },
+  {
+   "fieldname": "tg_date_3",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "TG Date 3"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-10 13:27:45.019637",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "Yearly Exam Date CT",
+ "owner": "punitsharma9998@gmail.com",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

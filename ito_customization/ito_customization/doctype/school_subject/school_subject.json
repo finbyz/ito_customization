@@ -6,21 +6,69 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "little_champ"
+  "little_champ",
+  "section_break_rfzu",
+  "practice_workbook_110",
+  "student_guide_220",
+  "prev_year_paper_160",
+  "section_break_cqcc",
+  "text_book",
+  "work_book"
  ],
  "fields": [
   {
    "default": "0",
    "fieldname": "little_champ",
    "fieldtype": "Check",
+   "in_list_view": 1,
    "label": "Little Champ"
+  },
+  {
+   "depends_on": "eval:doc.little_champ == 0",
+   "fieldname": "section_break_rfzu",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "practice_workbook_110",
+   "fieldtype": "Table MultiSelect",
+   "label": "Practice Workbook (\u20b9110)",
+   "options": "Class Detail"
+  },
+  {
+   "fieldname": "student_guide_220",
+   "fieldtype": "Table MultiSelect",
+   "label": "Student Guide (\u20b9220)",
+   "options": "Class Detail"
+  },
+  {
+   "fieldname": "prev_year_paper_160",
+   "fieldtype": "Table MultiSelect",
+   "label": "Prev. Year Paper (\u20b9160)",
+   "options": "Class Detail"
+  },
+  {
+   "depends_on": "eval:doc.little_champ == 1",
+   "fieldname": "section_break_cqcc",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "text_book",
+   "fieldtype": "Table MultiSelect",
+   "label": "Text Book",
+   "options": "Class Detail"
+  },
+  {
+   "fieldname": "work_book",
+   "fieldtype": "Table MultiSelect",
+   "label": "Work Book",
+   "options": "Class Detail"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-06 13:18:34.768302",
- "modified_by": "Administrator",
+ "modified": "2026-06-10 11:51:26.070974",
+ "modified_by": "puneet@yopmail.com",
  "module": "ITO Customization",
  "name": "School Subject",
  "naming_rule": "Set by user",

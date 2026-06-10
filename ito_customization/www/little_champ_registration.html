@@ -1028,12 +1028,18 @@
                     'input, select'
                 );
 
-            const role =
+            const roleText =
                 row.querySelector(
                     'td:first-child'
-                )?.innerText
-                ?.replace(' In-charge', '')
-                ?.trim();
+                )?.innerText || '';
+
+            // Clean up role text - remove emojis and "In-charge" suffix
+            const role =
+                roleText
+                    .replace('👑', '')
+                    .replace('⭐', '')
+                    .replace(/In-charge$/i, '')
+                    .trim();
 
             if (
                 cells.length >= 4 &&
@@ -1046,7 +1052,8 @@
                     name: cells[0].value,
                     mobile: cells[1].value,
                     dob: cells[2].value,
-                    email: cells[3].value
+                    email: cells[3].value,
+                    role: role  // Add role for backend processing
                 };
             }
             });
@@ -1182,10 +1189,6 @@
         };
 
         function populateSchoolInfo(data) {
-
-            populateTeacherDetails(
-                data.customer.custom_school_teacher_details || []
-            );
 
             const fields = document.querySelectorAll(
                 '#step1 input, #step1 select, #step1 textarea'
@@ -1556,21 +1559,7 @@ return;
                             .replace(" In-charge", "")
                             .trim();
         
-                    if (
-                        rowSubject === subject ||
-                        (
-                            rowSubject ===
-                                "Head Master / Principal" &&
-                            subject === "Principal"
-                        ) ||
-                        (
-                            rowSubject ===
-                                "Overall Co-ordinator" &&
-                            subject === "Overall Coordinator"
-                        )
-                    ) {
-                        matchingRow = row;
-                    }
+                    
                 });
         
                 if (!matchingRow) {
@@ -1731,7 +1720,7 @@ return;
         );
 
     Object.entries(coordinators)
-        .forEach(([role, data]) => {
+        .forEach(([subjectKey, data]) => {
 
             let matchingRow = null;
 
@@ -1744,21 +1733,32 @@ return;
                     return;
                 }
 
-                const rowRole =
-                    firstCell.innerText
-                        .replace(" In-charge", "")
-                        .replace("👑 ", "")
-                        .replace("⭐ ", "")
-                        .trim();
+                // Get the text from the row (e.g., "Little Champ Maths In-charge" or "👑 Head Master / Principal")
+                const rowText =
+                    firstCell.innerText.trim();
 
-                const coordinatorRole =
-                    role
-                        .replace("👑 ", "")
-                        .replace("⭐ ", "")
-                        .trim();
+                // Remove emojis and "In-charge" suffix for comparison
+                const normalizedRowText =
+                    rowText
+                        .replace("👑", "")
+                        .replace("⭐", "")
+                        .replace(/In-charge$/i, "")
+                        .trim()
+                        .toLowerCase()
+                        .replace(/\s+/g, " ");
 
+                // Normalize the subject key from backend
+                const normalizedSubjectKey =
+                    subjectKey
+                        .trim()
+                        .toLowerCase()
+                        .replace(/\s+/g, " ");
+
+                // Special handling for Principal and Overall Coordinator
                 if (
-                    rowRole === coordinatorRole
+                    (subjectKey === "Principal" && rowText.includes("Principal")) ||
+                    (subjectKey === "Overall Coordinator" && rowText.includes("Overall")) ||
+                    normalizedRowText === normalizedSubjectKey
                 ) {
                     matchingRow = row;
                 }
@@ -1766,8 +1766,10 @@ return;
 
             if (!matchingRow) {
                 console.log(
-                    "No matching row found:",
-                    role
+                    "No matching row found for:",
+                    subjectKey,
+                    "Data:",
+                    data
                 );
                 return;
             }
