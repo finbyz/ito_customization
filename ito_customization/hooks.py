@@ -189,7 +189,7 @@ doc_events = {
 # }
 
 override_doctype_class = {
-	"Customer": "ito_customization.ito_customization.doc_events.custom_customer.CustomCustomer"
+	"Customer": "ito_customization.ito_customization.override.custom_customer.CustomCustomer"
 }
 
 # Overriding Methods
@@ -267,4 +267,6 @@ override_doctype_class = {
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
+
+update_website_context = "ito_customization.ito_customization.doc_events.web_page.website_redirects.update_website_context"
 
