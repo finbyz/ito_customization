@@ -1,0 +1,711 @@
+import frappe
+import json
+
+from frappe.utils import cint
+
+
+def ensure_subject_exists(subject_name):
+    """Create a School Subject if it doesn't exist"""
+    if not frappe.db.exists("School Subject", subject_name):
+        subject = frappe.new_doc("School Subject")
+        subject.name = subject_name
+        try:
+            subject.insert(ignore_permissions=True)
+        except frappe.DuplicateEntryError:
+            pass  # Subject was created by another process
+
+@frappe.whitelist(allow_guest=True)
+def save_books_order(registration_data):
+
+    try:
+
+        data = (
+            json.loads(registration_data)
+            if isinstance(registration_data, str)
+            else registration_data
+        )
+
+        frappe.log_error(
+            "Books Order Data",
+            json.dumps(data, indent=2)
+        )
+
+        original_flag = frappe.flags.ignore_permissions
+        frappe.flags.ignore_permissions = True
+
+        try:
+
+            school_info = data.get(
+                "school_info",
+                {}
+            )
+
+            customer = create_or_update_customer_books_order(
+                school_info
+            )
+
+            create_or_update_address(
+                customer,
+                school_info
+            )
+
+            if school_info.get("primary_contact"):
+                create_or_update_primary_contact(
+                    school_info.get(
+                        "primary_contact"
+                    ),
+                    customer
+                )
+
+            if school_info.get(
+                "olympiad_coordinator"
+            ):
+                create_or_update_olympiad_coordinator(
+                    school_info.get(
+                        "olympiad_coordinator"
+                    ),
+                    customer
+                )
+
+            books_selection = data.get(
+                "books_selection",
+                []
+            )
+
+            if books_selection:
+
+                create_or_update_books_selection(
+                    customer,
+                    books_selection
+    )
+
+            frappe.db.commit()
+
+            return {
+                "success": True,
+                "customer": customer
+            }
+
+        finally:
+            frappe.flags.ignore_permissions = (
+                original_flag
+            )
+
+    except Exception:
+
+        frappe.db.rollback()
+
+        frappe.flags.ignore_permissions = False
+
+        frappe.log_error(
+            frappe.get_traceback(),
+            "Books Order Save Error"
+        )
+
+        return {
+            "success": False,
+            "message": frappe.get_traceback()
+        }
+
+
+
+def create_or_update_books_selection(
+    customer_name,
+    books_selection
+):
+
+    books_name = frappe.db.get_value(
+        "Books Selection",
+        {
+            "customer": customer_name
+        }
+    )
+
+    if books_name:
+
+        books_doc = frappe.get_doc(
+            "Books Selection",
+            books_name
+        )
+
+        books_doc.select_books = []
+
+    else:
+
+        books_doc = frappe.new_doc(
+            "Books Selection"
+        )
+
+        books_doc.customer = (
+            customer_name
+        )
+
+    for row in books_selection:
+
+        if not (
+            cint(
+                row.get(
+                    "practice_workbook_110"
+                )
+            )
+            or
+            cint(
+                row.get(
+                    "student_guide_220"
+                )
+            )
+            or
+            cint(
+                row.get(
+                    "prev_year_paper_160"
+                )
+            )
+        ):
+            continue
+
+        books_doc.append(
+            "select_books",
+            {
+                "subject":
+                    row.get("subject"),
+
+                "class_grade":
+                    row.get("class_grade"),
+
+                "practice_workbook_110":
+                    cint(
+                        row.get(
+                            "practice_workbook_110"
+                        )
+                    ),
+
+                "student_guide_220":
+                    cint(
+                        row.get(
+                            "student_guide_220"
+                        )
+                    ),
+
+                "prev_year_paper_160":
+                    cint(
+                        row.get(
+                            "prev_year_paper_160"
+                        )
+                    )
+            }
+        )
+
+    if books_doc.is_new():
+
+        books_doc.insert(
+            ignore_permissions=True
+        )
+
+    else:
+
+        books_doc.save(
+            ignore_permissions=True
+        )
+
+    return books_doc.name
+
+def create_or_update_customer_books_order(school_info):
+
+    school_name = school_info.get("school_name")
+
+    if not school_name:
+        frappe.throw("School Name is mandatory")
+
+    existing = frappe.db.exists(
+        "Customer",
+        {"customer_name": school_name}
+    )
+
+    if existing:
+        customer = frappe.get_doc(
+            "Customer",
+            existing
+        )
+    else:
+        customer = frappe.new_doc("Customer")
+        customer.customer_name = school_name
+
+    customer.customer_type = "Company"
+
+    # Existing ITO School Code
+    if hasattr(customer, "custom_ito_school_code"):
+        customer.custom_ito_school_code = school_info.get(
+            "ito_school_code"
+        )
+
+    # Contact Details
+    if hasattr(customer, "email_id"):
+        customer.email_id = school_info.get(
+            "contact_email"
+        )
+
+    if hasattr(customer, "mobile_no"):
+        customer.mobile_no = school_info.get(
+            "contact_mobile"
+        )
+
+    # Location Details
+    if hasattr(customer, "custom_taluka"):
+        customer.custom_taluka = school_info.get(
+            "taluka"
+        )
+
+    if hasattr(customer, "custom_district"):
+        customer.custom_district = school_info.get(
+            "district"
+        )
+
+    if hasattr(customer, "custom_customer_category"):
+        customer.custom_customer_category = (
+            "School Customer"
+        )
+
+    if customer.is_new():
+        customer.insert(
+            ignore_permissions=True
+        )
+    else:
+        customer.save(
+            ignore_permissions=True
+        )
+
+    return customer.name
+
+
+
+def create_or_update_address(customer_name, school_info):
+
+    address_name = frappe.db.exists(
+        "Address",
+        {
+            "address_title": customer_name
+        }
+    )
+
+    if address_name:
+        address = frappe.get_doc(
+            "Address",
+            address_name
+        )
+    else:
+        address = frappe.new_doc("Address")
+
+        address.address_title = customer_name
+        address.address_type = "Billing"
+
+        address.append(
+            "links",
+            {
+                "link_doctype": "Customer",
+                "link_name": customer_name
+            }
+        )
+
+    address.address_line1 = school_info.get(
+        "school_address"
+    )
+
+    address.city = school_info.get(
+        "city"
+    )
+
+    address.state = school_info.get(
+        "state"
+    )
+
+    address.pincode = school_info.get(
+        "pincode"
+    )
+
+    address.country = "India"
+
+    if hasattr(address, "custom_taluka"):
+        address.custom_taluka = school_info.get(
+            "taluka"
+        )
+
+    if hasattr(address, "custom_district"):
+        address.custom_district = school_info.get(
+            "district"
+        )
+
+    if address.is_new():
+        address.insert(
+            ignore_permissions=True
+        )
+    else:
+        address.save(
+            ignore_permissions=True
+        )
+
+    return address.name
+
+
+def create_or_update_primary_contact(
+    primary_contact,
+    customer_name
+):
+
+    if not primary_contact.get("name"):
+        return
+
+    contact_name = frappe.db.exists(
+        "Contact",
+        {
+            "first_name": primary_contact.get("name")
+        }
+    )
+
+    if contact_name:
+        contact = frappe.get_doc(
+            "Contact",
+            contact_name
+        )
+    else:
+        contact = frappe.new_doc(
+            "Contact"
+        )
+
+    contact.first_name = primary_contact.get(
+        "name"
+    )
+
+    contact.designation = (
+        "Primary Contact"
+    )
+
+    contact.email_ids = []
+    contact.phone_nos = []
+
+    if primary_contact.get("email"):
+
+        contact.append(
+            "email_ids",
+            {
+                "email_id": primary_contact.get(
+                    "email"
+                ),
+                "is_primary": 1
+            }
+        )
+
+    if primary_contact.get("mobile"):
+
+        contact.append(
+            "phone_nos",
+            {
+                "phone": primary_contact.get(
+                    "mobile"
+                ),
+                "is_primary_mobile_no": 1
+            }
+        )
+
+    if not contact.links:
+
+        contact.append(
+            "links",
+            {
+                "link_doctype": "Customer",
+                "link_name": customer_name
+            }
+        )
+
+    if contact.is_new():
+
+        contact.insert(
+            ignore_permissions=True
+        )
+
+    else:
+
+        contact.save(
+            ignore_permissions=True
+        )
+
+    # ----------------------------------
+    # Update Customer Primary Contact
+    # ----------------------------------
+
+    customer = frappe.get_doc(
+        "Customer",
+        customer_name
+    )
+
+    customer.customer_primary_contact = (
+        contact.name
+    )
+
+    if hasattr(customer, "mobile_no"):
+        customer.mobile_no = primary_contact.get(
+            "mobile"
+        )
+
+    if hasattr(customer, "email_id"):
+        customer.email_id = primary_contact.get(
+            "email"
+        )
+
+    customer.save(
+        ignore_permissions=True
+    )
+
+    return contact.name
+
+
+
+def create_or_update_olympiad_coordinator(
+    coordinator,
+    customer_name
+):
+
+    if not coordinator.get("name"):
+        return
+
+    customer = frappe.get_doc(
+        "Customer",
+        customer_name
+    )
+
+    ensure_subject_exists(
+        "Overall Coordinator"
+    )
+
+    # ----------------------------------
+    # Find Existing Coordinator
+    # ----------------------------------
+
+    teacher_name = frappe.db.get_value(
+        "Teacher",
+        {
+            "customer_reference":
+                customer.name,
+            "subject":
+                "Overall Coordinator"
+        }
+    )
+
+    if teacher_name:
+
+        teacher = frappe.get_doc(
+            "Teacher",
+            teacher_name
+        )
+
+    else:
+
+        teacher = frappe.new_doc(
+            "Teacher"
+        )
+
+    # ----------------------------------
+    # Teacher Master
+    # ----------------------------------
+
+    teacher.name1 = coordinator.get(
+        "name"
+    )
+
+    teacher.phone_number = (
+        coordinator.get("mobile")
+    )
+
+    teacher.email_id = (
+        coordinator.get("email")
+    )
+
+    teacher.date_of_birth = "2000-01-01"
+
+    teacher.subject = (
+        "Overall Coordinator"
+    )
+
+    teacher.status = "Active"
+
+    teacher.experience = (
+        "Experienced"
+    )
+
+    teacher.customer_reference = (
+        customer.name
+    )
+
+    if teacher.is_new():
+
+        teacher.insert(
+            ignore_permissions=True
+        )
+
+    else:
+
+        teacher.save(
+            ignore_permissions=True
+        )
+
+    # ----------------------------------
+    # Customer Child Table Sync
+    # ----------------------------------
+
+    existing_row = None
+
+    for row in customer.custom_school_teacher_details:
+
+        if (
+            row.subject ==
+            "Overall Coordinator"
+        ):
+            existing_row = row
+            break
+
+    if existing_row:
+
+        existing_row.name1 = (
+            teacher.name
+        )
+
+        existing_row.phone_number = (
+            teacher.phone_number
+        )
+
+        existing_row.email_id = (
+            teacher.email_id
+        )
+
+    else:
+
+        customer.append(
+            "custom_school_teacher_details",
+            {
+                "name1":
+                    teacher.name,
+
+                "phone_number":
+                    teacher.phone_number,
+
+                "email_id":
+                    teacher.email_id,
+
+                "subject":
+                    "Overall Coordinator",
+
+                "status":
+                    teacher.status,
+
+                "experience":
+                    teacher.experience
+            }
+        )
+
+    customer.save(
+        ignore_permissions=True
+    )
+
+    return teacher.name
+
+
+@frappe.whitelist(allow_guest=True)
+def get_books_order_subjects():
+
+    if frappe.session.user == "Guest":
+        return []
+
+    customer_name = frappe.db.get_value(
+        "Portal User",
+        {
+            "user": frappe.session.user
+        },
+        "parent"
+    )
+
+    if not customer_name:
+        return []
+
+    es_name = frappe.db.get_value(
+        "Exams Summary",
+        {
+            "customer": customer_name
+        }
+    )
+
+    if not es_name:
+        return []
+
+    es_doc = frappe.get_doc(
+        "Exams Summary",
+        es_name
+    )
+
+    if not es_doc.exam_detail:
+        return []
+
+    yearly_exam = frappe.get_doc(
+        "Yearly Exam Date",
+        es_doc.exam_detail
+    )
+
+    subjects_data = []
+
+    for row in yearly_exam.target_dates:
+
+        if not row.subject:
+            continue
+
+        if not frappe.db.exists(
+            "School Subject",
+            row.subject
+        ):
+            continue
+
+        subject_doc = frappe.get_doc(
+            "School Subject",
+            row.subject
+        )
+
+        subjects_data.append({
+            "subject": subject_doc.name,
+
+            "practice_workbook_110": [
+                d.get("class")
+                for d in subject_doc.practice_workbook_110
+            ],
+
+            "student_guide_220": [
+                d.get("class")
+                for d in subject_doc.student_guide_220
+            ],
+
+            "prev_year_paper_160": [
+                d.get("class")
+                for d in subject_doc.prev_year_paper_160
+            ]
+        })
+
+    frappe.log_error(
+        title="BOOK SUBJECTS",
+        message=json.dumps(
+            subjects_data,
+            indent=2,
+            default=str
+        )
+    )
+
+    return subjects_data
+
+
+def get_customer_from_user():
+
+    user = frappe.session.user
+
+    customer = frappe.db.get_value(
+        "Customer",
+        {
+            "email_id": user
+        }
+    )
+
+    return customer

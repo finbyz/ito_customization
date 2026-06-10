@@ -628,6 +628,7 @@ def get_customer_from_session_user():
     # Primary Contact Details
     # --------------------------------------------------
 
+    contact_name = ""
     contact_email = ""
     contact_mobile = ""
 
@@ -636,6 +637,12 @@ def get_customer_from_session_user():
         contact = frappe.get_doc(
             "Contact",
             customer.customer_primary_contact
+        )
+
+        contact_name = (
+            contact.get_full_name()
+            if hasattr(contact, "get_full_name")
+            else contact.first_name
         )
 
         if contact.email_ids:
@@ -843,6 +850,7 @@ def get_customer_from_session_user():
     return {
         "customer": customer.as_dict(),
         "address": address,
+        "contact_name": contact_name,
         "contact_email": contact_email,
         "contact_mobile": contact_mobile,
         "application_deadline": customer.custom_application_deadline,

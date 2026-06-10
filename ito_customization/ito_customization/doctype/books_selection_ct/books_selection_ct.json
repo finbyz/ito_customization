@@ -1,0 +1,64 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-06-10 16:48:47.678972",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "subject",
+  "class_grade",
+  "practice_workbook_110",
+  "student_guide_220",
+  "prev_year_paper_160"
+ ],
+ "fields": [
+  {
+   "fieldname": "class_grade",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Class Grade",
+   "options": "Class"
+  },
+  {
+   "fieldname": "practice_workbook_110",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Practice Workbook (\u20b9110)"
+  },
+  {
+   "fieldname": "student_guide_220",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Student Guide (\u20b9220)"
+  },
+  {
+   "fieldname": "prev_year_paper_160",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Prev. Year Paper (\u20b9160)"
+  },
+  {
+   "fieldname": "subject",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Subject",
+   "options": "School Subject"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-10 18:20:21.493904",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "Books Selection CT",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
