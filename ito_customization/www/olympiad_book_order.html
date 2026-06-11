@@ -31,7 +31,10 @@
             <div>
                 <h1 class="text-3xl font-extrabold tracking-tight">INDIAN TALENT OLYMPIAD</h1>
                 <p class="text-blue-100 font-semibold text-lg mt-1">Study Materials & Books Order Form (Classes 1st to 12th)</p>
-                <p class="text-blue-200 text-sm">Official Registration & Ordering Gateway AY 2026-27</p>
+                <p class="text-blue-200 text-sm">
+                    Official Registration & Ordering Gateway
+                    <span id="academicYearBadge"></span>
+                </p>
             </div>
             <div class="bg-blue-900/50 backdrop-blur-md border border-blue-600 rounded-xl p-4 text-center md:text-right shadow-inner">
                 <span class="font-extrabold text-yellow-400 uppercase tracking-wider text-xs block mb-1">Standard Delivery Timeline</span>
@@ -1021,6 +1024,16 @@
         
             const address =
                 data.address || {};
+
+                const badge =
+                document.getElementById(
+                    "academicYearBadge"
+                );
+        
+            if (badge) {
+                badge.textContent =
+                    customer.custom_current_academic_year || "";
+            }
         
             const inputs =
                 document.querySelectorAll(
@@ -1135,24 +1148,14 @@
                 }
             );
         
-            const result =
-                await response.json();
+            const result = await response.json();
         
-            console.log(
-                "Customer Data",
-                result
-            );
+            populateCustomerData(result.message);
+            populatePrimaryContactData(result.message);
+            populateCoordinatorData(result.message.coordinators);
         
-            populateCustomerData(
-                result.message
-            );
-
-            populatePrimaryContactData(
-                result.message
-            );
-            populateCoordinatorData(
-                result.message.coordinators
-            );
+            savedBooksSelection =
+                result.message.books_selection || [];
         }
 
         // --- INIT ROSTER SYSTEM ---
@@ -1190,6 +1193,12 @@
             buildSubjectsMatrix(
                 subjectsConfig
             );
+
+            populateBooksSelectionData(
+                savedBooksSelection
+            );
+
+            calculateGrandTotal();
         };
 
         function isBookAvailable(
@@ -1337,6 +1346,82 @@ function collectBooksSelectionData() {
                 .prev_year_paper_160
                 .includes(className);
         }
+
+function populateBooksSelectionData(savedBooks) {
+
+    if (!savedBooks?.length) return;
+
+    savedBooks.forEach(row => {
+
+        const subject = row.subject;
+        const classGrade = row.class_grade;
+
+        const wbInput = document.querySelector(
+            `.input-book-qty[data-subject="${subject}"][data-class="${classGrade}"][data-type="wb"]`
+        );
+
+        if (wbInput) {
+            wbInput.value =
+                row.practice_workbook_110 || "";
+        }
+
+        const sgInput = document.querySelector(
+            `.input-book-qty[data-subject="${subject}"][data-class="${classGrade}"][data-type="sg"]`
+        );
+
+        if (sgInput) {
+            sgInput.value =
+                row.student_guide_220 || "";
+        }
+
+        const ypInput = document.querySelector(
+            `.input-book-qty[data-subject="${subject}"][data-class="${classGrade}"][data-type="yp"]`
+        );
+
+        if (ypInput) {
+            ypInput.value =
+                row.prev_year_paper_160 || "";
+        }
+    });
+}
+
+function populateBooksSelectionData(savedBooks) {
+
+    if (!savedBooks?.length) return;
+
+    savedBooks.forEach(row => {
+
+        const subject = row.subject;
+        const classGrade = row.class_grade;
+
+        const wbInput = document.querySelector(
+            `.input-book-qty[data-subject="${subject}"][data-class="${classGrade}"][data-type="wb"]`
+        );
+
+        if (wbInput) {
+            wbInput.value =
+                row.practice_workbook_110 || "";
+        }
+
+        const sgInput = document.querySelector(
+            `.input-book-qty[data-subject="${subject}"][data-class="${classGrade}"][data-type="sg"]`
+        );
+
+        if (sgInput) {
+            sgInput.value =
+                row.student_guide_220 || "";
+        }
+
+        const ypInput = document.querySelector(
+            `.input-book-qty[data-subject="${subject}"][data-class="${classGrade}"][data-type="yp"]`
+        );
+
+        if (ypInput) {
+            ypInput.value =
+                row.prev_year_paper_160 || "";
+        }
+    });
+}
 
     </script>
 </body>

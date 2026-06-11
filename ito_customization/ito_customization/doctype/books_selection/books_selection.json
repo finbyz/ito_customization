@@ -7,6 +7,8 @@
  "engine": "InnoDB",
  "field_order": [
   "customer",
+  "academic_year",
+  "order_date",
   "select_books"
  ],
  "fields": [
@@ -22,13 +24,24 @@
    "fieldtype": "Table",
    "label": "Select Books",
    "options": "Books Selection CT"
+  },
+  {
+   "fetch_from": "customer.custom_current_academic_year",
+   "fieldname": "academic_year",
+   "fieldtype": "Data",
+   "label": "Academic Year"
+  },
+  {
+   "fieldname": "order_date",
+   "fieldtype": "Date",
+   "label": "Order Date"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-10 18:30:49.111395",
- "modified_by": "Administrator",
+ "modified": "2026-06-11 09:52:18.664424",
+ "modified_by": "kaustubh.sharma@finbyz.tech",
  "module": "ITO Customization",
  "name": "Books Selection",
  "naming_rule": "By fieldname",

@@ -140,6 +140,9 @@ def create_or_update_books_selection(
             customer_name
         )
 
+    if not books_doc.order_date:
+        books_doc.order_date = frappe.utils.nowdate()
+
     for row in books_selection:
 
         if not (

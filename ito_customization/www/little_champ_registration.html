@@ -31,7 +31,9 @@
                 <div class="flex items-center gap-3 mb-1">
                     <h1 class="text-3xl font-bold tracking-tight">INDIAN TALENT OLYMPIAD</h1>
                 </div>
-                <p class="text-purple-100 font-semibold text-lg">Little Champ Registration Form 2026-27</p>
+                <p class="text-purple-100 font-semibold text-lg">Little Champ Registration Form 
+                    <span id="academicYearBadge"></span>
+                </p>
                 <p class="text-purple-200 text-sm mt-1">Nursery, Junior KG & Senior KG</p>
             </div>
             <div class="bg-purple-800/40 backdrop-blur-sm border border-purple-500 rounded-lg p-3 text-sm flex flex-col gap-1 text-center md:text-right shadow-inner">
@@ -1193,6 +1195,15 @@
             const fields = document.querySelectorAll(
                 '#step1 input, #step1 select, #step1 textarea'
             );
+                    const badge =
+                document.getElementById(
+                    "academicYearBadge"
+                );
+
+            if (badge) {
+                badge.textContent =
+                    data.customer?.custom_current_academic_year || "";
+            }
 
             if (data.application_deadline) {
 
@@ -1370,6 +1381,7 @@
             data.customer?.email_id ||
             "";
 
+            
 // ----------------------------------
 // Slot Registration Dates
 // ----------------------------------

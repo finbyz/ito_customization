@@ -847,6 +847,41 @@ def get_customer_from_session_user():
                 "no_of_students": row.no_of_students
             })
 
+    # --------------------------------------------------
+    # Books Selection Data
+    # --------------------------------------------------
+
+    books_selection = []
+
+    bs_name = frappe.db.get_value(
+        "Books Selection",
+        {
+            "customer": customer.name
+        }
+    )
+
+    frappe.log_error(
+        "BOOKS DEBUG",
+        f"Customer={customer.name}\nBooks Selection={bs_name}"
+    )
+
+    if bs_name:
+
+        bs_doc = frappe.get_doc(
+            "Books Selection",
+            bs_name
+        )
+
+        for row in bs_doc.select_books:
+
+            books_selection.append({
+                "subject": row.subject,
+                "class_grade": row.class_grade,
+                "practice_workbook_110": row.practice_workbook_110,
+                "student_guide_220": row.student_guide_220,
+                "prev_year_paper_160": row.prev_year_paper_160
+            })
+
     return {
         "customer": customer.as_dict(),
         "address": address,
@@ -860,7 +895,8 @@ def get_customer_from_session_user():
         "coordinators": coordinators_data,
         "exam_summaries": exam_summaries_data,
         "session_user": frappe.session.user,
-         "teachers": teachers_data
+        "teachers": teachers_data,
+        "books_selection": books_selection
     }
 
 

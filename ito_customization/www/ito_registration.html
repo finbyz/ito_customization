@@ -47,7 +47,9 @@
             class="bg-blue-800 p-6 text-white flex flex-col md:flex-row justify-between items-center md:items-start gap-4">
             <div>
                 <h1 class="text-3xl font-bold tracking-tight">INDIAN TALENT OLYMPIAD</h1>
-                <p class="text-blue-200 mt-1 font-medium">School Registration Form 2026-27</p>
+                <p class="text-blue-200 mt-1 font-medium">School Registration Form
+                    <span id="academicYearBadge"></span>
+                </p>
             </div>
             <div class="bg-blue-700/20 border border-blue-400 rounded-2xl px-8 py-4 text-center shadow-sm">
                 <p class="text-blue-100 text-sm uppercase tracking-wider">
@@ -1422,6 +1424,16 @@
                             year: "numeric"
                         }
                     );
+            }
+
+            const badge =
+                document.getElementById(
+                    "academicYearBadge"
+                );
+
+            if (badge) {
+                badge.textContent =
+                    data.customer?.custom_current_academic_year || "";
             }
 
             if (data.application_deadline) {
