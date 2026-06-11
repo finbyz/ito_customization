@@ -370,6 +370,11 @@
         
                 const tableRowsHtml =
                     rowsClasses.map(c => {
+
+                        const wbRow =
+                        sub.workbookClasses.find(
+                            row => row.class === c
+                        );
         
                         const wbCell =
                             isBookAvailable(
@@ -388,8 +393,14 @@
                                         data-sub="${sub.code}"
                                         data-subject="${sub.name}"
                                         data-class="${c}"
+                                        data-price="${wbRow?.item_price || 0}"
+                                        data-item="${wbRow?.item || ''}"
                                         oninput="calculateGrandTotal()"
                                     >
+
+                                    <div class="text-[11px] text-blue-600 font-bold mt-1">
+                                        ₹ ${wbRow?.item_price || 0}
+                                    </div>
                                 </td>
                             `
                                 : `
@@ -397,7 +408,11 @@
                                     N/A
                                 </td>
                             `;
-        
+
+                            const sgRow =
+                            sub.guideClasses.find(
+                                row => row.class === c
+                            );
                         const sgCell =
                             isBookAvailable(
                                 sub,
@@ -413,10 +428,15 @@
                                         class="input-book-qty w-full rounded border border-slate-300 p-1 text-center font-bold outline-none focus:ring-1 focus:ring-blue-500"
                                         data-type="sg"
                                         data-sub="${sub.code}"
+                                        data-price="${sgRow?.item_price || 0}"
+                                        data-item="${sgRow?.item || ''}"
                                         data-subject="${sub.name}"
                                         data-class="${c}"
                                         oninput="calculateGrandTotal()"
                                     >
+                                    <div class="text-[11px] text-blue-600 font-bold mt-1">
+                                        ₹ ${sgRow?.item_price || 0}
+                                    </div>
                                 </td>
                             `
                                 : `
@@ -424,7 +444,11 @@
                                     N/A
                                 </td>
                             `;
-        
+                        
+                            const ypRow =
+                            sub.paperClasses.find(
+                                row => row.class === c
+                            );
                         const ypCell =
                             isBookAvailable(
                                 sub,
@@ -441,9 +465,14 @@
                                         data-type="yp"
                                         data-sub="${sub.code}"
                                         data-subject="${sub.name}"
+                                        data-price="${ypRow?.item_price || 0}"
+                                        data-item="${ypRow?.item || ''}"
                                         data-class="${c}"
                                         oninput="calculateGrandTotal()"
                                     >
+                                    <div class="text-[11px] text-blue-600 font-bold mt-1">
+                                        ₹ ${ypRow?.item_price || 0}
+                                    </div>
                                 </td>
                             `
                                 : `
@@ -549,6 +578,10 @@
                                             <th class="p-3 border-r border-slate-200 bg-fuchsia-50/20">
                                                 Prev. Year Paper (₹160)
                                             </th>
+
+                                            <th class="p-3 bg-green-50/20">
+                                                Amount
+                                            </th>
         
                                             
         
@@ -575,7 +608,7 @@
                                         id="card_books_total_${sub.code}"
                                         class="text-blue-700"
                                     >
-                                        0
+                                        ₹ 0
                                     </span>
                                     Books Ordered
         
@@ -637,14 +670,48 @@
                 });
         }
 
+        function calculateClassSum(
+            card,
+            subCode,
+            className
+        ) {
+
+            let classTotal = 0;
+
+            card.querySelectorAll(
+                `.input-book-qty[data-class="${className}"]`
+            ).forEach(input => {
+
+                const qty =
+                    parseInt(input.value) || 0;
+
+                const price =
+                    parseFloat(
+                        input.dataset.price
+                    ) || 0;
+
+                classTotal += qty * price;
+            });
+
+            const rowTotal =
+                document.getElementById(
+                    `sub_total_${subCode}_${className.replace(/\s+/g, '_')}`
+                );
+
+            if (rowTotal) {
+
+                rowTotal.textContent =
+                    `₹ ${classTotal}`;
+            }
+
+            return classTotal;
+        }
+
         // --- MATHS COMPILER FOR ENTIRE ORDER FORM ---
         function calculateGrandTotal() {
             const region = document.getElementById('regionSelect').value;
             
             // Standard prices from PDF
-            const priceWb = region === 'india' ? 110 : 10;
-            const priceSg = region === 'india' ? 220 : 10;
-            const priceYp = region === 'india' ? 160 : 10;
             const currencySymbol = region === 'india' ? '₹' : '$';
 
             let grandTotalQuantity = 0;
@@ -664,44 +731,105 @@
                 grandTotalQuantity += val;
             });
 
-            // Update bottom card counters dynamically
             subjectsConfig.forEach(sub => {
-                const card = document.getElementById(`subCard_${sub.code}`);
+
+                const card =
+                    document.getElementById(
+                        `subCard_${sub.code}`
+                    );
+            
                 if (!card) return;
-                
-                let subjectSum = 0;
-                card.querySelectorAll('.input-book-qty').forEach(input => {
-                    subjectSum += parseInt(input.value) || 0;
+            
+                let subjectQty = 0;
+                let subjectAmount = 0;
+            
+                card.querySelectorAll(
+                    '.input-book-qty'
+                ).forEach(input => {
+            
+                    const qty =
+                        parseInt(input.value) || 0;
+            
+                    const price =
+                        parseFloat(
+                            input.dataset.price
+                        ) || 0;
+            
+                    subjectQty += qty;
+                    subjectAmount += qty * price;
                 });
-
-                // Update single class row sum column inside the table
-                const rowsClasses = sub.classesOverride || Array.from({length: (sub.maxClass - sub.minClass + 1)}, (v, k) => k + sub.minClass);
-                rowsClasses.forEach(c => {
-                    let classTotal = 0;
-                    card.querySelectorAll(`[data-sub="${sub.code}"][data-class="${c}"]`).forEach(input => {
-                        classTotal += parseInt(input.value) || 0;
+            
+                // Update single class row amount
+                for (let i = 1; i <= 12; i++) {
+            
+                    const className =
+                        `Class ${i}`;
+            
+                    let classAmount = 0;
+            
+                    card.querySelectorAll(
+                        `[data-sub="${sub.code}"][data-class="${className}"]`
+                    ).forEach(input => {
+            
+                        const qty =
+                            parseInt(input.value) || 0;
+            
+                        const price =
+                            parseFloat(
+                                input.dataset.price
+                            ) || 0;
+            
+                        classAmount +=
+                            qty * price;
                     });
-                    const totalCell = document.getElementById(`sub_total_${sub.code}_c${c}`);
+            
+                    const totalCell =
+                        document.getElementById(
+                            `sub_total_${sub.code}_${className.replace(/\s+/g, '_')}`
+                        );
+            
                     if (totalCell) {
-                        totalCell.textContent = classTotal;
+            
+                        totalCell.textContent =
+                            `₹ ${classAmount.toLocaleString('en-IN')}`;
                     }
-                });
-
-                // Update subject totals
-                const cardBooksTotal = document.getElementById(`card_books_total_${sub.code}`);
-                if (cardBooksTotal) {
-                    cardBooksTotal.textContent = subjectSum;
                 }
-                
-                // Update Badge
-                const badge = document.getElementById(`badge_${sub.code}`);
+            
+                // Subject amount at bottom
+                const cardBooksTotal =
+                    document.getElementById(
+                        `card_books_total_${sub.code}`
+                    );
+            
+                if (cardBooksTotal) {
+            
+                    cardBooksTotal.textContent =
+                        `₹ ${subjectAmount.toLocaleString('en-IN')}`;
+                }
+            
+                // Badge at top
+                const badge =
+                    document.getElementById(
+                        `badge_${sub.code}`
+                    );
+            
                 if (badge) {
-                    if (subjectSum > 0) {
-                        badge.className = "text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200 animate-pulse";
-                        badge.textContent = `${subjectSum} Ordered`;
+            
+                    if (subjectQty > 0) {
+            
+                        badge.className =
+                            "text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200 animate-pulse";
+            
+                        badge.textContent =
+                            `${subjectQty} Ordered`;
+            
                     } else {
-                        badge.className = "text-xs font-bold px-2.5 py-1 rounded-full bg-slate-200 text-slate-500";
-                        badge.textContent = "Empty";
+            
+                        badge.className =
+                            "text-xs font-bold px-2.5 py-1 rounded-full bg-slate-200 text-slate-500";
+            
+                        badge.textContent =
+                            "Empty";
                     }
                 }
             });
@@ -715,7 +843,25 @@
             if (summaryYp) summaryYp.textContent = grandTotalYp;
 
             // Calculate total cost
-            const totalCost = (grandTotalWb * priceWb) + (grandTotalSg * priceSg) + (grandTotalYp * priceYp);
+            let totalCost = 0;
+
+                document
+                    .querySelectorAll(
+                        ".input-book-qty"
+                    )
+                    .forEach(input => {
+
+                        const qty =
+                            parseInt(input.value) || 0;
+
+                        const price =
+                            parseFloat(
+                                input.dataset.price
+                            ) || 0;
+
+                        totalCost +=
+                            qty * price;
+                    });
             
             const grandTotalEl = document.getElementById('grand_books_total');
             if (grandTotalEl) {
@@ -934,6 +1080,49 @@
                         JSON.stringify(result)
                     );
                 }
+
+                // ---------------------
+                // Create Quotation
+                // ---------------------
+
+                const quotationResponse =
+                await fetch(
+                    "/api/method/ito_customization.ito_customization.doc_events.web_page.olympiad_book_order.create_quotation_from_books_order",
+                    {
+                        method: "POST",
+                        credentials: "include",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-Frappe-CSRF-Token": csrfToken
+                        },
+                        body: JSON.stringify({
+                            order_data: JSON.stringify(
+                                collectQuotationItems()
+                            )
+                        })
+                    }
+                );
+
+                const quotationResult =
+                await quotationResponse.json();
+
+                console.log(
+                "Quotation Result",
+                quotationResult
+                );
+
+                if (
+                !quotationResponse.ok ||
+                (
+                    quotationResult.message &&
+                    quotationResult.message.success === false
+                )
+                ) {
+
+                throw new Error(
+                    "Quotation creation failed"
+                );
+                }
         
                 const modal =
                     document.getElementById(
@@ -974,6 +1163,35 @@
                     "Submission failed. Check console."
                 );
             }
+        }
+
+        function collectQuotationItems() {
+
+            const items = [];
+        
+            document
+                .querySelectorAll(
+                    ".input-book-qty"
+                )
+                .forEach(input => {
+        
+                    const qty =
+                        parseInt(input.value) || 0;
+        
+                    if (!qty) {
+                        return;
+                    }
+        
+                    items.push({
+                        item: input.dataset.item,
+                        qty: qty,
+                        rate: parseFloat(
+                            input.dataset.price
+                        ) || 0
+                    });
+                });
+        
+            return items;
         }
 
         // Close the modal dialog gracefully
@@ -1202,26 +1420,29 @@
         };
 
         function isBookAvailable(
-                sub,
-                type,
-                className
-            ) {
+    sub,
+    type,
+    className
+) {
 
     if (type === "wb") {
-        return sub.workbookClasses.includes(
-            className
+
+        return sub.workbookClasses.some(
+            row => row.class === className
         );
     }
 
     if (type === "sg") {
-        return sub.guideClasses.includes(
-            className
+
+        return sub.guideClasses.some(
+            row => row.class === className
         );
     }
 
     if (type === "yp") {
-        return sub.paperClasses.includes(
-            className
+
+        return sub.paperClasses.some(
+            row => row.class === className
         );
     }
 

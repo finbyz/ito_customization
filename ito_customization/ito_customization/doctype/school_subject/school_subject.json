@@ -30,21 +30,21 @@
   },
   {
    "fieldname": "practice_workbook_110",
-   "fieldtype": "Table MultiSelect",
-   "label": "Practice Workbook (\u20b9110)",
-   "options": "Class Detail"
+   "fieldtype": "Table",
+   "label": "Practice Workbook",
+   "options": "School Subject CT"
   },
   {
    "fieldname": "student_guide_220",
-   "fieldtype": "Table MultiSelect",
-   "label": "Student Guide (\u20b9220)",
-   "options": "Class Detail"
+   "fieldtype": "Table",
+   "label": "Student Guide",
+   "options": "School Subject CT"
   },
   {
    "fieldname": "prev_year_paper_160",
-   "fieldtype": "Table MultiSelect",
-   "label": "Prev. Year Paper (\u20b9160)",
-   "options": "Class Detail"
+   "fieldtype": "Table",
+   "label": "Prev. Year Paper",
+   "options": "School Subject CT"
   },
   {
    "depends_on": "eval:doc.little_champ == 1",
@@ -53,22 +53,22 @@
   },
   {
    "fieldname": "text_book",
-   "fieldtype": "Table MultiSelect",
+   "fieldtype": "Table",
    "label": "Text Book",
-   "options": "Class Detail"
+   "options": "School Subject CT"
   },
   {
    "fieldname": "work_book",
-   "fieldtype": "Table MultiSelect",
+   "fieldtype": "Table",
    "label": "Work Book",
-   "options": "Class Detail"
+   "options": "School Subject CT"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-10 11:51:26.070974",
- "modified_by": "puneet@yopmail.com",
+ "modified": "2026-06-11 17:31:58.210849",
+ "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "School Subject",
  "naming_rule": "Set by user",

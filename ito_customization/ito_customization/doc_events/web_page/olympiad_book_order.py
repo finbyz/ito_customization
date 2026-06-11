@@ -1,4 +1,5 @@
 import frappe
+from frappe.utils import flt
 import json
 
 from frappe.utils import cint
@@ -673,17 +674,29 @@ def get_books_order_subjects():
             "subject": subject_doc.name,
 
             "practice_workbook_110": [
-                d.get("class")
+                {
+                    "class": d.get("class"),
+                    "item": d.get("item"),
+                    "item_price" : d.get("item_price")
+                }
                 for d in subject_doc.practice_workbook_110
             ],
 
             "student_guide_220": [
-                d.get("class")
+                {
+                    "class": d.get("class"),
+                    "item": d.get("item"),
+                    "item_price" : d.get("item_price")
+                }
                 for d in subject_doc.student_guide_220
             ],
 
             "prev_year_paper_160": [
-                d.get("class")
+                {
+                    "class": d.get("class"),
+                    "item": d.get("item"),
+                    "item_price" : d.get("item_price")
+                }
                 for d in subject_doc.prev_year_paper_160
             ]
         })
@@ -712,3 +725,133 @@ def get_customer_from_user():
     )
 
     return customer
+    
+
+@frappe.whitelist()
+def create_quotation_from_books_order(order_data):
+
+    data = (
+        json.loads(order_data)
+        if isinstance(order_data, str)
+        else order_data
+    )
+
+    customer_name = frappe.db.get_value(
+        "Portal User",
+        {
+            "user": frappe.session.user
+        },
+        "parent"
+    )
+
+    if not customer_name:
+        frappe.throw(
+            "Customer not found"
+        )
+
+    # -----------------------------------
+    # Find existing Draft Quotation
+    # -----------------------------------
+
+    quotation_name = frappe.db.get_value(
+        "Quotation",
+        {
+            "customer_name": customer_name,
+            "docstatus": 0
+        },
+        "name",
+        order_by="creation desc"
+    )
+
+    # -----------------------------------
+    # Update Existing
+    # -----------------------------------
+
+    if quotation_name:
+
+        quotation = frappe.get_doc(
+            "Quotation",
+            quotation_name
+        )
+
+        quotation.set(
+            "items",
+            []
+        )
+
+    # -----------------------------------
+    # Create New
+    # -----------------------------------
+
+    else:
+
+        quotation = frappe.new_doc(
+            "Quotation"
+        )
+
+        quotation.quotation_to = "Customer"
+        quotation.party_name = customer_name
+        quotation.customer_name = customer_name
+
+    # -----------------------------------
+    # Append Items
+    # -----------------------------------
+
+    for row in data:
+
+        item_code = row.get("item")
+        qty = flt(
+            row.get("qty")
+        )
+        rate = flt(
+            row.get("rate")
+        )
+
+        if not item_code:
+            continue
+
+        if qty <= 0:
+            continue
+
+        quotation.append(
+            "items",
+            {
+                "item_code": item_code,
+                "qty": qty,
+                "rate": rate
+            }
+        )
+
+    if not quotation.items:
+
+        frappe.throw(
+            "No items selected"
+        )
+
+    # -----------------------------------
+    # Save
+    # -----------------------------------
+
+    if quotation.is_new():
+
+        quotation.insert(
+            ignore_permissions=True
+        )
+
+    else:
+
+        quotation.save(
+            ignore_permissions=True
+        )
+
+    frappe.db.commit()
+
+    return {
+        "success": True,
+        "quotation": quotation.name,
+        "message": (
+            "Quotation Updated"
+            if quotation_name
+            else "Quotation Created"
+        )
+    }
