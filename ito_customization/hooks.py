@@ -151,6 +151,9 @@ doc_events = {
     },
     "Sales Partner": {
         "on_update": "ito_customization.ito_customization.doc_events.sales_partner.after_save"
+    },
+    "Item Price": {
+        "validate": "ito_customization.ito_customization.doc_events.item_price.validate_item_price"
     }
 }
 

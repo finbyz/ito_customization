@@ -15,7 +15,9 @@ class SchoolSubject(Document):
 		child_tables = [
 			"practice_workbook_110",
 			"student_guide_220",
-			"prev_year_paper_160"
+			"prev_year_paper_160",
+			"work_book",
+			"text_book"
 		]
 
 		for table in child_tables:
