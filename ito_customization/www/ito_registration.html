@@ -178,6 +178,13 @@
                         </div>
 
                         <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Country Code</label>
+                            <input type="text" id="countryCodeInput"
+                                class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow"
+                                placeholder="+91"
+                                oninput="applyCountryCodeToStep2()">
+                        </div>
+                        <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">School Ph. No. 1</label>
                             <input type="text"
                                 class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow">
@@ -465,6 +472,28 @@
         let currentStep = 1;
         const totalSteps = 4;
 
+
+
+        function applyCountryCodeToStep2() {
+            const code = (document.getElementById("countryCodeInput")?.value || "").trim();
+        
+            // --- Step 2: Mobile inputs (inputs[1] in each coordinator row) ---
+            document.querySelectorAll("#step2 tbody tr").forEach(row => {
+                const inputs = row.querySelectorAll("input");
+                if (!inputs[1]) return;
+        
+                let current = inputs[1].value.trim();
+                let stripped = current.replace(/^\+\d{1,4}\s*\+?\s*/, "").trim();
+                inputs[1].value = code ? `${code} ${stripped}` : stripped;
+            });
+        
+            // --- Step 3: WhatsApp inputs in all subject accordion rows ---
+            document.querySelectorAll(".wa-input").forEach(input => {
+                let current = input.value.trim();
+                let stripped = current.replace(/^\+\d{1,4}\s*\+?\s*/, "").trim();
+                input.value = code ? `${code} ${stripped}` : stripped;
+            });
+        }
         async function changeStep(direction) {
 
             if (direction === 1) {
@@ -704,6 +733,10 @@
             document.getElementById('prevBtn').classList.toggle('hidden', currentStep === 1);
             document.getElementById('nextBtn').classList.toggle('hidden', currentStep === totalSteps);
             document.getElementById('submitBtn').classList.toggle('hidden', currentStep !== totalSteps);
+
+            if (currentStep === 2) {
+                applyCountryCodeToStep2();
+            }
         }
 
 
@@ -963,7 +996,7 @@
                         <input type="text" placeholder="Teacher Name" class="w-full rounded border border-transparent hover:border-slate-300 focus:border-blue-500 px-2 py-1.5 text-xs bg-slate-50 focus:bg-white transition-all outline-none">
                     </td>
                     <td class="p-2">
-                        <input type="text" placeholder="Mobile / WA" class="w-full rounded border border-transparent hover:border-slate-300 focus:border-blue-500 px-2 py-1.5 text-xs bg-slate-50 focus:bg-white transition-all outline-none">
+                        <input type="text" placeholder="Mobile / WA" class="wa-input w-full rounded border border-transparent hover:border-slate-300 focus:border-blue-500 px-2 py-1.5 text-xs bg-slate-50 focus:bg-white transition-all outline-none" value="">
                     </td>
                     <td class="p-2">
                         <input type="number" min="0" placeholder="0" class="student-count w-full rounded border border-slate-300 px-2 py-1.5 text-xs text-right focus:border-blue-500 focus:ring-1 ring-blue-500 transition-all outline-none" oninput="calculateTotal(); updateSubjectTotal('${cardId}')">
@@ -974,7 +1007,15 @@
                 </tr>
             `;
             tbody.insertAdjacentHTML('beforeend', rowTemplate);
-        }
+
+            // Pre-fill country code in the newly added WA input
+            const newRow = tbody.lastElementChild;
+            const waInput = newRow.querySelector('.wa-input');
+            if (waInput) {
+                const code = (document.getElementById("countryCodeInput")?.value || "").trim();
+                if (code) waInput.value = code + " ";
+            }
+                    }
 
         function removeClassRow(button, cardId) {
             const tbody = document.getElementById(`tbody_${cardId}`);
@@ -1162,9 +1203,10 @@
                 8: 'gst_no',
                 9: 'board',
                 10: 'student_strength',
-                11: 'school_phone1',
-                12: 'school_phone2',
-                13: 'school_email'
+                11: 'country_code',      // NEW
+                12: 'school_phone1',     // shifted
+                13: 'school_phone2',     // shifted
+                14: 'school_email'       // shifted
             };
 
             schoolInputs.forEach((input, index) => {
@@ -1177,9 +1219,7 @@
                 }
             });
 
-            // ----------------------------------
-            // Coordinators (Step 2)
-            // ----------------------------------
+           
 
             // ----------------------------------
             // Coordinators (Step 2)
@@ -1241,6 +1281,11 @@
                     const subjectName =
                         card.dataset.subject;
 
+                        const selectedDate =
+                    card.querySelector(
+                        'input[type="radio"]:checked'
+                    )?.value || '';
+
                     if (!subjectName) {
                         return;
                     }
@@ -1283,7 +1328,9 @@
                                     whatsapp:
                                         cells[2].value,
                                     students:
-                                        cells[3].value
+                                        cells[3].value,
+                                    slot_date:
+                                        selectedDate
                                 });
                             }
                         });
@@ -1304,6 +1351,14 @@
             console.log(
                 "Collected Exams:",
                 data.exams
+            );
+
+            console.log(
+                JSON.stringify(
+                    data.exams,
+                    null,
+                    2
+                )
             );
 
             // ----------------------------------
@@ -1376,6 +1431,7 @@
                     "FULL RESPONSE",
                     result.message
                 );
+                applyCountryCodeToStep2();
                 populateSchoolInfo(result.message);
 
                 populateTeacherDetails(
@@ -1529,80 +1585,86 @@
 
             // School Name
             fields[0].value =
-                data.customer_name ||
-                data.customer?.customer_name ||
-                "";
+            data.customer_name ||
+            data.customer?.customer_name ||
+            "";
 
             // ITO School Code
             fields[1].value =
-                data.custom_ito_school_code ||
-                data.customer?.custom_ito_school_code ||
-                "";
+            data.custom_ito_school_code ||
+            data.customer?.custom_ito_school_code ||
+            "";
 
             // Complete School Address
             fields[2].value =
-                (data.address?.address_line1 || "") +
-                (data.address?.address_line2 ? "\n" + data.address.address_line2 : "");
+            (data.address?.address_line1 || "") +
+            (data.address?.address_line2 ? "\n" + data.address.address_line2 : "");
 
             // City
             fields[3].value =
-                data.address?.city ||
-                "";
+            data.address?.city ||
+            "";
 
             // Taluka
             fields[4].value =
-                data.address?.custom_taluka ||
-                data.customer?.custom_taluka ||
-                "";
+            data.address?.custom_taluka ||
+            data.customer?.custom_taluka ||
+            "";
 
             // District
             fields[5].value =
-                data.address?.custom_district ||
-                data.customer?.custom_district ||
-                "";
+            data.address?.custom_district ||
+            data.customer?.custom_district ||
+            "";
 
             // State
             fields[6].value =
-                data.address?.state ||
-                "";
+            data.address?.state ||
+            "";
 
             // Pincode
             fields[7].value =
-                data.address?.pincode ||
-                "";
+            data.address?.pincode ||
+            "";
 
             // GST
             fields[8].value =
-                data.customer?.tax_id ||
-                data.customer?.gstin ||
-                "";
+            data.customer?.tax_id ||
+            data.customer?.gstin ||
+            "";
 
             // Board
             fields[9].value =
-                data.customer?.custom_board ||
-                "";
+            data.customer?.custom_board ||
+            "";
 
             // Student Strength
             fields[10].value =
-                data.customer?.custom_student_strength ||
-                "";
+            data.customer?.custom_student_strength ||
+            "";
+
+            // Country Code (NEW FIELD)
+            fields[11].value =
+            data.customer?.country_code ||
+            "+91";
 
             // School Phone No. 1
-            fields[11].value =
-                data.contact_mobile ||
-                data.customer?.mobile_no ||
-                "";
+            fields[12].value =
+            data.contact_mobile ||
+            data.customer?.mobile_no ||
+            "";
 
             // School Phone 2
-            fields[12].value =
-                data.customer?.custom_school_phone_2 ||
-                "";
+            fields[13].value =
+            data.customer?.custom_school_phone_2 ||
+            "";
 
             // School Email ID
-            fields[13].value =
-                data.contact_email ||
-                data.customer?.email_id ||
-                "";
+            fields[14].value =
+            data.contact_email ||
+            data.customer?.email_id ||
+            "";
+
         }
 
         function populateTeacherDetails(teachers, examSummaries = []) {
@@ -1804,10 +1866,13 @@
                             inputs[1].value =
                                 row.teacher_name || "";
 
-                        if (inputs[2])
-                            inputs[2].value =
-                                row.whatsapp_no || "";
-
+                        if (inputs[2]) {
+                            const code = (document.getElementById("countryCodeInput")?.value || "").trim();
+                            let waVal = row.whatsapp_no || "";
+                            // Strip double code if already present
+                            waVal = waVal.replace(/^\+\d{1,4}\s*\+?\s*/, "").trim();
+                            inputs[2].value = code ? `${code} ${waVal}` : waVal;
+                        }
                         if (inputs[3])
                             inputs[3].value =
                                 row.no_of_students || "";
@@ -1930,6 +1995,28 @@
                     inputs[3].value =
                         data.email || "";
             });
+
+
+            // Auto-detect country code from first populated mobile field
+        const firstMobile = (() => {
+            let found = "";
+            document.querySelectorAll("#step2 tbody tr").forEach(row => {
+                if (found) return;
+                const inputs = row.querySelectorAll("input");
+                if (inputs[1] && inputs[1].value.trim().startsWith("+")) {
+                    found = inputs[1].value.trim();
+                }
+            });
+            return found;
+        })();
+
+        if (firstMobile) {
+            const detectedCode = firstMobile.match(/^(\+\d{1,4})/)?.[1] || "";
+            const codeInput = document.getElementById("countryCodeInput");
+            if (codeInput && !codeInput.value) {
+                codeInput.value = detectedCode;
+            }
+        }
         }
 
         function formatDateForInput(dateStr) {

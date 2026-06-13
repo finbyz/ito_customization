@@ -154,7 +154,11 @@ doc_events = {
     },
     "Item Price": {
         "validate": "ito_customization.ito_customization.doc_events.item_price.validate_item_price"
+    },
+    "Customer": {
+        "on_update": "ito_customization.ito_customization.doc_events.customer.sync_teachers"
     }
+
 }
 
 # Scheduled Tasks

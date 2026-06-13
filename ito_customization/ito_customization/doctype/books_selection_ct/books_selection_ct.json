@@ -10,7 +10,9 @@
   "class_grade",
   "practice_workbook_110",
   "student_guide_220",
-  "prev_year_paper_160"
+  "prev_year_paper_160",
+  "text_book",
+  "work_book"
  ],
  "fields": [
   {
@@ -44,13 +46,25 @@
    "in_list_view": 1,
    "label": "Subject",
    "options": "School Subject"
+  },
+  {
+   "fieldname": "text_book",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Text Book"
+  },
+  {
+   "fieldname": "work_book",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Work Book"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-06-10 18:20:21.493904",
+ "modified": "2026-06-12 16:10:18.142790",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Books Selection CT",

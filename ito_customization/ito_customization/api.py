@@ -90,7 +90,8 @@ def save_ito_registration(registration_data):
                                 "class": row.get("class"),
                                 "teacher_name": row.get("teacher_name"),
                                 "whatsapp_no": row.get("whatsapp"),
-                                "no_of_students": row.get("students")
+                                "no_of_students": row.get("students"),
+                                "slot_date": row.get("slot_date")
                             })
 
                     es_doc.save(ignore_permissions=True)
@@ -239,7 +240,8 @@ def save_registration_step():
                                     "class": row.get("class"),
                                     "teacher_name": row.get("teacher_name"),
                                     "whatsapp_no": row.get("whatsapp"),
-                                    "no_of_students": row.get("students")
+                                    "no_of_students": row.get("students"),
+                                    "slot_date": row.get("slot_date")
                                 })
 
                         es_doc.save(ignore_permissions=True)
@@ -749,7 +751,8 @@ def get_customer_from_session_user():
                     "class": getattr(exam_row, "class", ""),
                     "teacher_name": getattr(exam_row, "teacher_name", ""),
                     "whatsapp_no": getattr(exam_row, "whatsapp_no", ""),
-                    "no_of_students": getattr(exam_row, "no_of_students", 0)
+                    "no_of_students": getattr(exam_row, "no_of_students", 0),
+                    "slot_date": getattr(exam_row, "slot_date", "")
                 })
             exam_summaries_data.extend(subject_map.values())
             continue
@@ -814,7 +817,8 @@ def get_customer_from_session_user():
                     exam_row,
                     "no_of_students",
                     0
-                )
+                ),
+                "slot_date": getattr(exam_row, "slot_date", "")
             })
 
         exam_summaries_data.extend(
@@ -844,7 +848,9 @@ def get_customer_from_session_user():
                 "class": getattr(row, "class", ""),
                 "teacher_name": row.teacher_name,
                 "whatsapp_no": row.whatsapp_no,
-                "no_of_students": row.no_of_students
+                "no_of_students": row.no_of_students,
+                "slot_date": (exam_row, "slot_date", "")
+                
             })
 
     # --------------------------------------------------
@@ -1055,7 +1061,8 @@ def save_little_champ_registration(registration_data):
                             "class": row.get("class"),
                             "teacher_name": row.get("teacher_name"),
                             "whatsapp_no": row.get("whatsapp"),
-                            "no_of_students": row.get("students")
+                            "no_of_students": row.get("students"),
+                            "slot_date": row.get("slot_date")
                         }
                     )
 
@@ -1450,7 +1457,8 @@ def save_little_champ_step():
                                     "whatsapp_no":
                                         row.get("whatsapp"),
                                     "no_of_students":
-                                        row.get("students")
+                                        row.get("students"),
+                                    "slot_date": row.get("slot_date")
                                 }
                             )
 
