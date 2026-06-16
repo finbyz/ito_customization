@@ -880,12 +880,20 @@ def get_customer_from_session_user():
 
         for row in bs_doc.select_books:
 
+            frappe.log_error(
+                "BOOK ROW DEBUG",
+                frappe.as_json(row.as_dict())
+            )
+
+
             books_selection.append({
                 "subject": row.subject,
                 "class_grade": row.class_grade,
                 "practice_workbook_110": row.practice_workbook_110,
                 "student_guide_220": row.student_guide_220,
-                "prev_year_paper_160": row.prev_year_paper_160
+                "prev_year_paper_160": row.prev_year_paper_160,
+                "text_book" : row.text_book,
+                "work_book" : row.work_book
             })
 
     return {
