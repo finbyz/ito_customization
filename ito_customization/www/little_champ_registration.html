@@ -131,6 +131,17 @@
                             <label class="block text-sm font-medium text-slate-700 mb-1">GST No. of School / Trust</label>
                             <input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none">
                         </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Country Code</label>
+                            <input
+                                type="text"
+                                id="countryCodeInput"
+                                placeholder="+91"
+                                oninput="applyCountryCodeToStep2()"
+                                class="w-full rounded-md border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                            >
+                        </div>
                         
                         <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
                             
@@ -319,6 +330,74 @@
         let subjectData = [];
         let currentStep = 1;
         const totalSteps = 4;
+
+
+        function applyCountryCodeToStep2() {
+
+            const code =
+                (
+                    document.getElementById(
+                        "countryCodeInput"
+                    )?.value || ""
+                ).trim();
+        
+            // ----------------------------------
+            // Step 1: Phone (fields[10])
+            // ----------------------------------
+        
+            const step1Fields = document.querySelectorAll(
+                '#step1 input, #step1 select, #step1 textarea'
+            );
+        
+            const step1Phone = step1Fields[10];
+            if (step1Phone) {
+                let current = step1Phone.value.trim();
+                let stripped = current.replace(/^\+\d{1,4}\s*\+?\s*/, "").trim();
+                step1Phone.value = (code && stripped) ? `${code} ${stripped}` : stripped;
+            }
+        
+            // ----------------------------------
+            // Step 1: WhatsApp (fields[11])
+            // ----------------------------------
+        
+            const step1WA = step1Fields[11];
+            if (step1WA) {
+                let current = step1WA.value.trim();
+                let stripped = current.replace(/^\+\d{1,4}\s*\+?\s*/, "").trim();
+                step1WA.value = (code && stripped) ? `${code} ${stripped}` : stripped;
+            }
+        
+            // Step 2 Coordinator Mobile Numbers
+                document
+                .querySelectorAll("#step2 tbody tr")
+                .forEach(row => {
+                    const inputs = row.querySelectorAll("input");
+                    if (!inputs[1]) return;
+                    let current = inputs[1].value.trim();
+                    let stripped = current.replace(/^\+\d{1,4}\s*\+?\s*/, "").trim();
+                    if (code && stripped) {
+                        // Has a number — prepend code
+                        inputs[1].value = `${code} ${stripped}`;
+                    } else if (code && !stripped) {
+                        // Empty field — set code as default placeholder value
+                        inputs[1].value = `${code} `;
+                    } else {
+                        inputs[1].value = stripped;
+                    }
+                });
+        
+            // ----------------------------------
+            // Step 3: WhatsApp inputs in subject rows
+            // ----------------------------------
+        
+            document
+                .querySelectorAll(".wa-input")
+                .forEach(input => {
+                    let current = input.value.trim();
+                    let stripped = current.replace(/^\+\d{1,4}\s*\+?\s*/, "").trim();
+                    input.value = (code && stripped) ? `${code} ${stripped}` : stripped;
+                });
+        }
 
         async function changeStep(direction) {
 
@@ -551,6 +630,10 @@
         // Add a row to a specific subject card
         function addClassRow(cardId) {
             const tbody = document.getElementById(`tbody_${cardId}`);
+            const countryCode =
+                document.getElementById(
+                    "countryCodeInput"
+                )?.value || "";
             const rowTemplate = `
                 <tr class="hover:bg-fuchsia-50/30 group">
                     <td class="p-2">
@@ -563,8 +646,12 @@
                         <input type="text" placeholder="Teacher Name" class="w-full rounded border border-transparent hover:border-slate-300 focus:border-purple-500 px-2 py-1.5 text-xs bg-slate-50 focus:bg-white transition-all outline-none">
                     </td>
                     <td class="p-2">
-                        <input type="text" placeholder="Mobile / WA" class="w-full rounded border border-transparent hover:border-slate-300 focus:border-purple-500 px-2 py-1.5 text-xs bg-slate-50 focus:bg-white transition-all outline-none">
-                    </td>
+                    <input
+                        type="text"
+                        value="${countryCode}"
+                        placeholder="Mobile / WA"
+                        class="wa-input w-full rounded border border-transparent hover:border-slate-300 focus:border-purple-500 px-2 py-1.5 text-xs bg-slate-50 focus:bg-white transition-all outline-none">
+                                        </td>
                     <td class="p-2">
                         <input type="number" min="0" placeholder="0" class="student-count w-full rounded border border-slate-300 px-2 py-1.5 text-xs text-right focus:border-purple-500 focus:ring-1 ring-purple-500 transition-all outline-none" oninput="calculateTotal(); updateSubjectTotal('${cardId}')">
                     </td>
@@ -999,9 +1086,10 @@
                 6: 'state',
                 7: 'pincode',
                 8: 'gst_no',
-                9: 'phone_no',
-                10: 'whatsapp_no',
-                11: 'school_email'
+                9: 'country_code',
+                10: 'phone_no',
+                11: 'whatsapp_no',
+                12: 'school_email'
             };
         
             schoolInputs.forEach((input, index) => {
@@ -1082,6 +1170,8 @@
                         card.querySelector(
                             '.subject-name'
                         )?.innerText || '';
+
+                        
         
                     const tbody =
                         card.querySelector('tbody');
@@ -1124,7 +1214,8 @@
                                     class: cells[0].value,
                                     teacher_name: cells[1].value,
                                     whatsapp: cells[2].value,
-                                    students: cells[3].value
+                                    students: cells[3].value,
+                                    slot_date: selectedDate
                                 });
                             }
                         });
@@ -1364,23 +1455,55 @@
             data.customer?.gstin ||
             "";
 
-            // Phone 1
-            fields[9].value =
-            data.contact_mobile ||
-            data.customer?.mobile_no ||
-            "";
+            // Country Code
+// Country Code
+fields[9].value =
+    data.customer?.custom_country_code ||
+    data.customer?.country_code ||
+    "+91";
 
-            // WhatsApp
-            fields[10].value =
-            data.customer?.custom_whatsapp_no ||
-            "";
+const countryCode = fields[9].value; // e.g. "+91"
 
-            // School Email
-            fields[11].value =
-            data.contact_email ||
-            data.customer?.email_id ||
-            "";
+// Helper: strip country code and return raw local number
+function stripCountryCode(number, code) {
+    if (!number) return "";
+    number = number.trim();
+    // Remove country code prefix (with or without space/dash)
+    if (code && number.startsWith(code)) {
+        return number.slice(code.length).replace(/^[\s-]/, "").trim();
+    }
+    // Fallback: strip any +XX or +XXX prefix
+    return number.replace(/^\+\d{1,4}[\s-]?/, "").trim();
+}
 
+// Phone
+const rawPhone =
+    data.contact_mobile ||
+    data.customer?.mobile_no ||
+    "";
+fields[10].value = stripCountryCode(rawPhone, countryCode);
+
+// WhatsApp — currently empty in DB, will be empty until user fills it
+const rawWA =
+    data.customer?.custom_whatsapp_no ||
+    "";
+fields[11].value = stripCountryCode(rawWA, countryCode);
+
+// Email
+fields[12].value =
+    data.contact_email ||
+    data.customer?.email_id ||
+    "";
+
+// DEBUG — remove once confirmed
+console.table({
+"fields[9] country_code": fields[9].value,
+"fields[10] phone raw": fields[10].value,
+"fields[11] whatsapp raw": fields[11].value,
+"API mobile_no": data.customer?.mobile_no,
+"API contact_mobile": data.contact_mobile,
+"API custom_whatsapp_no": data.customer?.custom_whatsapp_no
+});
             
 // ----------------------------------
 // Slot Registration Dates
@@ -1714,6 +1837,21 @@ return;
                     if (inputs[3])
                         inputs[3].value =
                             row.no_of_students || 0;
+
+                            if (exam.rows.length) {
+
+                                const savedSlotDate =
+                                    exam.rows[0].slot_date;
+                            
+                                const radio =
+                                    card.querySelector(
+                                        `input[name="date_${cardId}"][value="${savedSlotDate}"]`
+                                    );
+                            
+                                if (radio) {
+                                    radio.checked = true;
+                                }
+                            }
                 });
         
                 calculateTotal(cardId);
@@ -1902,25 +2040,26 @@ async function loadCustomerData() {
         const examSummaries =
             result.message.exam_summaries || [];
 
-        buildAllSubjectAccordions(
-            examSummaries
-        );
+       // 1. Build UI structure first
+       buildAllSubjectAccordions(examSummaries);
+       buildCoordinatorRows(examSummaries);
 
-        buildCoordinatorRows(
-            examSummaries
-        );
+       // 2. Populate school info (sets fields[9] = country code)
+       populateSchoolInfo(result.message);
 
-        populateSchoolInfo(
-            result.message
-        );
+       // 3. Populate coordinators (sets mobile numbers)
+       populateCoordinatorData(
+           result.message.coordinators || {}
+       );
 
-        populateCoordinatorData(
-            result.message.coordinators || {}
-        );
+       // 4. NOW apply country code — fields[9] is set, mobiles are populated
+       applyCountryCodeToStep2();
 
-        populateExamSummaryData(
-            examSummaries
-        );
+       // 5. Populate exam summary data
+       populateExamSummaryData(examSummaries);
+
+       // 6. Apply country code again to catch Step 3 wa-inputs
+       applyCountryCodeToStep2();
 
     } catch (e) {
 

@@ -1876,6 +1876,21 @@
                         if (inputs[3])
                             inputs[3].value =
                                 row.no_of_students || "";
+
+                                if (exam.rows.length) {
+
+                                    const savedSlotDate =
+                                        exam.rows[0].slot_date;
+                                
+                                    const radio =
+                                        card.querySelector(
+                                            `input[name="date_${cardId}"][value="${savedSlotDate}"]`
+                                        );
+                                
+                                    if (radio) {
+                                        radio.checked = true;
+                                    }
+                                }
                     });
                 }
 
