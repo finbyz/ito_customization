@@ -1,0 +1,120 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-06-23 17:32:17.983614",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "student_name",
+  "mobile_no",
+  "iso",
+  "imo",
+  "eio",
+  "gkio",
+  "ico",
+  "ido",
+  "neso",
+  "nesso",
+  "nho",
+  "nlro"
+ ],
+ "fields": [
+  {
+   "fieldname": "student_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Student Name"
+  },
+  {
+   "fieldname": "mobile_no",
+   "fieldtype": "Data",
+   "label": "Mobile No"
+  },
+  {
+   "default": "0",
+   "fieldname": "iso",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "ISO"
+  },
+  {
+   "default": "0",
+   "fieldname": "imo",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "IMO"
+  },
+  {
+   "default": "0",
+   "fieldname": "eio",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "EIO"
+  },
+  {
+   "default": "0",
+   "fieldname": "gkio",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "GKIO"
+  },
+  {
+   "default": "0",
+   "fieldname": "ico",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "ICO"
+  },
+  {
+   "default": "0",
+   "fieldname": "ido",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "IDO"
+  },
+  {
+   "default": "0",
+   "fieldname": "neso",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "NESO"
+  },
+  {
+   "default": "0",
+   "fieldname": "nesso",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "NESSO"
+  },
+  {
+   "default": "0",
+   "fieldname": "nho",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "NHO"
+  },
+  {
+   "default": "0",
+   "fieldname": "nlro",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "NLRO"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-23 17:50:33.920171",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "Student List CT",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -7,9 +7,11 @@
  "engine": "InnoDB",
  "field_order": [
   "subject",
+  "is_little_champ",
   "tg_date_1",
   "tg_date_2",
-  "tg_date_3"
+  "tg_date_3",
+  "school_subject"
  ],
  "fields": [
   {
@@ -36,13 +38,26 @@
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "TG Date 3"
+  },
+  {
+   "fetch_from": "subject.abbr",
+   "fieldname": "school_subject",
+   "fieldtype": "Data",
+   "label": "School Subject"
+  },
+  {
+   "default": "0",
+   "fetch_from": "subject.little_champ",
+   "fieldname": "is_little_champ",
+   "fieldtype": "Check",
+   "label": "Is Little Champ"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-06-10 13:27:45.019637",
+ "modified": "2026-06-25 16:05:14.723506",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Yearly Exam Date CT",

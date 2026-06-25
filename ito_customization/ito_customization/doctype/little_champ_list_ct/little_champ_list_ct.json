@@ -1,0 +1,95 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-06-23 17:36:26.833168",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "lc_class",
+  "student_name",
+  "mobile_no",
+  "maths",
+  "evs",
+  "english",
+  "drawing",
+  "hindi",
+  "abacus"
+ ],
+ "fields": [
+  {
+   "fieldname": "student_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Student Name"
+  },
+  {
+   "fieldname": "mobile_no",
+   "fieldtype": "Data",
+   "label": "Mobile No"
+  },
+  {
+   "default": "0",
+   "fieldname": "maths",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Maths"
+  },
+  {
+   "default": "0",
+   "fieldname": "evs",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "EVS"
+  },
+  {
+   "default": "0",
+   "fieldname": "english",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "English"
+  },
+  {
+   "default": "0",
+   "fieldname": "drawing",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Drawing"
+  },
+  {
+   "default": "0",
+   "fieldname": "hindi",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Hindi"
+  },
+  {
+   "default": "0",
+   "fieldname": "abacus",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Abacus"
+  },
+  {
+   "fieldname": "lc_class",
+   "fieldtype": "Link",
+   "label": "LC Class",
+   "options": "Class"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-24 10:54:23.376734",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "Little champ List CT",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

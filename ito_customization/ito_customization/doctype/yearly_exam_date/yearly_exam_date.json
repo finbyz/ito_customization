@@ -8,6 +8,7 @@
  "field_order": [
   "section_break_aqts",
   "posting_date",
+  "is_little_champ",
   "column_break_kkto",
   "academic_year",
   "amended_from",
@@ -71,16 +72,23 @@
    "allow_on_submit": 1,
    "fieldname": "column_break_aglh",
    "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_little_champ",
+   "fieldtype": "Check",
+   "label": "Is Little Champ"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-06-09 15:55:44.521036",
- "modified_by": "puneet@yopmail.com",
+ "modified": "2026-06-25 16:38:00.366920",
+ "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Yearly Exam Date",
+ "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [
   {

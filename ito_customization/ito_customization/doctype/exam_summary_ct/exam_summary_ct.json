@@ -9,6 +9,7 @@
   "class",
   "subject",
   "teacher_name",
+  "form_type",
   "column_break_brqb",
   "whatsapp_no",
   "no_of_students",
@@ -54,15 +55,20 @@
   {
    "fieldname": "slot_date",
    "fieldtype": "Date",
-   "in_list_view": 1,
    "label": "Slot Date"
+  },
+  {
+   "fieldname": "form_type",
+   "fieldtype": "Select",
+   "label": "Form Type",
+   "options": "\nITO Registration\nLittle Champ\nBooks Order\nBooks Order LC"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-06-13 11:04:37.757243",
+ "modified": "2026-06-25 13:22:14.926236",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Exam Summary CT",

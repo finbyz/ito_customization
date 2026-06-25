@@ -6,6 +6,7 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "abbr",
   "little_champ",
   "section_break_rfzu",
   "practice_workbook_110",
@@ -62,12 +63,17 @@
    "fieldtype": "Table",
    "label": "Work Book",
    "options": "School Subject CT"
+  },
+  {
+   "fieldname": "abbr",
+   "fieldtype": "Data",
+   "label": "Abbr"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-11 17:31:58.210849",
+ "modified": "2026-06-24 16:13:22.245025",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "School Subject",

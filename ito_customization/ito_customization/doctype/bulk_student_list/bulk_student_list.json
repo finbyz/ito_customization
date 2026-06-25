@@ -1,0 +1,95 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:customer",
+ "creation": "2026-06-23 17:27:49.038428",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "customer",
+  "academic_year",
+  "section_break_jjer",
+  "for_student",
+  "student_list",
+  "section_break_joxq",
+  "for_little_champ",
+  "little_champ_list"
+ ],
+ "fields": [
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "unique": 1
+  },
+  {
+   "fieldname": "academic_year",
+   "fieldtype": "Link",
+   "label": "Academic Year",
+   "options": "School Academic Year"
+  },
+  {
+   "fieldname": "student_list",
+   "fieldtype": "Table",
+   "label": "Student List",
+   "options": "Student List CT"
+  },
+  {
+   "depends_on": "eval:doc.for_student == 0",
+   "fieldname": "section_break_joxq",
+   "fieldtype": "Section Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "for_little_champ",
+   "fieldtype": "Check",
+   "label": "For Little Champ"
+  },
+  {
+   "fieldname": "little_champ_list",
+   "fieldtype": "Table",
+   "label": "Little Champ List",
+   "options": "Little champ List CT"
+  },
+  {
+   "depends_on": "eval:doc.for_little_champ == 0",
+   "fieldname": "section_break_jjer",
+   "fieldtype": "Section Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "for_student",
+   "fieldtype": "Check",
+   "label": "For Student"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-25 09:54:32.581887",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "Bulk Student List",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
