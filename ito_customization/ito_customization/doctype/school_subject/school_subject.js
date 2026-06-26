@@ -1,5 +1,5 @@
 frappe.ui.form.on('School Subject', {
-    onload: function(frm) {
+    refresh: function(frm) {
         // text_book & work_book → little_champ = 1 (checked)
         frm.set_query('class', 'text_book', function() {
             return { filters: { 'little_champ': 1 } };
