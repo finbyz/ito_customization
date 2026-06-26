@@ -107,7 +107,7 @@ def make_sales_partner(teacher):
 	teacher_doc.co_ordinator = sales_partner.name
 	teacher_doc.save(ignore_permissions=True)
 	
-	frappe.db.commit()
+	# frappe.db.commit()
 	
 	return sales_partner.name
 
