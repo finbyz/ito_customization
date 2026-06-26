@@ -25,7 +25,6 @@ def save_little_champ_book_order(order_data):
     original_flag = frappe.flags.ignore_permissions
 
     try:
-
         data = (
             json.loads(order_data)
             if isinstance(order_data, str)
@@ -205,8 +204,6 @@ def save_little_champ_book_order(order_data):
                 customer_doc.name,
                 books_selection
             )
-
-          
 
         frappe.db.commit()
 
@@ -967,10 +964,23 @@ def get_customer_from_session_user():
     if not customer_name:
         return {}
 
+    if not frappe.db.exists("Customer", customer_name):
+        frappe.db.delete("Portal User", {"user": frappe.session.user, "parent": customer_name})
+        frappe.db.commit()
+        return {}
+
     customer = frappe.get_doc(
         "Customer",
         customer_name
     )
+    
+
+    forms_data = {
+        "registration": None,
+        "little_champ": None,
+        "books_order": None,
+        "form4": None,
+    }
 
     # --------------------------------------------------
     # Address Details
@@ -1472,7 +1482,44 @@ def create_quotation_from_books_order(order_data):
     )
 
     if not customer_name:
-        frappe.throw("Customer not found")
+        return {
+            "success": False,
+            "message": "Customer not found",
+            "alert": True
+        }
+
+    # -----------------------------------
+    # Filter valid items
+    # -----------------------------------
+
+    valid_items = []
+    for row in data:
+        item_code = row.get("item")
+        qty = flt(row.get("qty"))
+        rate = flt(row.get("rate"))
+
+        if item_code and qty > 0:
+            valid_items.append({
+                "item_code": item_code,
+                "qty": qty,
+                "rate": rate
+            })
+
+    # -----------------------------------
+    # No items selected — return friendly alert
+    # -----------------------------------
+
+    if not valid_items:
+        return {
+            "success": True,
+            "quotation": None,
+            "message": "No quotation created. Please select items if you want to create a quotation.",
+            "alert": True
+        }
+
+    # -----------------------------------
+    # Find existing Draft Quotation
+    # -----------------------------------
 
     quotation_name = frappe.db.get_value(
         "Quotation",
@@ -1484,68 +1531,34 @@ def create_quotation_from_books_order(order_data):
         order_by="creation desc"
     )
 
+    # -----------------------------------
+    # Update Existing or Create New
+    # -----------------------------------
+
     if quotation_name:
-
-        quotation = frappe.get_doc(
-            "Quotation",
-            quotation_name
-        )
-
-        quotation.set(
-            "items",
-            []
-        )
-
+        quotation = frappe.get_doc("Quotation", quotation_name)
+        quotation.set("items", [])
     else:
-
-        quotation = frappe.new_doc(
-            "Quotation"
-        )
-
+        quotation = frappe.new_doc("Quotation")
         quotation.quotation_to = "Customer"
         quotation.party_name = customer_name
         quotation.customer_name = customer_name
 
-    for row in data:
+    # -----------------------------------
+    # Append Items
+    # -----------------------------------
 
-        item_code = row.get("item")
+    for item in valid_items:
+        quotation.append("items", item)
 
-        qty = flt(
-            row.get("qty")
-        )
-
-        rate = flt(
-            row.get("rate")
-        )
-
-        if not item_code or qty <= 0:
-            continue
-
-        quotation.append(
-            "items",
-            {
-                "item_code": item_code,
-                "qty": qty,
-                "rate": rate
-            }
-        )
-
-    if not quotation.items:
-        frappe.throw(
-            "No items selected"
-        )
+    # -----------------------------------
+    # Save
+    # -----------------------------------
 
     if quotation.is_new():
-
-        quotation.insert(
-            ignore_permissions=True
-        )
-
+        quotation.insert(ignore_permissions=True)
     else:
-
-        quotation.save(
-            ignore_permissions=True
-        )
+        quotation.save(ignore_permissions=True)
 
     frappe.db.commit()
 

@@ -15,11 +15,13 @@ def ensure_subject_exists(subject_name):
         except frappe.DuplicateEntryError:
             pass  # Subject was created by another process
 
+import json
+import frappe
+
+
 @frappe.whitelist(allow_guest=True)
 def save_books_order(registration_data):
-
     try:
-
         data = (
             json.loads(registration_data)
             if isinstance(registration_data, str)
@@ -31,78 +33,96 @@ def save_books_order(registration_data):
             json.dumps(data, indent=2)
         )
 
+        school_info = data.get("school_info", {})
+
+        # Validate state and city before saving
+        state = school_info.get("state", "")
+        city = school_info.get("city", "")
+        pincode = school_info.get("pincode", "")
+
+        if not state:
+            return {
+                "success": False,
+                "message": "State is required. Please select from the dropdown.",
+                "field": "state"
+            }
+
+        if not city:
+            return {
+                "success": False,
+                "message": "City is required. Please select from the dropdown.",
+                "field": "city"
+            }
+
+        # Validate state exists in Address doctype
+        valid_state = frappe.db.exists("Address", {"state": state})
+        if not valid_state:
+            return {
+                "success": False,
+                "message": f"Invalid state '{state}'. Please select a valid state from the dropdown.",
+                "field": "state"
+            }
+
+        # Validate city exists for this state
+        valid_city = frappe.db.exists("Address", {"state": state, "city": city})
+        if not valid_city:
+            return {
+                "success": False,
+                "message": f"Invalid city '{city}' for state '{state}'. Please select a valid city from the dropdown.",
+                "field": "city"
+            }
+
+        # Validate pincode format (optional)
+        if pincode and not pincode.isdigit():
+            return {
+                "success": False,
+                "message": "Pincode must contain only numbers.",
+                "field": "pincode"
+            }
+
         original_flag = frappe.flags.ignore_permissions
         frappe.flags.ignore_permissions = True
 
         try:
+            customer = create_or_update_customer_books_order(school_info)
 
-            school_info = data.get(
-                "school_info",
-                {}
-            )
-
-            customer = create_or_update_customer_books_order(
-                school_info
-            )
-
-            create_or_update_address(
-                customer,
-                school_info
-            )
+            create_or_update_address(customer, school_info)
 
             if school_info.get("primary_contact"):
                 create_or_update_primary_contact(
-                    school_info.get(
-                        "primary_contact"
-                    ),
+                    school_info.get("primary_contact"),
                     customer
                 )
 
-            if school_info.get(
-                "olympiad_coordinator"
-            ):
+            if school_info.get("olympiad_coordinator"):
                 create_or_update_olympiad_coordinator(
-                    school_info.get(
-                        "olympiad_coordinator"
-                    ),
+                    school_info.get("olympiad_coordinator"),
                     customer
                 )
 
-            books_selection = data.get(
-                "books_selection",
-                []
-            )
+            books_selection = data.get("books_selection", [])
 
             if books_selection:
-
-                create_or_update_books_selection(
-                    customer,
-                    books_selection
-    )
+                create_or_update_books_selection(customer, books_selection)
 
             frappe.db.commit()
 
             return {
                 "success": True,
-                "customer": customer
+                "customer": customer,
+                "message": "Books order saved successfully!"
             }
 
         finally:
-            frappe.flags.ignore_permissions = (
-                original_flag
-            )
+            frappe.flags.ignore_permissions = original_flag
 
     except Exception:
-
         frappe.db.rollback()
-
         frappe.flags.ignore_permissions = False
-
         frappe.log_error(
             frappe.get_traceback(),
             "Books Order Save Error"
         )
-
         return {
             "success": False,
             "message": frappe.get_traceback()
@@ -114,7 +134,6 @@ def create_or_update_books_selection(
     customer_name,
     books_selection
 ):
-
     books_name = frappe.db.get_value(
         "Books Selection",
         {
@@ -123,20 +142,15 @@ def create_or_update_books_selection(
     )
 
     if books_name:
-
         books_doc = frappe.get_doc(
             "Books Selection",
             books_name
         )
-
         books_doc.select_books = []
-
     else:
-
         books_doc = frappe.new_doc(
             "Books Selection"
         )
-
         books_doc.customer = (
             customer_name
         )
@@ -145,7 +159,6 @@ def create_or_update_books_selection(
         books_doc.order_date = frappe.utils.nowdate()
 
     for row in books_selection:
-
         if not (
             cint(
                 row.get(
@@ -172,24 +185,20 @@ def create_or_update_books_selection(
             {
                 "subject":
                     row.get("subject"),
-
                 "class_grade":
                     row.get("class_grade"),
-
                 "practice_workbook_110":
                     cint(
                         row.get(
                             "practice_workbook_110"
                         )
                     ),
-
                 "student_guide_220":
                     cint(
                         row.get(
                             "student_guide_220"
                         )
                     ),
-
                 "prev_year_paper_160":
                     cint(
                         row.get(
@@ -200,21 +209,18 @@ def create_or_update_books_selection(
         )
 
     if books_doc.is_new():
-
         books_doc.insert(
             ignore_permissions=True
         )
-
     else:
-
         books_doc.save(
             ignore_permissions=True
         )
 
     return books_doc.name
 
-def create_or_update_customer_books_order(school_info):
 
+def create_or_update_customer_books_order(school_info):
     school_name = school_info.get("school_name")
 
     if not school_name:
@@ -281,71 +287,35 @@ def create_or_update_customer_books_order(school_info):
     return customer.name
 
 
-
 def create_or_update_address(customer_name, school_info):
-
-    address_name = frappe.db.exists(
-        "Address",
-        {
-            "address_title": customer_name
-        }
-    )
-
+    address_name = frappe.db.exists("Address", {"address_title": customer_name})
+    
     if address_name:
-        address = frappe.get_doc(
-            "Address",
-            address_name
-        )
+        address = frappe.get_doc("Address", address_name)
     else:
         address = frappe.new_doc("Address")
-
         address.address_title = customer_name
         address.address_type = "Billing"
+        address.append("links", {
+            "link_doctype": "Customer",
+            "link_name": customer_name
+        })
 
-        address.append(
-            "links",
-            {
-                "link_doctype": "Customer",
-                "link_name": customer_name
-            }
-        )
-
-    address.address_line1 = school_info.get(
-        "school_address"
-    )
-
-    address.city = school_info.get(
-        "city"
-    )
-
-    address.state = school_info.get(
-        "state"
-    )
-
-    address.pincode = school_info.get(
-        "pincode"
-    )
-
+    address.address_line1 = school_info.get("school_address", "")
+    address.city = school_info.get("city", "")
+    address.state = school_info.get("state", "")  # Now validated - will be "Tamil Nadu" not "Tamilnadu"
+    address.pincode = school_info.get("pincode", "")
     address.country = "India"
 
     if hasattr(address, "custom_taluka"):
-        address.custom_taluka = school_info.get(
-            "taluka"
-        )
-
+        address.custom_taluka = school_info.get("taluka", "")
     if hasattr(address, "custom_district"):
-        address.custom_district = school_info.get(
-            "district"
-        )
+        address.custom_district = school_info.get("district", "")
 
     if address.is_new():
-        address.insert(
-            ignore_permissions=True
-        )
+        address.insert(ignore_permissions=True)
     else:
-        address.save(
-            ignore_permissions=True
-        )
+        address.save(ignore_permissions=True)
 
     return address.name
 
@@ -354,7 +324,6 @@ def create_or_update_primary_contact(
     primary_contact,
     customer_name
 ):
-
     if not primary_contact.get("name"):
         return
 
@@ -387,7 +356,6 @@ def create_or_update_primary_contact(
     contact.phone_nos = []
 
     if primary_contact.get("email"):
-
         contact.append(
             "email_ids",
             {
@@ -399,7 +367,6 @@ def create_or_update_primary_contact(
         )
 
     if primary_contact.get("mobile"):
-
         contact.append(
             "phone_nos",
             {
@@ -411,7 +378,6 @@ def create_or_update_primary_contact(
         )
 
     if not contact.links:
-
         contact.append(
             "links",
             {
@@ -421,13 +387,10 @@ def create_or_update_primary_contact(
         )
 
     if contact.is_new():
-
         contact.insert(
             ignore_permissions=True
         )
-
     else:
-
         contact.save(
             ignore_permissions=True
         )
@@ -462,12 +425,10 @@ def create_or_update_primary_contact(
     return contact.name
 
 
-
 def create_or_update_olympiad_coordinator(
     coordinator,
     customer_name
 ):
-
     if not coordinator.get("name"):
         return
 
@@ -495,14 +456,11 @@ def create_or_update_olympiad_coordinator(
     )
 
     if teacher_name:
-
         teacher = frappe.get_doc(
             "Teacher",
             teacher_name
         )
-
     else:
-
         teacher = frappe.new_doc(
             "Teacher"
         )
@@ -540,13 +498,10 @@ def create_or_update_olympiad_coordinator(
     )
 
     if teacher.is_new():
-
         teacher.insert(
             ignore_permissions=True
         )
-
     else:
-
         teacher.save(
             ignore_permissions=True
         )
@@ -558,7 +513,6 @@ def create_or_update_olympiad_coordinator(
     existing_row = None
 
     for row in customer.custom_school_teacher_details:
-
         if (
             row.subject ==
             "Overall Coordinator"
@@ -567,7 +521,6 @@ def create_or_update_olympiad_coordinator(
             break
 
     if existing_row:
-
         existing_row.name1 = (
             teacher.name
         )
@@ -579,27 +532,20 @@ def create_or_update_olympiad_coordinator(
         existing_row.email_id = (
             teacher.email_id
         )
-
     else:
-
         customer.append(
             "custom_school_teacher_details",
             {
                 "name1":
                     teacher.name,
-
                 "phone_number":
                     teacher.phone_number,
-
                 "email_id":
                     teacher.email_id,
-
                 "subject":
                     "Overall Coordinator",
-
                 "status":
                     teacher.status,
-
                 "experience":
                     teacher.experience
             }
@@ -614,7 +560,6 @@ def create_or_update_olympiad_coordinator(
 
 @frappe.whitelist(allow_guest=True)
 def get_books_order_subjects():
-
     if frappe.session.user == "Guest":
         return []
 
@@ -655,7 +600,6 @@ def get_books_order_subjects():
     subjects_data = []
 
     for row in yearly_exam.target_dates:
-
         if not row.subject:
             continue
 
@@ -672,7 +616,6 @@ def get_books_order_subjects():
 
         subjects_data.append({
             "subject": subject_doc.name,
-
             "practice_workbook_110": [
                 {
                     "class": d.get("class"),
@@ -681,7 +624,6 @@ def get_books_order_subjects():
                 }
                 for d in subject_doc.practice_workbook_110
             ],
-
             "student_guide_220": [
                 {
                     "class": d.get("class"),
@@ -690,7 +632,6 @@ def get_books_order_subjects():
                 }
                 for d in subject_doc.student_guide_220
             ],
-
             "prev_year_paper_160": [
                 {
                     "class": d.get("class"),
@@ -714,7 +655,6 @@ def get_books_order_subjects():
 
 
 def get_customer_from_user():
-
     user = frappe.session.user
 
     customer = frappe.db.get_value(
@@ -725,11 +665,10 @@ def get_customer_from_user():
     )
 
     return customer
-    
+
 
 @frappe.whitelist()
 def create_quotation_from_books_order(order_data):
-
     data = (
         json.loads(order_data)
         if isinstance(order_data, str)
@@ -745,9 +684,40 @@ def create_quotation_from_books_order(order_data):
     )
 
     if not customer_name:
-        frappe.throw(
-            "Customer not found"
-        )
+        return {
+            "success": False,
+            "message": "Customer not found",
+            "alert": True
+        }
+
+    # -----------------------------------
+    # Filter valid items
+    # -----------------------------------
+
+    valid_items = []
+    for row in data:
+        item_code = row.get("item")
+        qty = flt(row.get("qty"))
+        rate = flt(row.get("rate"))
+
+        if item_code and qty > 0:
+            valid_items.append({
+                "item_code": item_code,
+                "qty": qty,
+                "rate": rate
+            })
+
+    # -----------------------------------
+    # No items selected — return friendly message
+    # -----------------------------------
+
+    if not valid_items:
+        return {
+            "success": True,
+            "quotation": None,
+            "message": "No quotation created. Please select items if you want to create a quotation.",
+            "alert": True
+        }
 
     # -----------------------------------
     # Find existing Draft Quotation
@@ -764,31 +734,14 @@ def create_quotation_from_books_order(order_data):
     )
 
     # -----------------------------------
-    # Update Existing
+    # Update Existing or Create New
     # -----------------------------------
 
     if quotation_name:
-
-        quotation = frappe.get_doc(
-            "Quotation",
-            quotation_name
-        )
-
-        quotation.set(
-            "items",
-            []
-        )
-
-    # -----------------------------------
-    # Create New
-    # -----------------------------------
-
+        quotation = frappe.get_doc("Quotation", quotation_name)
+        quotation.set("items", [])
     else:
-
-        quotation = frappe.new_doc(
-            "Quotation"
-        )
-
+        quotation = frappe.new_doc("Quotation")
         quotation.quotation_to = "Customer"
         quotation.party_name = customer_name
         quotation.customer_name = customer_name
@@ -797,52 +750,17 @@ def create_quotation_from_books_order(order_data):
     # Append Items
     # -----------------------------------
 
-    for row in data:
-
-        item_code = row.get("item")
-        qty = flt(
-            row.get("qty")
-        )
-        rate = flt(
-            row.get("rate")
-        )
-
-        if not item_code:
-            continue
-
-        if qty <= 0:
-            continue
-
-        quotation.append(
-            "items",
-            {
-                "item_code": item_code,
-                "qty": qty,
-                "rate": rate
-            }
-        )
-
-    if not quotation.items:
-
-        frappe.throw(
-            "No items selected"
-        )
+    for item in valid_items:
+        quotation.append("items", item)
 
     # -----------------------------------
     # Save
     # -----------------------------------
 
     if quotation.is_new():
-
-        quotation.insert(
-            ignore_permissions=True
-        )
-
+        quotation.insert(ignore_permissions=True)
     else:
-
-        quotation.save(
-            ignore_permissions=True
-        )
+        quotation.save(ignore_permissions=True)
 
     frappe.db.commit()
 
