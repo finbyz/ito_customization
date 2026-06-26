@@ -48,14 +48,25 @@ def save_ito_registration(registration_data):
                 gstin = ""
             school_info["gst_no"] = gstin
 
+            # FIX: Normalize school_code from both possible field names
+            # Frontend might send 'ito_school_code' instead of 'school_code'
+            if not school_info.get("school_code") and school_info.get("ito_school_code"):
+                school_info["school_code"] = school_info.get("ito_school_code")
+
+            # Create/update customer - saves to DB session
             customer = create_or_update_customer(school_info)
+            
+            # Create/update address - saves to DB session
             create_or_update_address(customer, school_info)
 
+            # Create/update principal if provided
             if data.get("coordinators", {}).get("principal"):
                 create_or_update_principal(data["coordinators"]["principal"], customer)
 
+            # Create/update teachers - saves to DB session
             create_or_update_teachers(data.get("coordinators", {}), customer)
 
+            # Save exams data
             exams_data = data.get("exams", {})
             if exams_data:
                 es_name = frappe.db.get_value("Exams Summary", {"customer": customer})
@@ -88,20 +99,20 @@ def save_ito_registration(registration_data):
                                 "no_of_students": row.get("students")
                             })
 
+                    # Save exams - persists to DB session
                     es_doc.save(ignore_permissions=True)
 
-            frappe.db.commit()
+            # NO explicit commit - let Frappe handle it
             return {"success": True, "customer": customer}
 
         finally:
             frappe.flags.ignore_permissions = original_flag
             
-    except Exception:
-        frappe.db.rollback()
+    except Exception as e:
+        # Reset flag but don't call rollback
         frappe.flags.ignore_permissions = False        
         frappe.log_error(frappe.get_traceback(), "ITO Registration Error")
-        return {"success": False, "message": frappe.get_traceback()}
-
+        return {"success": False, "message": str(e)}
 
 @frappe.whitelist(allow_guest=True)
 def save_registration_step():
@@ -138,9 +149,14 @@ def save_registration_step():
                 customer_doc.mobile_no = school_info.get("school_phone1", customer_doc.mobile_no)
                 customer_doc.email_id = school_info.get("school_email", customer_doc.email_id)
                 customer_doc.gstin = school_info.get("gst_no", customer_doc.gstin)
+                
+                # Save customer - this persists to DB session
                 customer_doc.save(ignore_permissions=True)
 
+                # Save address - this persists to DB session
                 create_or_update_address(customer, school_info)
+                
+                # Cache the customer name
                 frappe.cache().set_value(f"ito_customer_{frappe.session.user}", customer)
 
             elif step == 2:
@@ -152,6 +168,8 @@ def save_registration_step():
 
                 coordinators = data.get("coordinators", {})
                 frappe.log_error(title="STEP 2 COORDINATORS", message=frappe.as_json(coordinators))
+                
+                # Save teachers - persists to DB session
                 create_or_update_teachers(coordinators, customer)
 
             elif step == 3:
@@ -195,22 +213,24 @@ def save_registration_step():
                                     "no_of_students": row.get("students")
                                 })
 
+                        # Save exams - persists to DB session
                         es_doc.save(ignore_permissions=True)
 
             else:
                 frappe.throw(f"Invalid step: {step}")
 
-            frappe.db.commit()
+            # NO explicit commit - let Frappe handle it
+            # NO explicit rollback - let Frappe handle exceptions
             return {"success": True, "step": step}
 
         finally:
             frappe.flags.ignore_permissions = original_flag
 
-    except Exception:
-        frappe.db.rollback()
+    except Exception as e:
+        # Reset flag but don't call rollback
         frappe.flags.ignore_permissions = False
         frappe.log_error(frappe.get_traceback(), "Save Registration Step Error")
-        return {"success": False, "message": frappe.get_traceback()}
+        return {"success": False, "message": str(e)}
 
 
 def create_or_update_customer(school_info):
@@ -230,8 +250,10 @@ def create_or_update_customer(school_info):
     if hasattr(customer, "email_id"):
         customer.email_id = school_info.get("school_email")
 
-    if school_info.get("school_code"):
-        customer.custom_school_code = school_info.get("school_code")
+    # FIX: Handle both 'school_code' and 'ito_school_code'
+    school_code = school_info.get("school_code") or school_info.get("ito_school_code")
+    if school_code:
+        customer.custom_ito_school_code = school_code
 
     if hasattr(customer, "mobile_no"):
         customer.mobile_no = school_info.get("school_phone1")
@@ -244,8 +266,9 @@ def create_or_update_customer(school_info):
 
     customer.custom_student_strength = cint(school_info.get("student_strength") or 0)
     
-    if hasattr(customer, "custom_ito_school_code"):
-        customer.custom_ito_school_code = school_info.get("ito_school_code")
+    # Remove this duplicate line since we handle it above
+    # if hasattr(customer, "custom_ito_school_code"):
+    #     customer.custom_ito_school_code = school_info.get("ito_school_code")
 
     if hasattr(customer, "custom_customer_category"):
         customer.custom_customer_category = "School Customer"
@@ -329,13 +352,10 @@ def create_or_update_principal(principal, customer_name):
     # Step 2: Handle Email — add NEW row, mark old as non-primary
     email = principal.get("email")
     if email:
-        # Check if this exact email already exists
         email_exists = any(row.email_id == email for row in contact.email_ids)
         if not email_exists:
-            # Mark all existing as non-primary
             for row in contact.email_ids:
                 row.is_primary = 0
-            # Add new as primary
             contact.append("email_ids", {
                 "email_id": email,
                 "is_primary": 1
@@ -344,13 +364,10 @@ def create_or_update_principal(principal, customer_name):
     # Step 3: Handle Mobile — add NEW row, mark old as non-primary
     mobile = principal.get("mobile")
     if mobile:
-        # Check if this exact phone already exists
         phone_exists = any(row.phone == mobile for row in contact.phone_nos)
         if not phone_exists:
-            # Mark all existing as non-primary
             for row in contact.phone_nos:
                 row.is_primary_mobile_no = 0
-            # Add new as primary
             contact.append("phone_nos", {
                 "phone": mobile,
                 "is_primary_mobile_no": 1
@@ -367,15 +384,16 @@ def create_or_update_principal(principal, customer_name):
             "link_name": customer_name
         })
 
-    # Step 5: Save
+    # Step 5: Save contact
     if contact.is_new():
         contact.insert(ignore_permissions=True)
     else:
         contact.save(ignore_permissions=True)
 
-    # Step 6: Set as customer's primary contact
-    frappe.db.set_value("Customer", customer_name, "customer_primary_contact", contact.name)
-    frappe.db.commit()
+    # Step 6: Set as customer's primary contact using doc method instead of db.set_value
+    customer = frappe.get_doc("Customer", customer_name)
+    customer.customer_primary_contact = contact.name
+    customer.save(ignore_permissions=True)
 
     return contact.name
 
@@ -655,14 +673,23 @@ def save_little_champ_registration(registration_data):
     try:
         data = json.loads(registration_data) if isinstance(registration_data, str) else registration_data
 
+        # Create/update customer - saves to DB session
         customer = create_or_update_customer(data.get("school_info", {}))
+        
+        # Update customer with Little Champ specific fields
         customer_doc = frappe.get_doc("Customer", customer)
         customer_doc.custom_is_little_champ = 1
-        customer_doc.custom_school_code = data.get("school_info", {}).get("school_code")
+        
+        # FIX: Handle both 'school_code' and 'ito_school_code' from frontend
+        school_code = data.get("school_info", {}).get("school_code") or data.get("school_info", {}).get("ito_school_code")
+        if school_code:
+            customer_doc.custom_school_code = school_code
+            
         customer_doc.custom_taluka = data.get("school_info", {}).get("taluka")
         customer_doc.custom_district = data.get("school_info", {}).get("district")
         customer_doc.save(ignore_permissions=True)
 
+        # Update contact if exists
         if customer_doc.customer_primary_contact:
             contact = frappe.get_doc("Contact", customer_doc.customer_primary_contact)
             school_info = data.get("school_info", {})
@@ -670,16 +697,20 @@ def save_little_champ_registration(registration_data):
             contact.custom_whatsapp_no = school_info.get("whatsapp_no")
             contact.save(ignore_permissions=True)
 
+        # Create/update address - saves to DB session
         create_or_update_address(customer_doc.name, data.get("school_info", {}))
 
+        # Process coordinators
         coordinators_data = data.get("coordinators", {})
         for role_key, coord_data in coordinators_data.items():
             role_text = coord_data.get("role", role_key).strip().lower()
             if "principal" in role_text or "head master" in role_text:
                 create_or_update_principal(coord_data, customer_doc.name)
 
+        # Create/update teachers - saves to DB session
         create_or_update_little_champ_teachers(coordinators_data, customer_doc.name)
 
+        # Save exams data
         exams_data = data.get("exams", {})
         if exams_data:
             es_name = frappe.db.get_value("Exams Summary", {"customer": customer_doc.name})
@@ -707,14 +738,13 @@ def save_little_champ_registration(registration_data):
             else:
                 es_doc.save(ignore_permissions=True)
 
-            frappe.db.commit()
-
+        # NO explicit commit - let Frappe handle it
+        # NO explicit rollback - let Frappe handle exceptions
         return {"success": True, "customer": customer_doc.name}
 
-    except Exception:
-        frappe.db.rollback()
+    except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Little Champ Registration Error")
-        return {"success": False, "message": frappe.get_traceback()}
+        return {"success": False, "message": str(e)}
 
 
 def create_or_update_little_champ_teachers(coordinators, customer_name):
@@ -782,6 +812,11 @@ def save_little_champ_step():
         try:
             if step == 1:
                 school_info = data.get("school_info", {})
+                
+                # FIX: Handle both 'school_code' and 'ito_school_code' from frontend
+                if not school_info.get("school_code") and school_info.get("ito_school_code"):
+                    school_info["school_code"] = school_info.get("ito_school_code")
+                
                 customer = create_or_update_customer(school_info)
                 customer_doc = frappe.get_doc("Customer", customer)
                 customer_doc.custom_is_little_champ = 1
@@ -798,8 +833,8 @@ def save_little_champ_step():
 
                 create_or_update_address(customer_doc.name, school_info)
                 frappe.cache().set_value(f"little_champ_customer_{frappe.session.user}", customer_doc.name)
-                frappe.db.commit()
 
+                # NO explicit commit - let Frappe handle it
                 return {"success": True, "step": 1, "customer": customer_doc.name}
 
             elif step == 2:
@@ -816,8 +851,8 @@ def save_little_champ_step():
                         create_or_update_principal(coord_data, customer)
 
                 create_or_update_little_champ_teachers(coordinators_data, customer)
-                frappe.db.commit()
 
+                # NO explicit commit - let Frappe handle it
                 return {"success": True, "step": 2}
 
             elif step == 3:
@@ -855,7 +890,7 @@ def save_little_champ_step():
                     else:
                         es_doc.save(ignore_permissions=True)
 
-                frappe.db.commit()
+                # NO explicit commit - let Frappe handle it
                 return {"success": True, "step": 3}
 
             else:
@@ -864,10 +899,10 @@ def save_little_champ_step():
         finally:
             frappe.flags.ignore_permissions = original_flag
 
-    except Exception:
-        frappe.db.rollback()
+    except Exception as e:
+        # NO explicit rollback - let Frappe handle exceptions
         frappe.log_error(frappe.get_traceback(), "Little Champ Step Save Error")
-        return {"success": False, "message": frappe.get_traceback()}
+        return {"success": False, "message": str(e)}
 
 
 
@@ -878,7 +913,7 @@ def get_subjects_for_year(academic_year, is_little_champ=0):
     """
     Fetch subjects from Yearly Exam Date for given academic year.
     Filters by is_little_champ flag on parent Yearly Exam Date document.
-    This allows separate Yearly Exam Date documents for Student vs Little Champ.
+    Only fetches SUBMITTED documents (docstatus=1).
     """
     if not academic_year:
         return []
@@ -889,21 +924,26 @@ def get_subjects_for_year(academic_year, is_little_champ=0):
         if len(parts) == 2:
             academic_year = f"AY-{parts[0]}/{parts[1]}"
 
-    # CRITICAL: Convert to integer (Frappe passes strings from frontend)
+    # CRITICAL: Convert to integer
     is_little_champ = int(is_little_champ or 0)
 
     # Check if parent doctype has is_little_champ field
     has_parent_lc_field = frappe.db.has_column("Yearly Exam Date", "is_little_champ")
 
     # Build filters for parent document
-    filters = {"academic_year": academic_year}
+    filters = {
+        "academic_year": academic_year,
+        "docstatus": 1  # ← ONLY fetch SUBMITTED documents
+    }
     if has_parent_lc_field:
         filters["is_little_champ"] = is_little_champ
 
     # Find Yearly Exam Date for this academic year AND type
+    # Order by creation date to get latest if multiple exist
     yed = frappe.get_all("Yearly Exam Date",
         filters=filters,
-        fields=["name"],
+        fields=["name", "creation"],
+        order_by="creation desc",  # ← Get latest first
         limit=1)
 
     if not yed:
@@ -916,7 +956,6 @@ def get_subjects_for_year(academic_year, is_little_champ=0):
     yed_name = yed[0].name
 
     # Fetch ALL subjects from this document's child table
-    # (No child table filtering needed since each doc has its own subjects)
     target_dates = frappe.get_all("Yearly Exam Date CT",
         filters={"parent": yed_name},
         fields=["subject", "school_subject", "idx"],
@@ -927,10 +966,7 @@ def get_subjects_for_year(academic_year, is_little_champ=0):
         if not row.subject:
             continue
 
-        # Use school_subject as shortName if available, else derive from subject
         short_name = row.school_subject or derive_short_name(row.subject)
-
-        # Generate safe code from short_name or subject
         safe_code = (short_name or row.subject).lower().replace(" ", "_").replace("(", "").replace(")", "")[:20]
 
         subjects.append({
@@ -1433,16 +1469,16 @@ def save_bulk_student_list():
             else:
                 bsl.save(ignore_permissions=True)
 
-            frappe.db.commit()
+            # NO explicit commit - let Frappe handle it
             return {"success": True, "name": bsl.name}
 
         finally:
             frappe.flags.ignore_permissions = original_flag
 
-    except Exception:
-        frappe.db.rollback()
+    except Exception as e:
+        # NO explicit rollback - let Frappe handle exceptions
         frappe.log_error(frappe.get_traceback(), "Bulk Student List Save Error")
-        return {"success": False, "message": frappe.get_traceback()}
+        return {"success": False, "message": str(e)}
 
 
 # ==================== 8. SAVE LITTLE CHAMP BULK ====================
@@ -1523,16 +1559,16 @@ def save_little_champ_bulk():
             else:
                 bsl.save(ignore_permissions=True)
 
-            frappe.db.commit()
+            # NO explicit commit - let Frappe handle it
             return {"success": True, "name": bsl.name}
 
         finally:
             frappe.flags.ignore_permissions = original_flag
 
-    except Exception:
-        frappe.db.rollback()
+    except Exception as e:
+        # NO explicit rollback - let Frappe handle exceptions
         frappe.log_error(frappe.get_traceback(), "Little Champ Bulk Save Error")
-        return {"success": False, "message": frappe.get_traceback()}
+        return {"success": False, "message": str(e)}
 
 
 @frappe.whitelist(allow_guest=True)

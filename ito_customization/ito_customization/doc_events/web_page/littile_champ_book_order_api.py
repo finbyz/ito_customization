@@ -38,199 +38,99 @@ def save_little_champ_book_order(order_data):
 
         frappe.flags.ignore_permissions = True
 
-        school_info = data.get(
-            "school_info",
-            {}
-        )
-        
-        books_selection = data.get(
-            "books_selection",
-            []
-        )
+        school_info = data.get("school_info", {})
+        books_selection = data.get("books_selection", [])
 
         # ----------------------------------
         # Customer
         # ----------------------------------
 
-        customer = create_or_update_customer_book_order(
-            school_info
-        )
+        # FIX: Handle both 'school_code' and 'ito_school_code' from frontend
+        if not school_info.get("school_code") and school_info.get("ito_school_code"):
+            school_info["school_code"] = school_info.get("ito_school_code")
+
+        customer = create_or_update_customer_book_order(school_info)
         
-        customer_doc = frappe.get_doc(
-            "Customer",
-            customer
-        )
+        customer_doc = frappe.get_doc("Customer", customer)
 
         customer_doc.custom_is_little_champ = 1
+        customer_doc.custom_school_code = school_info.get("school_code")
+        customer_doc.custom_taluka = school_info.get("taluka")
+        customer_doc.custom_district = school_info.get("district")
 
-        customer_doc.custom_school_code = (
-            school_info.get("school_code")
-        )
-
-        customer_doc.custom_taluka = (
-            school_info.get("taluka")
-        )
-
-        customer_doc.custom_district = (
-            school_info.get("district")
-        )
-
-        customer_doc.save(
-            ignore_permissions=True
-        )
+        customer_doc.save(ignore_permissions=True)
 
         # ----------------------------------
         # Contact
         # ----------------------------------
 
         if customer_doc.customer_primary_contact:
-
-            contact = frappe.get_doc(
-                "Contact",
-                customer_doc.customer_primary_contact
-            )
-
+            contact = frappe.get_doc("Contact", customer_doc.customer_primary_contact)
         else:
+            contact = frappe.new_doc("Contact")
+            contact.first_name = school_info.get("school_name") or customer_doc.customer_name
+            contact.append("links", {
+                "link_doctype": "Customer",
+                "link_name": customer_doc.name
+            })
 
-            contact = frappe.new_doc(
-                "Contact"
-            )
+        contact.email_id = school_info.get("school_email")
+        contact.mobile_no = school_info.get("phone1") or school_info.get("phone_no")
 
-            contact.first_name = (
-                school_info.get(
-                    "school_name"
-                )
-                or customer_doc.customer_name
-            )
-
-            contact.append(
-                "links",
-                {
-                    "link_doctype": "Customer",
-                    "link_name": customer_doc.name
-                }
-            )
-
-        contact.email_id = (
-            school_info.get(
-                "school_email"
-            )
-        )
-
-        contact.mobile_no = (
-            school_info.get(
-                "phone1"
-            )
-            or school_info.get(
-                "phone_no"
-            )
-        )
-
-        if hasattr(
-            contact,
-            "custom_whatsapp_no"
-        ):
-            contact.custom_whatsapp_no = (
-                school_info.get(
-                    "whatsapp_no"
-                )
-            )
+        if hasattr(contact, "custom_whatsapp_no"):
+            contact.custom_whatsapp_no = school_info.get("whatsapp_no")
 
         if contact.is_new():
-
-            contact.insert(
-                ignore_permissions=True
-            )
-
-            customer_doc.customer_primary_contact = (
-                contact.name
-            )
-
-            customer_doc.save(
-                ignore_permissions=True
-            )
-
+            contact.insert(ignore_permissions=True)
+            customer_doc.customer_primary_contact = contact.name
+            customer_doc.save(ignore_permissions=True)
         else:
-
-            contact.save(
-                ignore_permissions=True
-            )
+            contact.save(ignore_permissions=True)
 
         # ----------------------------------
         # Address
         # ----------------------------------
 
-        create_or_update_address(
-            customer_doc.name,
-            school_info
-        )
+        create_or_update_address(customer_doc.name, school_info)
 
         # ----------------------------------
         # Coordinator
         # ----------------------------------
 
-        principal = data.get(
-            "principal",
-            {}
-        )
-
-        coordinator = data.get(
-            "coordinator",
-            {}
-        )
+        principal = data.get("principal", {})
+        coordinator = data.get("coordinator", {})
 
         if coordinator:
+            create_or_update_school_contact(principal, customer, "Principal")
+            create_or_update_school_contact(coordinator, customer, "Overall Coordinator")
 
-            create_or_update_school_contact(
-                principal,
-                customer,
-                "Principal"
-            )
+        # ----------------------------------
+        # Books Selection
+        # ----------------------------------
 
-            create_or_update_school_contact(
-                coordinator,
-                customer,
-                "Overall Coordinator"
-            )
-
-            books_selection = data.get(
-                "books_selection",
-                []
-            )
-
+        books_selection = data.get("books_selection", [])
         if books_selection:
+            create_or_update_books_selection(customer_doc.name, books_selection)
 
-            create_or_update_books_selection(
-                customer_doc.name,
-                books_selection
-            )
-
-        frappe.db.commit()
-
+        # NO explicit commit - let Frappe handle it
         return {
             "success": True,
             "customer": customer_doc.name
         }
 
-    except Exception:
-
-        frappe.db.rollback()
-
+    except Exception as e:
+        # NO explicit rollback - let Frappe handle exceptions
         frappe.log_error(
             frappe.get_traceback(),
             "Little Champ Book Order Save Error"
         )
-
         return {
             "success": False,
-            "message": frappe.get_traceback()
+            "message": str(e)
         }
 
     finally:
-
-        frappe.flags.ignore_permissions = (
-            original_flag
-        )
+        frappe.flags.ignore_permissions = original_flag
 
 
 
@@ -965,8 +865,9 @@ def get_customer_from_session_user():
         return {}
 
     if not frappe.db.exists("Customer", customer_name):
+        # Delete stale Portal User link
         frappe.db.delete("Portal User", {"user": frappe.session.user, "parent": customer_name})
-        frappe.db.commit()
+        # NO explicit commit - let Frappe handle it
         return {}
 
     customer = frappe.get_doc(
@@ -1011,6 +912,8 @@ def get_customer_from_session_user():
             "city": addr.city,
             "county": getattr(addr, "county", ""),
             "state": addr.state,
+            "custom_taluka": getattr(addr, "custom_taluka", ""),
+            "custom_district": getattr(addr, "custom_district", ""),
             "country": addr.country,
             "pincode": addr.pincode
         }
@@ -1466,7 +1369,6 @@ def create_or_update_school_contact(
 
 @frappe.whitelist()
 def create_quotation_from_books_order(order_data):
-
     data = (
         json.loads(order_data)
         if isinstance(order_data, str)
@@ -1475,9 +1377,7 @@ def create_quotation_from_books_order(order_data):
 
     customer_name = frappe.db.get_value(
         "Portal User",
-        {
-            "user": frappe.session.user
-        },
+        {"user": frappe.session.user},
         "parent"
     )
 
@@ -1520,16 +1420,30 @@ def create_quotation_from_books_order(order_data):
     # -----------------------------------
     # Find existing Draft Quotation
     # -----------------------------------
+    # FIX: Use party_name (the actual link field) instead of customer_name
+    # Also check customer_name as fallback for backwards compatibility
 
     quotation_name = frappe.db.get_value(
         "Quotation",
         {
-            "customer_name": customer_name,
+            "party_name": customer_name,
             "docstatus": 0
         },
         "name",
         order_by="creation desc"
     )
+
+    # Fallback: try customer_name if party_name didn't work
+    if not quotation_name:
+        quotation_name = frappe.db.get_value(
+            "Quotation",
+            {
+                "customer_name": customer_name,
+                "docstatus": 0
+            },
+            "name",
+            order_by="creation desc"
+        )
 
     # -----------------------------------
     # Update Existing or Create New
@@ -1538,11 +1452,13 @@ def create_quotation_from_books_order(order_data):
     if quotation_name:
         quotation = frappe.get_doc("Quotation", quotation_name)
         quotation.set("items", [])
+        is_update = True
     else:
         quotation = frappe.new_doc("Quotation")
         quotation.quotation_to = "Customer"
         quotation.party_name = customer_name
         quotation.customer_name = customer_name
+        is_update = False
 
     # -----------------------------------
     # Append Items
@@ -1560,14 +1476,10 @@ def create_quotation_from_books_order(order_data):
     else:
         quotation.save(ignore_permissions=True)
 
-    frappe.db.commit()
+    # NO explicit commit - let Frappe handle it
 
     return {
         "success": True,
         "quotation": quotation.name,
-        "message": (
-            "Quotation Updated"
-            if quotation_name
-            else "Quotation Created"
-        )
+        "message": "Quotation Updated" if is_update else "Quotation Created"
     }

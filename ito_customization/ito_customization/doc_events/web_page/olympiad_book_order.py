@@ -15,8 +15,7 @@ def ensure_subject_exists(subject_name):
         except frappe.DuplicateEntryError:
             pass  # Subject was created by another process
 
-import json
-import frappe
+
 
 
 @frappe.whitelist(allow_guest=True)
@@ -80,6 +79,10 @@ def save_books_order(registration_data):
                 "field": "pincode"
             }
 
+        # FIX: Handle both 'school_code' and 'ito_school_code' from frontend
+        if not school_info.get("school_code") and school_info.get("ito_school_code"):
+            school_info["school_code"] = school_info.get("ito_school_code")
+
         original_flag = frappe.flags.ignore_permissions
         frappe.flags.ignore_permissions = True
 
@@ -105,8 +108,7 @@ def save_books_order(registration_data):
             if books_selection:
                 create_or_update_books_selection(customer, books_selection)
 
-            frappe.db.commit()
-
+            # NO explicit commit - let Frappe handle it
             return {
                 "success": True,
                 "customer": customer,
@@ -116,8 +118,8 @@ def save_books_order(registration_data):
         finally:
             frappe.flags.ignore_permissions = original_flag
 
-    except Exception:
-        frappe.db.rollback()
+    except Exception as e:
+        # NO explicit rollback - let Frappe handle exceptions
         frappe.flags.ignore_permissions = False
         frappe.log_error(
             frappe.get_traceback(),
@@ -125,7 +127,7 @@ def save_books_order(registration_data):
         )
         return {
             "success": False,
-            "message": frappe.get_traceback()
+            "message": str(e)
         }
 
 
@@ -677,9 +679,7 @@ def create_quotation_from_books_order(order_data):
 
     customer_name = frappe.db.get_value(
         "Portal User",
-        {
-            "user": frappe.session.user
-        },
+        {"user": frappe.session.user},
         "parent"
     )
 
@@ -722,16 +722,29 @@ def create_quotation_from_books_order(order_data):
     # -----------------------------------
     # Find existing Draft Quotation
     # -----------------------------------
+    # FIX: Search by party_name first (actual link field), fallback to customer_name
 
     quotation_name = frappe.db.get_value(
         "Quotation",
         {
-            "customer_name": customer_name,
+            "party_name": customer_name,
             "docstatus": 0
         },
         "name",
         order_by="creation desc"
     )
+
+    # Fallback: try customer_name for backwards compatibility
+    if not quotation_name:
+        quotation_name = frappe.db.get_value(
+            "Quotation",
+            {
+                "customer_name": customer_name,
+                "docstatus": 0
+            },
+            "name",
+            order_by="creation desc"
+        )
 
     # -----------------------------------
     # Update Existing or Create New
@@ -740,11 +753,13 @@ def create_quotation_from_books_order(order_data):
     if quotation_name:
         quotation = frappe.get_doc("Quotation", quotation_name)
         quotation.set("items", [])
+        is_update = True
     else:
         quotation = frappe.new_doc("Quotation")
         quotation.quotation_to = "Customer"
         quotation.party_name = customer_name
         quotation.customer_name = customer_name
+        is_update = False
 
     # -----------------------------------
     # Append Items
@@ -762,14 +777,10 @@ def create_quotation_from_books_order(order_data):
     else:
         quotation.save(ignore_permissions=True)
 
-    frappe.db.commit()
+    # NO explicit commit - let Frappe handle it
 
     return {
         "success": True,
         "quotation": quotation.name,
-        "message": (
-            "Quotation Updated"
-            if quotation_name
-            else "Quotation Created"
-        )
+        "message": "Quotation Updated" if is_update else "Quotation Created"
     }
