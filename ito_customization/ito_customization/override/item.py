@@ -1,6 +1,6 @@
 import frappe
 from frappe import _
-from customer_portal.webshop_compat.doctype.override_doctype.item import WebshopItem as _Item
+from erpnext.stock.doctype.item.item import Item as _Item
 
 
 class CustomItem(_Item):
