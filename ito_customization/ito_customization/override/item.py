@@ -1,8 +1,30 @@
 import frappe
+from frappe import _
 from erpnext.stock.doctype.item.item import Item as _Item
 
 
 class CustomItem(_Item):
+
+    def validate(self):
+        self.validate_barcode_required()
+
+    def validate_barcode_required(self):
+        if not self.item_group:
+            return
+
+        barcode_required = frappe.db.get_value(
+            "Item Group",
+            self.item_group,
+            "custom_barcode_required"
+        )
+
+        if barcode_required and not self.barcodes:
+            frappe.throw(
+                _("At least one Barcode is required for Item Group '{0}'.").format(
+                    self.item_group
+                )
+            )
+
     def autoname(self):
         company_prefix = self.get_company_prefix()
 
