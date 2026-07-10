@@ -1,7 +1,8 @@
 import frappe
 from frappe.utils import flt
 import json
-
+import secrets
+from frappe.utils import getdate, nowdate
 from frappe.utils import cint
 
 
@@ -784,3 +785,197 @@ def create_quotation_from_books_order(order_data):
         "quotation": quotation.name,
         "message": "Quotation Updated" if is_update else "Quotation Created"
     }
+    
+import re
+import secrets
+from frappe.utils import formatdate, getdate, nowdate
+
+LITTLE_CHAMP_CLASS_ORDER = ["Nursery", "Junior", "Senior"]
+
+
+@frappe.whitelist()
+def generate_consent_token(customer):
+    token = secrets.token_urlsafe(16)
+    base_url = 'https://ito.finbyz.com/parent-consent'
+    full_url = f'{base_url}?token={token}'
+
+    frappe.db.set_value('Customer', customer, {
+        'custom_consent_token': token,
+        'custom_url': full_url
+    })
+
+    return {'token': token, 'url': full_url}
+
+
+@frappe.whitelist(allow_guest=True)
+def get_school_by_token(token):
+    result = frappe.db.get_value(
+        'Customer',
+        {'custom_consent_token': token},
+        ['name', 'customer_name', 'custom_concern_form_last_date', 'custom_is_little_champ']
+    )
+    if not result:
+        frappe.throw('Invalid or expired link')
+
+    customer, school_name, expiry_date, is_little_champ = result
+
+    if expiry_date and getdate(nowdate()) > getdate(expiry_date):
+        frappe.throw('This link has expired. Please contact the school for a new link.')
+
+    return {
+        'customer': customer,
+        'school_name': school_name,
+        'is_little_champ': bool(is_little_champ),
+    }
+
+
+def extract_class_number(value):
+    """Extract a numeric class from strings like 'Class 12' -> 12"""
+    if not value:
+        return None
+    match = re.search(r'(\d+)', str(value))
+    return int(match.group(1)) if match else None
+
+
+@frappe.whitelist(allow_guest=True)
+def get_class_options(is_little_champ=0):
+    """Returns the ordered list of Class names for the given category."""
+    is_little_champ = int(is_little_champ)
+
+    classes = frappe.get_all(
+        'Class',
+        filters={'little_champ': is_little_champ},
+        fields=['name']
+    )
+    names = [c.name for c in classes]
+
+    if is_little_champ:
+        names.sort(
+            key=lambda n: LITTLE_CHAMP_CLASS_ORDER.index(n)
+            if n in LITTLE_CHAMP_CLASS_ORDER else len(LITTLE_CHAMP_CLASS_ORDER)
+        )
+    else:
+        names.sort(key=lambda n: extract_class_number(n) or 0)
+
+    return {'classes': names}
+
+
+@frappe.whitelist(allow_guest=True)
+def get_dynamic_subjects(school_name, selected_class=None):
+    """Returns fully dynamic subject config for the Exams & Books table.
+    Branches on the Customer's custom_is_little_champ flag:
+      - Normal: Exam registration + Workbook/Guide/Past Papers, priced by class number.
+      - Little Champ: Text Book + Work Book only, no exam, priced by exact class name.
+    """
+
+    customer_row = frappe.db.get_value(
+        'Customer',
+        {'customer_name': school_name},
+        ['name', 'custom_is_little_champ'],
+        as_dict=True
+    )
+
+    if not customer_row:
+        return {'subjects': [], 'found_customer': False}
+
+    customer = customer_row.name
+    is_little_champ = bool(customer_row.custom_is_little_champ)
+
+    es_name = frappe.db.get_value('Exams Summary', {'customer': customer})
+
+    if not es_name:
+        return {'subjects': [], 'found_customer': True, 'is_little_champ': is_little_champ}
+
+    es_doc = frappe.get_doc('Exams Summary', es_name)
+
+    if not es_doc.exam_detail:
+        return {'subjects': [], 'found_customer': True, 'is_little_champ': is_little_champ}
+
+    yearly_exam = frappe.get_doc('Yearly Exam Date', es_doc.exam_detail)
+
+    selected_class_num = extract_class_number(selected_class) if selected_class else None
+    subjects = []
+
+    def find_item_by_number(items):
+        if selected_class_num is None:
+            return None
+        for d in items:
+            if extract_class_number(d.get('class')) == selected_class_num:
+                return d
+        return None
+
+    def find_item_by_exact_class(items):
+        if not selected_class:
+            return None
+        for d in items:
+            if str(d.get('class')) == str(selected_class):
+                return d
+        return None
+
+    for row in yearly_exam.target_dates:
+        if not row.subject:
+            continue
+
+        if not frappe.db.exists('School Subject', row.subject):
+            continue
+
+        subject_doc = frappe.get_doc('School Subject', row.subject)
+
+        # Only show subjects matching the customer's category
+        if bool(subject_doc.little_champ) != is_little_champ:
+            continue
+
+        match = re.search(r'\(([^)]+)\)', subject_doc.name)
+        code = match.group(1) if match else subject_doc.name
+
+        if is_little_champ:
+            tb_item = find_item_by_exact_class(subject_doc.text_book)
+            wb_item = find_item_by_exact_class(subject_doc.work_book)
+
+            subjects.append({
+                'code': code,
+                'name': subject_doc.name,
+                'exam_available': False,
+                'exam_fee': 0,
+                'tb': {
+                    'available': bool(tb_item),
+                    'price': tb_item.get('item_price') if tb_item else None
+                },
+                'wb': {
+                    'available': bool(wb_item),
+                    'price': wb_item.get('item_price') if wb_item else None
+                },
+                'sg': {'available': False, 'price': None},
+                'yp': {'available': False, 'price': None},
+                'date_a': None,
+                'date_b': None,
+                'date_c': None,
+            })
+        else:
+            wb_item = find_item_by_number(subject_doc.practice_workbook_110)
+            sg_item = find_item_by_number(subject_doc.student_guide_220)
+            yp_item = find_item_by_number(subject_doc.prev_year_paper_160)
+
+            subjects.append({
+                'code': code,
+                'name': subject_doc.name,
+                'exam_available': True,
+                'exam_fee': 175,  # TODO: replace with per-subject fee once that field exists
+                'wb': {
+                    'available': bool(wb_item),
+                    'price': wb_item.get('item_price') if wb_item else None
+                },
+                'sg': {
+                    'available': bool(sg_item),
+                    'price': sg_item.get('item_price') if sg_item else None
+                },
+                'yp': {
+                    'available': bool(yp_item),
+                    'price': yp_item.get('item_price') if yp_item else None
+                },
+                'date_a': formatdate(row.tg_date_1, 'dd MMM, yyyy') if row.tg_date_1 else None,
+                'date_b': formatdate(row.tg_date_2, 'dd MMM, yyyy') if row.tg_date_2 else None,
+                'date_c': formatdate(row.tg_date_3, 'dd MMM, yyyy') if row.tg_date_3 else None,
+            })
+
+    return {'subjects': subjects, 'found_customer': True, 'is_little_champ': is_little_champ}
