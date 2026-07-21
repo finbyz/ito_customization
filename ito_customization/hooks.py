@@ -156,7 +156,10 @@ doc_events = {
         "validate": "ito_customization.ito_customization.doc_events.item_price.validate_item_price"
     },
     "Customer": {
-        "on_update": "ito_customization.ito_customization.doc_events.customer.sync_teachers"
+        "on_update": "ito_customization.ito_customization.doc_events.customer.sync_teachers",
+        "on_update": "ito_customization.ito_customization.doc_events.customer.sync_school_code",
+        "autoname": "ito_customization.ito_customization.doc_events.customer.autoname",
+        "validate": "ito_customization.ito_customization.doc_events.customer.validate"
     }
 
 }
