@@ -6,6 +6,8 @@
  "engine": "InnoDB",
  "field_order": [
   "customer",
+  "column_break_fual",
+  "is_little_champ",
   "section_break_crlt",
   "student_name",
   "parent_name",
@@ -18,7 +20,13 @@
   "class",
   "section_break_qbzf",
   "student_consent",
-  "little_champ_consent"
+  "little_champ_consent",
+  "payment_section",
+  "total_amount",
+  "column_break_payment",
+  "sales_invoice",
+  "payment_entry",
+  "amended_from"
  ],
  "fields": [
   {
@@ -81,22 +89,74 @@
    "fieldtype": "Section Break"
   },
   {
+   "depends_on": "eval:doc.is_little_champ == 0",
    "fieldname": "student_consent",
    "fieldtype": "Table",
    "label": "Student Consent",
    "options": "Consent Student CT"
   },
   {
+   "depends_on": "is_little_champ",
    "fieldname": "little_champ_consent",
    "fieldtype": "Table",
    "label": "Little Champ Consent",
    "options": "Consent LC CT"
+  },
+  {
+   "fieldname": "column_break_fual",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_little_champ",
+   "fieldtype": "Check",
+   "label": "Is Little Champ"
+  },
+  {
+   "fieldname": "payment_section",
+   "fieldtype": "Section Break",
+   "label": "Payment"
+  },
+  {
+   "fieldname": "total_amount",
+   "fieldtype": "Currency",
+   "label": "Total Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_payment",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "label": "Sales Invoice",
+   "options": "Sales Invoice",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "label": "Payment Entry",
+   "options": "Payment Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Parent Consent",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
+ "is_submittable": 1,
  "links": [],
- "modified": "2026-06-29 17:03:07.780692",
+ "modified": "2026-07-13 18:31:56.511784",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Parent Consent",

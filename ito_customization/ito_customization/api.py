@@ -6,7 +6,7 @@ from frappe import _
 import json
 import csv
 import base64
-from frappe.utils import cint
+from frappe.utils import cint, flt
 import io
 try:
     from openpyxl import Workbook
@@ -215,6 +215,25 @@ def save_registration_step():
 
                         # Save exams - persists to DB session
                         es_doc.save(ignore_permissions=True)
+
+            elif step == 4:
+                customer = frappe.cache().get_value(f"ito_customer_{frappe.session.user}")
+                if not customer and frappe.session.user != "Guest":
+                    customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+                if not customer:
+                    frappe.throw("Please save School Information first.")
+
+                payment = data.get("payment", {})
+                mode = payment.get("mode")
+                # Razorpay payments are recorded via the Sales Invoice/Payment Entry
+                # created by registration_payment.py - this is just an audit trail for
+                # the self-declared manual modes (DD/NEFT/Cash/UPI).
+                if mode and mode != "razorpay":
+                    frappe.get_doc("Customer", customer).add_comment(
+                        "Info",
+                        f"ITO Registration fee reported as paid via {mode}: "
+                        f"{frappe.as_json(payment.get('payment_details', {}))}",
+                    )
 
             else:
                 frappe.throw(f"Invalid step: {step}")
@@ -1608,3 +1627,132 @@ def debug_subjects():
         "function_source_preview": source[:500] if source else "N/A",
         "has_lc_column": frappe.db.has_column("Yearly Exam Date CT", "is_little_champ")
     }
+
+
+@frappe.whitelist(allow_guest=True)
+def save_parent_consent(data):
+    try:
+        payload = json.loads(data) if isinstance(data, str) else data
+        
+        student_profile = payload.get("student_profile", {})
+        is_little_champ = payload.get("is_little_champ", False)
+        selections = payload.get("selections", [])
+        payment = payload.get("payment", {})
+        token = payload.get("token")
+
+        # 1. Map fields
+        # Resolve via the consent token first (same lookup as get_school_by_token) -
+        # more reliable than matching on customer_name, which can collide/mismatch
+        # on case or whitespace.
+        school_name = student_profile.get("school_name")
+        customer = None
+        if token:
+            customer = frappe.db.get_value("Customer", {"custom_consent_token": token}, "name")
+        if not customer and school_name:
+            customer = frappe.db.get_value("Customer", {"customer_name": school_name})
+
+        # 1a. Recompute the fee server-side - never trust the client's
+        # total_amount, which can be stale (e.g. per-subject pricing hadn't
+        # finished loading in the browser yet) as well as manipulated. This
+        # mirrors initiate_parent_consent_payment's calculation exactly.
+        from ito_customization.ito_customization.parent_consent_payment import (
+            _compute_grand_total,
+        )
+
+        selected_class = payload.get("selected_class") or student_profile.get("class_grade")
+        total_amount = _compute_grand_total(school_name, selected_class, selections)
+        sales_invoice = payment.get("sales_invoice")
+        payment_entry = payment.get("payment_entry")
+
+        # 1b. If fees are due, require a confirmed payment covering that amount
+        # before finalizing the consent - the frontend already gates the submit
+        # button on this, this is the server-side backstop.
+        if total_amount > 0:
+            if not sales_invoice:
+                frappe.throw(_("Please complete the payment before submitting."))
+            invoice = frappe.db.get_value(
+                "Sales Invoice", sales_invoice, ["outstanding_amount", "grand_total"], as_dict=True
+            )
+            if not invoice or flt(invoice.outstanding_amount) > 0:
+                frappe.throw(_("Payment has not been confirmed for this consent yet."))
+            if flt(invoice.grand_total) < total_amount - 1:
+                frappe.throw(
+                    _("The paid amount does not cover the current fee total. Please retry payment.")
+                )
+
+        gender_map = {
+            "male": "Boy",
+            "female": "Girl"
+        }
+        gender = gender_map.get(student_profile.get("gender"), student_profile.get("gender"))
+        
+        # 2. Create Parent Consent doc
+        pc_doc = frappe.new_doc("Parent Consent")
+        pc_doc.customer = customer
+        pc_doc.is_little_champ = 1 if is_little_champ else 0
+        pc_doc.student_name = student_profile.get("student_name")
+        pc_doc.gender = gender
+        pc_doc.class_grade = student_profile.get("class_grade")  # Wait, let's verify if the fieldname is class or class_grade in json? Wait! Let's check parent_consent.json again!
+        # In parent_consent.json:
+        # {
+        #  "fieldname": "class",
+        #  "fieldtype": "Link",
+        #  "label": "Class",
+        #  "options": "Class"
+        # }
+        # The fieldname in json is "class"! Let's use pc_doc.set("class", ...) or getattr/setattr because "class" is a reserved keyword in python.
+        # Frappe docs use pc_doc.set("class", ...) or pc_doc.class is sometimes problematic in Python, but let's use:
+        # pc_doc.set("class", student_profile.get("class_grade"))
+        pc_doc.set("class", student_profile.get("class_grade"))
+        pc_doc.section = student_profile.get("section")
+        pc_doc.parent_name = student_profile.get("parent_name")
+        pc_doc.city = student_profile.get("city")
+        pc_doc.mobile_no = student_profile.get("parent_mobile")
+        pc_doc.total_amount = total_amount
+        pc_doc.sales_invoice = sales_invoice
+        pc_doc.payment_entry = payment_entry
+
+        # 3. Populate Child table
+        if is_little_champ:
+            for sel in selections:
+                sub_code = sel.get("subject_code")
+                subject_name = sub_code
+                
+                # Check if subject is valid/exists in School Subject directly
+                if not frappe.db.exists("School Subject", sub_code):
+                    # Try fallback to matching the code inside brackets like "(LCAO)"
+                    found_sub = frappe.db.get_value("School Subject", {"name": ["like", f"%({sub_code})%"]}, "name")
+                    if found_sub:
+                        subject_name = found_sub
+                
+                pc_doc.append("little_champ_consent", {
+                    "subject": subject_name,
+                    "text_book": 1 if sel.get("tb") else 0,
+                    "work_book": 1 if sel.get("wb") else 0
+                })
+        else:
+            for sel in selections:
+                sub_code = sel.get("subject_code")
+                subject_name = sub_code
+                
+                # Check if subject is valid/exists in School Subject directly
+                if not frappe.db.exists("School Subject", sub_code):
+                    # Try fallback to matching the code inside brackets like "(IMO)"
+                    found_sub = frappe.db.get_value("School Subject", {"name": ["like", f"%({sub_code})%"]}, "name")
+                    if found_sub:
+                        subject_name = found_sub
+                
+                pc_doc.append("student_consent", {
+                    "subject": subject_name,
+                    "practice_workbook": 1 if sel.get("wb") else 0,
+                    "student_guide": 1 if sel.get("sg") else 0,
+                    "prev_year_paper": 1 if sel.get("yp") else 0
+                })
+        
+        pc_doc.insert(ignore_permissions=True)
+        
+        return {"success": True, "message": "Parent Consent registered successfully", "docname": pc_doc.name}
+        
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Save Parent Consent Error")
+        return {"success": False, "message": str(e)}

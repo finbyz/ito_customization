@@ -6,7 +6,8 @@ from frappe import _
 import json
 from frappe.utils import cint, today
 from frappe.utils import flt
-
+from frappe.utils import cint, today, add_days
+from frappe.utils import flt
 
 def ensure_subject_exists(subject_name):
     """Create a School Subject if it doesn't exist"""
@@ -1482,4 +1483,110 @@ def create_quotation_from_books_order(order_data):
         "success": True,
         "quotation": quotation.name,
         "message": "Quotation Updated" if is_update else "Quotation Created"
+    }
+    
+    
+    
+@frappe.whitelist()
+def create_sales_order_from_books_order(order_data):
+    data = (
+        json.loads(order_data)
+        if isinstance(order_data, str)
+        else order_data
+    )
+
+    customer_name = frappe.db.get_value(
+        "Portal User",
+        {"user": frappe.session.user},
+        "parent"
+    )
+
+    if not customer_name:
+        return {
+            "success": False,
+            "message": "Customer not found",
+            "alert": True
+        }
+
+    # -----------------------------------
+    # Filter valid items
+    # -----------------------------------
+
+    delivery_date = add_days(today(), 7)  # adjust default lead time as needed
+
+    valid_items = []
+    for row in data:
+        item_code = row.get("item")
+        qty = flt(row.get("qty"))
+        rate = flt(row.get("rate"))
+
+        if item_code and qty > 0:
+            valid_items.append({
+                "item_code": item_code,
+                "qty": qty,
+                "rate": rate,
+                "delivery_date": delivery_date
+            })
+
+    # -----------------------------------
+    # No items selected — return friendly alert
+    # -----------------------------------
+
+    if not valid_items:
+        return {
+            "success": True,
+            "sales_order": None,
+            "message": "No sales order created. Please select items if you want to create a sales order.",
+            "alert": True
+        }
+
+    # -----------------------------------
+    # Find existing Draft Sales Order
+    # -----------------------------------
+
+    sales_order_name = frappe.db.get_value(
+        "Sales Order",
+        {
+            "customer": customer_name,
+            "docstatus": 0
+        },
+        "name",
+        order_by="creation desc"
+    )
+
+    # -----------------------------------
+    # Update Existing or Create New
+    # -----------------------------------
+
+    if sales_order_name:
+        sales_order = frappe.get_doc("Sales Order", sales_order_name)
+        sales_order.set("items", [])
+        is_update = True
+    else:
+        sales_order = frappe.new_doc("Sales Order")
+        sales_order.customer = customer_name
+        sales_order.transaction_date = today()
+        sales_order.delivery_date = delivery_date
+        is_update = False
+
+    # -----------------------------------
+    # Append Items
+    # -----------------------------------
+
+    for item in valid_items:
+        sales_order.append("items", item)
+
+    # -----------------------------------
+    # Save
+    # -----------------------------------
+
+    if sales_order.is_new():
+        sales_order.insert(ignore_permissions=True)
+    else:
+        sales_order.save(ignore_permissions=True)
+
+    return {
+        "success": True,
+        "sales_order": sales_order.name,
+        "message": "Sales Order Updated" if is_update else "Sales Order Created"
     }
