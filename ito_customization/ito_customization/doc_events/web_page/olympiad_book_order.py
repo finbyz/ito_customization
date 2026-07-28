@@ -899,8 +899,8 @@ LITTLE_CHAMP_CLASS_ORDER = ["Nursery", "Junior", "Senior"]
 @frappe.whitelist()
 def generate_consent_token(customer):
     token = secrets.token_urlsafe(16)
-    base_url = 'https://ito.finbyz.com/parent-consent'
-    full_url = f'{base_url}?token={token}'
+    base_url = frappe.utils.get_url()
+    full_url = f'{base_url}/parent-consent?token={token}'
 
     frappe.db.set_value('Customer', customer, {
         'custom_consent_token': token,
