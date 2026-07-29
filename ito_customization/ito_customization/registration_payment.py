@@ -99,7 +99,7 @@ def _find_registration_fee_invoice(customer, company):
     return None
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=True)
 def initiate_registration_fee_payment(free_registrations=0):
     customer = _get_session_customer()
 
@@ -152,7 +152,7 @@ def initiate_registration_fee_payment(free_registrations=0):
             }
         )
         invoice.insert(ignore_permissions=True)
-        invoice.submit()
+        invoice.submit(ignore_permissions=True)
         invoice_name = invoice.name
         pay_amount = flt(invoice.outstanding_amount)
 
