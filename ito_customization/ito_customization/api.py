@@ -691,9 +691,14 @@ def get_customer_from_session_user():
 
 # ==================== LITTLE CHAMP ====================
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=True)
 def save_little_champ_registration(registration_data):
+    original_user = frappe.session.user
     try:
+        # This portal route uses Guest API access. Its Customer/contact/address
+        # persistence is scoped to the submitted Little Champ registration, so
+        # run the internal ERP writes as Administrator and restore the request user.
+        frappe.set_user("Administrator")
         data = json.loads(registration_data) if isinstance(registration_data, str) else registration_data
 
         # Create/update customer - saves to DB session
@@ -768,6 +773,8 @@ def save_little_champ_registration(registration_data):
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Little Champ Registration Error")
         return {"success": False, "message": str(e)}
+    finally:
+        frappe.set_user(original_user)
 
 
 def create_or_update_little_champ_teachers(coordinators, customer_name):

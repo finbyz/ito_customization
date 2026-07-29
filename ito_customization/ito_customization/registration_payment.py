@@ -201,7 +201,7 @@ def confirm_registration_fee_payment(
     }
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=True)
 def get_registration_fee_payment_status():
     customer = _get_session_customer()
     company = get_settings_for_page(PAGE).company

@@ -4,8 +4,17 @@
 import frappe
 from frappe import _
 import json
+from urllib.parse import parse_qs, urlparse
 from frappe.utils import cint, today
 from frappe.utils import flt
+from multi_company_razorpay.api import (
+    checkout_success,
+    create_payment_for_sales_invoice,
+    get_checkout_context,
+    get_settings_for_page,
+)
+
+RAZORPAY_PAGE = 'Little Champ Book Order'
 from frappe.utils import cint, today, add_days
 from frappe.utils import flt
 
@@ -24,8 +33,14 @@ def ensure_subject_exists(subject_name):
 @frappe.whitelist(allow_guest=True)
 def save_little_champ_book_order(order_data):
     original_flag = frappe.flags.ignore_permissions
+    original_user = frappe.session.user
 
     try:
+        # Customer.on_update updates the linked primary Contact through frappe.set_value,
+        # which does its own permission check. This endpoint has already established the
+        # authenticated portal user's Customer context, so elevate only while persisting
+        # the Customer/contact/address records and restore the user below.
+        frappe.set_user("Administrator")
         data = (
             json.loads(order_data)
             if isinstance(order_data, str)
@@ -131,8 +146,28 @@ def save_little_champ_book_order(order_data):
         }
 
     finally:
+        frappe.set_user(original_user)
         frappe.flags.ignore_permissions = original_flag
 
+
+
+def _get_delivery_warehouse(company):
+    """Return a usable leaf warehouse for Little Champ orders in `company`."""
+    warehouse = frappe.db.get_value(
+        "Warehouse",
+        {"company": company, "warehouse_name": "Stores", "disabled": 0, "is_group": 0},
+        "name",
+    )
+    if not warehouse:
+        warehouse = frappe.db.get_value(
+            "Warehouse",
+            {"company": company, "disabled": 0, "is_group": 0},
+            "name",
+            order_by="name",
+        )
+    if not warehouse:
+        frappe.throw(_("No active delivery warehouse is configured for {0}.").format(frappe.bold(company)))
+    return warehouse
 
 
 def create_or_update_customer_book_order(
@@ -1487,21 +1522,24 @@ def create_quotation_from_books_order(order_data):
     
     
     
-@frappe.whitelist()
-def create_sales_order_from_books_order(order_data):
+@frappe.whitelist(allow_guest=True)
+def create_sales_order_from_books_order(order_data, customer=None):
     data = (
         json.loads(order_data)
         if isinstance(order_data, str)
         else order_data
     )
 
-    customer_name = frappe.db.get_value(
+    session_customer = frappe.db.get_value(
         "Portal User",
         {"user": frappe.session.user},
         "parent"
     )
+    customer_name = session_customer or customer
 
-    if not customer_name:
+    if session_customer and customer and session_customer != customer:
+        frappe.throw(_("You are not allowed to create an order for this customer."), frappe.PermissionError)
+    if not customer_name or not frappe.db.exists("Customer", customer_name):
         return {
             "success": False,
             "message": "Customer not found",
@@ -1513,6 +1551,8 @@ def create_sales_order_from_books_order(order_data):
     # -----------------------------------
 
     delivery_date = add_days(today(), 7)  # adjust default lead time as needed
+    payment_company = get_settings_for_page(RAZORPAY_PAGE).company
+    delivery_warehouse = _get_delivery_warehouse(payment_company)
 
     valid_items = []
     for row in data:
@@ -1525,7 +1565,8 @@ def create_sales_order_from_books_order(order_data):
                 "item_code": item_code,
                 "qty": qty,
                 "rate": rate,
-                "delivery_date": delivery_date
+                "delivery_date": delivery_date,
+                "warehouse": delivery_warehouse,
             })
 
     # -----------------------------------
@@ -1540,6 +1581,8 @@ def create_sales_order_from_books_order(order_data):
             "alert": True
         }
 
+    # The sales invoice must use the same company as the Razorpay settings
+    # tagged for this Little Champ payment page; otherwise checkout rejects it.
     # -----------------------------------
     # Find existing Draft Sales Order
     # -----------------------------------
@@ -1548,6 +1591,7 @@ def create_sales_order_from_books_order(order_data):
         "Sales Order",
         {
             "customer": customer_name,
+            "company": payment_company,
             "docstatus": 0
         },
         "name",
@@ -1565,6 +1609,7 @@ def create_sales_order_from_books_order(order_data):
     else:
         sales_order = frappe.new_doc("Sales Order")
         sales_order.customer = customer_name
+        sales_order.company = payment_company
         sales_order.transaction_date = today()
         sales_order.delivery_date = delivery_date
         is_update = False
@@ -1589,4 +1634,99 @@ def create_sales_order_from_books_order(order_data):
         "success": True,
         "sales_order": sales_order.name,
         "message": "Sales Order Updated" if is_update else "Sales Order Created"
+    }
+
+@frappe.whitelist(allow_guest=True)
+def initiate_little_champ_books_order_payment(sales_order, customer=None):
+    session_customer = frappe.db.get_value('Portal User', {'user': frappe.session.user}, 'parent')
+    customer = session_customer or customer
+    if session_customer and customer and session_customer != customer:
+        frappe.throw(_('You are not allowed to pay for this customer.'), frappe.PermissionError)
+    if not customer:
+        frappe.throw(_('Please save School Information first.'))
+
+    original_user = frappe.session.user
+    original_ignore_permissions = frappe.flags.ignore_permissions
+    try:
+        frappe.set_user('Administrator')
+        frappe.flags.ignore_permissions = True
+
+        sales_order_doc = frappe.get_doc('Sales Order', sales_order)
+        if sales_order_doc.customer != customer:
+            frappe.throw(_('You are not allowed to pay for this order.'), frappe.PermissionError)
+        if sales_order_doc.docstatus == 0:
+            sales_order_doc.submit()
+        elif sales_order_doc.docstatus == 2:
+            frappe.throw(_('This Sales Order has been cancelled.'))
+
+        existing_invoice = frappe.db.sql(
+            """
+            select si.name, si.docstatus, si.outstanding_amount
+            from `tabSales Invoice` si
+            inner join `tabSales Invoice Item` sii on sii.parent = si.name
+            where sii.sales_order = %s and si.docstatus != 2
+            order by si.creation desc limit 1
+            """,
+            sales_order_doc.name,
+            as_dict=True,
+        )
+
+        if existing_invoice:
+            invoice = existing_invoice[0]
+            if invoice.docstatus == 1 and flt(invoice.outstanding_amount) <= 0:
+                frappe.throw(_('This book order has already been paid.'))
+            if invoice.docstatus == 1:
+                invoice_name = invoice.name
+                pay_amount = flt(invoice.outstanding_amount)
+            else:
+                frappe.delete_doc('Sales Invoice', invoice.name, ignore_permissions=True)
+                invoice_name = None
+        else:
+            invoice_name = None
+
+        if not invoice_name:
+            from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
+
+            sales_invoice = make_sales_invoice(sales_order_doc.name)
+            sales_invoice.set_posting_time = 1
+            sales_invoice.insert(ignore_permissions=True)
+            sales_invoice.submit()
+            invoice_name = sales_invoice.name
+            pay_amount = flt(sales_invoice.outstanding_amount)
+
+        result = create_payment_for_sales_invoice(
+            sales_invoice=invoice_name, amount=pay_amount, page=RAZORPAY_PAGE
+        )
+    finally:
+        frappe.flags.ignore_permissions = original_ignore_permissions
+        frappe.set_user(original_user)
+
+    token = parse_qs(urlparse(result['checkout_url']).query).get('token', [None])[0]
+    if not token:
+        frappe.throw(_('Unable to start Razorpay checkout.'))
+
+    checkout_context = get_checkout_context(token)
+    checkout_context['sales_invoice'] = invoice_name
+    return checkout_context
+
+
+@frappe.whitelist(allow_guest=True)
+def confirm_little_champ_books_order_payment(
+    integration_request, razorpay_payment_id, razorpay_order_id, razorpay_signature
+):
+    result = checkout_success(
+        integration_request=integration_request,
+        razorpay_payment_id=razorpay_payment_id,
+        razorpay_order_id=razorpay_order_id,
+        razorpay_signature=razorpay_signature,
+    )
+
+    integration = frappe.get_doc('Integration Request', integration_request)
+    data = frappe.parse_json(integration.data or '{}')
+    transaction = frappe.get_doc('Razorpay Transaction', data['razorpay_transaction'])
+    return {
+        'paid': transaction.status == 'Completed',
+        'payment_entry': transaction.payment_entry,
+        'sales_invoice': transaction.reference_docname,
+        'redirect_to': result.get('redirect_to'),
     }
