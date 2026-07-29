@@ -52,6 +52,10 @@ def _get_or_create_fee_item(company):
     # look it up (and dedupe) by item_name, which autoname leaves untouched.
     existing = frappe.db.get_value("Item", {"item_name": FEE_ITEM_NAME}, "name")
     if existing:
+        item = frappe.get_doc("Item", existing)
+        if not any(u.uom == "Nos" for u in item.uoms or []):
+            item.append("uoms", {"uom": "Nos", "conversion_factor": 1})
+            item.save(ignore_permissions=True)
         return existing
     item = frappe.get_doc(
         {
@@ -174,7 +178,7 @@ def initiate_registration_fee_payment(free_registrations=0):
     return checkout_context
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=True)
 def confirm_registration_fee_payment(
     integration_request, razorpay_payment_id, razorpay_order_id, razorpay_signature
 ):

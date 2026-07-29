@@ -84,9 +84,12 @@ def save_books_order(registration_data):
             school_info["school_code"] = school_info.get("ito_school_code")
 
         original_flag = frappe.flags.ignore_permissions
+        original_user = frappe.session.user
         frappe.flags.ignore_permissions = True
 
         try:
+            frappe.set_user("Administrator")
+
             customer = create_or_update_customer_books_order(school_info)
 
             create_or_update_address(customer, school_info)
@@ -116,6 +119,7 @@ def save_books_order(registration_data):
             }
 
         finally:
+            frappe.set_user(original_user)
             frappe.flags.ignore_permissions = original_flag
 
     except Exception as e:
@@ -785,110 +789,6 @@ def create_quotation_from_books_order(order_data):
         "message": "Quotation Updated" if is_update else "Quotation Created"
     }
 
-@frappe.whitelist()
-def create_sales_order_from_books_order(order_data):
-    data = (
-        json.loads(order_data)
-        if isinstance(order_data, str)
-        else order_data
-    )
-
-    customer_name = frappe.db.get_value(
-        "Portal User",
-        {"user": frappe.session.user},
-        "parent"
-    )
-
-    if not customer_name:
-        return {
-            "success": False,
-            "message": "Customer not found",
-            "alert": True
-        }
-
-    # -----------------------------------
-    # Filter valid items
-    # -----------------------------------
-
-    delivery_date = add_days(today(), 15)  # matches "Estimated 15 Working Days" shown in UI
-
-    valid_items = []
-    for row in data:
-        item_code = row.get("item")
-        qty = flt(row.get("qty"))
-        rate = flt(row.get("rate"))
-
-        if item_code and qty > 0:
-            valid_items.append({
-                "item_code": item_code,
-                "qty": qty,
-                "rate": rate,
-                "delivery_date": delivery_date
-            })
-
-    # -----------------------------------
-    # No items selected — return friendly alert
-    # -----------------------------------
-
-    if not valid_items:
-        return {
-            "success": True,
-            "sales_order": None,
-            "message": "No sales order created. Please select items if you want to create a sales order.",
-            "alert": True
-        }
-
-    # -----------------------------------
-    # Find existing Draft Sales Order
-    # -----------------------------------
-
-    sales_order_name = frappe.db.get_value(
-        "Sales Order",
-        {
-            "customer": customer_name,
-            "docstatus": 0
-        },
-        "name",
-        order_by="creation desc"
-    )
-
-    # -----------------------------------
-    # Update Existing or Create New
-    # -----------------------------------
-
-    if sales_order_name:
-        sales_order = frappe.get_doc("Sales Order", sales_order_name)
-        sales_order.set("items", [])
-        is_update = True
-    else:
-        sales_order = frappe.new_doc("Sales Order")
-        sales_order.customer = customer_name
-        sales_order.transaction_date = today()
-        sales_order.delivery_date = delivery_date
-        is_update = False
-
-    # -----------------------------------
-    # Append Items
-    # -----------------------------------
-
-    for item in valid_items:
-        sales_order.append("items", item)
-
-    # -----------------------------------
-    # Save
-    # -----------------------------------
-
-    if sales_order.is_new():
-        sales_order.insert(ignore_permissions=True)
-    else:
-        sales_order.save(ignore_permissions=True)
-
-    return {
-        "success": True,
-        "sales_order": sales_order.name,
-        "message": "Sales Order Updated" if is_update else "Sales Order Created"
-    }
-  
 import re
 import secrets
 from frappe.utils import formatdate, getdate, nowdate
@@ -908,6 +808,162 @@ def generate_consent_token(customer):
     })
 
     return {'token': token, 'url': full_url}
+
+from urllib.parse import parse_qs, urlparse
+from multi_company_razorpay.api import (
+    checkout_success,
+    create_payment_for_sales_invoice,
+    get_checkout_context,
+    get_settings_for_page,
+)
+
+PAGE = "Book Order"
+BOOKS_ORDER_INVOICE_REMARK = "Books Order Portal"
+
+
+def _get_valid_books_invoice_items(order_data):
+    data = json.loads(order_data) if isinstance(order_data, str) else order_data
+    valid_items = []
+
+    for row in data or []:
+        item_code = row.get("item")
+        qty = flt(row.get("qty"))
+        rate = flt(row.get("rate"))
+
+        if item_code and qty > 0:
+            valid_items.append({
+                "item_code": item_code,
+                "qty": qty,
+                "rate": rate,
+            })
+
+    return valid_items
+
+
+def _normalize_books_invoice_items(items):
+    return sorted(
+        (row.get("item_code"), flt(row.get("qty")), flt(row.get("rate")))
+        for row in items
+    )
+
+
+def _invoice_matches_books_order(invoice_name, valid_items):
+    invoice_items = frappe.get_all(
+        "Sales Invoice Item",
+        filters={"parent": invoice_name},
+        fields=["item_code", "qty", "rate"],
+        order_by="idx asc",
+    )
+    return _normalize_books_invoice_items(invoice_items) == _normalize_books_invoice_items(valid_items)
+
+
+def _find_existing_books_order_invoice(customer, company):
+    invoices = frappe.get_all(
+        "Sales Invoice",
+        filters={
+            "customer": customer,
+            "company": company,
+            "remarks": BOOKS_ORDER_INVOICE_REMARK,
+            "docstatus": ["!=", 2],
+        },
+        fields=["name", "docstatus", "outstanding_amount", "grand_total"],
+        order_by="creation desc",
+    )
+    return invoices[0] if invoices else None
+
+
+def _get_or_create_books_order_invoice(order_data, customer_name):
+    valid_items = _get_valid_books_invoice_items(order_data)
+    if not valid_items:
+        frappe.throw("Please select items before proceeding to payment")
+
+    company = get_settings_for_page(PAGE).company
+    existing = _find_existing_books_order_invoice(customer_name, company)
+
+    if existing and existing.docstatus == 1 and flt(existing.outstanding_amount) <= 0:
+        frappe.throw("This book order has already been paid.")
+
+    if existing and existing.docstatus == 1 and not _invoice_matches_books_order(existing.name, valid_items):
+        if flt(existing.outstanding_amount) < flt(existing.grand_total):
+            frappe.throw("An earlier invoice for this book order is partially paid. Please contact support.")
+        frappe.get_doc("Sales Invoice", existing.name).cancel()
+        existing = None
+
+    if existing and existing.docstatus == 0:
+        frappe.delete_doc("Sales Invoice", existing.name, ignore_permissions=True)
+        existing = None
+
+    if existing and existing.docstatus == 1:
+        return existing.name, flt(existing.outstanding_amount)
+
+    invoice = frappe.get_doc(
+        {
+            "doctype": "Sales Invoice",
+            "customer": customer_name,
+            "company": company,
+            "remarks": BOOKS_ORDER_INVOICE_REMARK,
+            "items": valid_items,
+        }
+    )
+    invoice.insert(ignore_permissions=True)
+    invoice.submit()
+    return invoice.name, flt(invoice.outstanding_amount)
+
+
+@frappe.whitelist()
+def initiate_books_order_payment(order_data):
+    session_customer = frappe.db.get_value(
+        "Portal User", {"user": frappe.session.user}, "parent"
+    )
+    if not session_customer:
+        frappe.throw("Please save School Information first.")
+
+    original_user = frappe.session.user
+    original_ignore_permissions = frappe.flags.ignore_permissions
+    try:
+        frappe.set_user("Administrator")
+        frappe.flags.ignore_permissions = True
+
+        invoice_name, pay_amount = _get_or_create_books_order_invoice(
+            order_data, session_customer
+        )
+        result = create_payment_for_sales_invoice(
+            sales_invoice=invoice_name,
+            amount=pay_amount,
+        )
+    finally:
+        frappe.flags.ignore_permissions = original_ignore_permissions
+        frappe.set_user(original_user)
+
+    checkout_token = parse_qs(urlparse(result["checkout_url"]).query).get("token", [None])[0]
+    if not checkout_token:
+        frappe.throw("Unable to start Razorpay checkout.")
+
+    checkout_context = get_checkout_context(checkout_token)
+    checkout_context["sales_invoice"] = invoice_name
+    return checkout_context
+
+@frappe.whitelist(allow_guest=True)
+def confirm_books_order_payment(
+    integration_request, razorpay_payment_id, razorpay_order_id, razorpay_signature
+):
+    result = checkout_success(
+        integration_request=integration_request,
+        razorpay_payment_id=razorpay_payment_id,
+        razorpay_order_id=razorpay_order_id,
+        razorpay_signature=razorpay_signature,
+    )
+
+    integration = frappe.get_doc("Integration Request", integration_request)
+    data = frappe.parse_json(integration.data or "{}")
+    transaction = frappe.get_doc("Razorpay Transaction", data["razorpay_transaction"])
+
+    return {
+        "paid": transaction.status == "Completed",
+        "payment_entry": transaction.payment_entry,
+        "sales_invoice": transaction.reference_docname,
+        "redirect_to": result.get("redirect_to"),
+    }
 
 
 @frappe.whitelist(allow_guest=True)

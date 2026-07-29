@@ -48,9 +48,16 @@ def _compute_grand_total(school_name, selected_class, selections):
         for s in get_dynamic_subjects(school_name, selected_class).get("subjects", [])
     }
 
-    exam_fee = wb_fee = sg_fee = yp_fee = tb_fee = 0.0
+    exam_fee = wb_fee = tb_fee = 0.0
     exam_count = 0
     selected_exam_fees = []
+
+    # We need to know if it's little champ to know whether to include tb/wb
+    # We can get this from the customer record since we have school_name
+    is_little_champ = False
+    customer_doc = frappe.db.get_value("Customer", {"customer_name": school_name}, ["custom_is_little_champ"], as_dict=True)
+    if customer_doc and customer_doc.custom_is_little_champ:
+        is_little_champ = True
 
     for sel in selections or []:
         subj = subjects.get(sel.get("subject_code"))
@@ -61,22 +68,29 @@ def _compute_grand_total(school_name, selected_class, selections):
             fee = flt(subj.get("exam_fee"))
             exam_fee += fee
             selected_exam_fees.append(fee)
-        if sel.get("wb") and subj.get("wb", {}).get("price") is not None:
-            wb_fee += flt(subj["wb"]["price"])
-        if sel.get("sg") and subj.get("sg", {}).get("price") is not None:
-            sg_fee += flt(subj["sg"]["price"])
-        if sel.get("yp") and subj.get("yp", {}).get("price") is not None:
-            yp_fee += flt(subj["yp"]["price"])
-        if sel.get("tb") and subj.get("tb", {}).get("price") is not None:
-            tb_fee += flt(subj["tb"]["price"])
+        
+        # Little Champ only — keep tb/wb fees
+        if is_little_champ:
+            if sel.get("tb") and subj.get("tb", {}).get("price") is not None:
+                tb_fee += flt(subj["tb"]["price"])
+            if sel.get("wb") and subj.get("wb", {}).get("price") is not None:
+                wb_fee += flt(subj["wb"]["price"])
 
     discount = min(selected_exam_fees) if exam_count >= 4 and selected_exam_fees else 0.0
-    return flt(exam_fee - discount + wb_fee + sg_fee + yp_fee + tb_fee)
+    
+    if is_little_champ:
+        return flt(tb_fee + wb_fee)
+    else:
+        return flt(exam_fee - discount)
 
 
 def _get_or_create_fee_item(company):
     existing = frappe.db.get_value("Item", {"item_name": FEE_ITEM_NAME}, "name")
     if existing:
+        item = frappe.get_doc("Item", existing)
+        if not any(u.uom == "Nos" for u in item.uoms or []):
+            item.append("uoms", {"uom": "Nos", "conversion_factor": 1})
+            item.save(ignore_permissions=True)
         return existing
     item = frappe.get_doc(
         {

@@ -55,6 +55,10 @@ def save_ito_registration(registration_data):
 
             # Create/update customer - saves to DB session
             customer = create_or_update_customer(school_info)
+            customer_doc = frappe.get_doc("Customer", customer)
+            if hasattr(customer_doc, "custom_registration_date"):
+                customer_doc.custom_registration_date = frappe.utils.nowdate()
+                customer_doc.save(ignore_permissions=True)
             
             # Create/update address - saves to DB session
             create_or_update_address(customer, school_info)
@@ -1639,6 +1643,9 @@ def save_parent_consent(data):
         selections = payload.get("selections", [])
         payment = payload.get("payment", {})
         token = payload.get("token")
+        
+        import uuid
+        book_order_token = str(uuid.uuid4())
 
         # 1. Map fields
         # Resolve via the consent token first (same lookup as get_school_by_token) -
@@ -1706,11 +1713,13 @@ def save_parent_consent(data):
         pc_doc.set("class", student_profile.get("class_grade"))
         pc_doc.section = student_profile.get("section")
         pc_doc.parent_name = student_profile.get("parent_name")
+        pc_doc.parent_email = student_profile.get("parent_email")
         pc_doc.city = student_profile.get("city")
         pc_doc.mobile_no = student_profile.get("parent_mobile")
         pc_doc.total_amount = total_amount
         pc_doc.sales_invoice = sales_invoice
         pc_doc.payment_entry = payment_entry
+        pc_doc.book_order_token = book_order_token
 
         # 3. Populate Child table
         if is_little_champ:
@@ -1743,15 +1752,12 @@ def save_parent_consent(data):
                         subject_name = found_sub
                 
                 pc_doc.append("student_consent", {
-                    "subject": subject_name,
-                    "practice_workbook": 1 if sel.get("wb") else 0,
-                    "student_guide": 1 if sel.get("sg") else 0,
-                    "prev_year_paper": 1 if sel.get("yp") else 0
+                    "subject": subject_name
                 })
         
         pc_doc.insert(ignore_permissions=True)
         
-        return {"success": True, "message": "Parent Consent registered successfully", "docname": pc_doc.name}
+        return {"success": True, "message": "Parent Consent registered successfully", "docname": pc_doc.name, "book_order_token": book_order_token}
         
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Save Parent Consent Error")
