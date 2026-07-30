@@ -152,7 +152,15 @@ def initiate_registration_fee_payment(free_registrations=0):
             }
         )
         invoice.insert(ignore_permissions=True)
-        invoice.submit(ignore_permissions=True)
+        
+        # submit() doesn't accept ignore_permissions - use frappe.flags instead
+        original_ignore_permissions = frappe.flags.ignore_permissions
+        try:
+            frappe.flags.ignore_permissions = True
+            invoice.submit()
+        finally:
+            frappe.flags.ignore_permissions = original_ignore_permissions
+        
         invoice_name = invoice.name
         pay_amount = flt(invoice.outstanding_amount)
 

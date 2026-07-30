@@ -877,6 +877,8 @@ def create_or_update_books_selection(
     return books_doc.name
 
 
+
+
 @frappe.whitelist(allow_guest=True)
 def get_customer_from_session_user():
 
@@ -1645,6 +1647,7 @@ def initiate_little_champ_books_order_payment(sales_order, customer=None):
         if sales_order_doc.customer != customer:
             frappe.throw(_('You are not allowed to pay for this order.'), frappe.PermissionError)
         if sales_order_doc.docstatus == 0:
+            sales_order_doc.flags.ignore_permissions = True
             sales_order_doc.submit()
         elif sales_order_doc.docstatus == 2:
             frappe.throw(_('This Sales Order has been cancelled.'))
@@ -1677,7 +1680,7 @@ def initiate_little_champ_books_order_payment(sales_order, customer=None):
         if not invoice_name:
             from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
 
-            sales_invoice = make_sales_invoice(sales_order_doc.name)
+            sales_invoice = make_sales_invoice(sales_order_doc.name, ignore_permissions=True)
             sales_invoice.set_posting_time = 1
             sales_invoice.insert(ignore_permissions=True)
             sales_invoice.submit()
@@ -1703,19 +1706,25 @@ def initiate_little_champ_books_order_payment(sales_order, customer=None):
 def confirm_little_champ_books_order_payment(
     integration_request, razorpay_payment_id, razorpay_order_id, razorpay_signature
 ):
-    result = checkout_success(
-        integration_request=integration_request,
-        razorpay_payment_id=razorpay_payment_id,
-        razorpay_order_id=razorpay_order_id,
-        razorpay_signature=razorpay_signature,
-    )
+    original_ignore_permissions = frappe.flags.ignore_permissions
+    try:
+        frappe.flags.ignore_permissions = True
 
-    integration = frappe.get_doc('Integration Request', integration_request)
-    data = frappe.parse_json(integration.data or '{}')
-    transaction = frappe.get_doc('Razorpay Transaction', data['razorpay_transaction'])
-    return {
-        'paid': transaction.status == 'Completed',
-        'payment_entry': transaction.payment_entry,
-        'sales_invoice': transaction.reference_docname,
-        'redirect_to': result.get('redirect_to'),
-    }
+        result = checkout_success(
+            integration_request=integration_request,
+            razorpay_payment_id=razorpay_payment_id,
+            razorpay_order_id=razorpay_order_id,
+            razorpay_signature=razorpay_signature,
+        )
+
+        integration = frappe.get_doc('Integration Request', integration_request)
+        data = frappe.parse_json(integration.data or '{}')
+        transaction = frappe.get_doc('Razorpay Transaction', data['razorpay_transaction'])
+        return {
+            'paid': transaction.status == 'Completed',
+            'payment_entry': transaction.payment_entry,
+            'sales_invoice': transaction.reference_docname,
+            'redirect_to': result.get('redirect_to'),
+        }
+    finally:
+        frappe.flags.ignore_permissions = original_ignore_permissions
