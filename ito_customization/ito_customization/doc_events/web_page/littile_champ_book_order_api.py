@@ -33,14 +33,9 @@ def ensure_subject_exists(subject_name):
 @frappe.whitelist(allow_guest=True)
 def save_little_champ_book_order(order_data):
     original_flag = frappe.flags.ignore_permissions
-    original_user = frappe.session.user
 
     try:
-        # Customer.on_update updates the linked primary Contact through frappe.set_value,
-        # which does its own permission check. This endpoint has already established the
-        # authenticated portal user's Customer context, so elevate only while persisting
-        # the Customer/contact/address records and restore the user below.
-        frappe.set_user("Administrator")
+        frappe.flags.ignore_permissions = True
         data = (
             json.loads(order_data)
             if isinstance(order_data, str)
@@ -51,8 +46,6 @@ def save_little_champ_book_order(order_data):
             "Little Champ Book Order Data",
             json.dumps(data, indent=2)
         )
-
-        frappe.flags.ignore_permissions = True
 
         school_info = data.get("school_info", {})
         books_selection = data.get("books_selection", [])
@@ -146,7 +139,6 @@ def save_little_champ_book_order(order_data):
         }
 
     finally:
-        frappe.set_user(original_user)
         frappe.flags.ignore_permissions = original_flag
 
 
@@ -1645,10 +1637,8 @@ def initiate_little_champ_books_order_payment(sales_order, customer=None):
     if not customer:
         frappe.throw(_('Please save School Information first.'))
 
-    original_user = frappe.session.user
     original_ignore_permissions = frappe.flags.ignore_permissions
     try:
-        frappe.set_user('Administrator')
         frappe.flags.ignore_permissions = True
 
         sales_order_doc = frappe.get_doc('Sales Order', sales_order)
@@ -1699,7 +1689,6 @@ def initiate_little_champ_books_order_payment(sales_order, customer=None):
         )
     finally:
         frappe.flags.ignore_permissions = original_ignore_permissions
-        frappe.set_user(original_user)
 
     token = parse_qs(urlparse(result['checkout_url']).query).get('token', [None])[0]
     if not token:

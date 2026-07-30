@@ -159,16 +159,16 @@ def initiate_registration_fee_payment(free_registrations=0):
     # create_payment_for_sales_invoice enforces a real Sales Invoice read-permission
     # check, which portal Customer users don't have directly. _get_session_customer()
     # above already established that the current session legitimately owns `customer`,
-    # and invoice_name is always scoped to that same customer, so it's safe to elevate
-    # just for this one call.
-    session_user = frappe.session.user
+    # and invoice_name is always scoped to that same customer, so it's safe to bypass
+    # permissions just for this one call.
+    original_ignore_permissions = frappe.flags.ignore_permissions
     try:
-        frappe.set_user("Administrator")
+        frappe.flags.ignore_permissions = True
         result = create_payment_for_sales_invoice(
             sales_invoice=invoice_name, amount=pay_amount, page=PAGE
         )
     finally:
-        frappe.set_user(session_user)
+        frappe.flags.ignore_permissions = original_ignore_permissions
     token = parse_qs(urlparse(result["checkout_url"]).query).get("token", [None])[0]
     if not token:
         frappe.throw(_("Unable to start Razorpay checkout."))

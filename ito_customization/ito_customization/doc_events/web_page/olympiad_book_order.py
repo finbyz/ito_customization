@@ -84,12 +84,9 @@ def save_books_order(registration_data):
             school_info["school_code"] = school_info.get("ito_school_code")
 
         original_flag = frappe.flags.ignore_permissions
-        original_user = frappe.session.user
         frappe.flags.ignore_permissions = True
 
         try:
-            frappe.set_user("Administrator")
-
             customer = create_or_update_customer_books_order(school_info)
 
             create_or_update_address(customer, school_info)
@@ -119,7 +116,6 @@ def save_books_order(registration_data):
             }
 
         finally:
-            frappe.set_user(original_user)
             frappe.flags.ignore_permissions = original_flag
 
     except Exception as e:
@@ -886,7 +882,7 @@ def _get_or_create_books_order_invoice(order_data, customer_name):
     if existing and existing.docstatus == 1 and not _invoice_matches_books_order(existing.name, valid_items):
         if flt(existing.outstanding_amount) < flt(existing.grand_total):
             frappe.throw("An earlier invoice for this book order is partially paid. Please contact support.")
-        frappe.get_doc("Sales Invoice", existing.name).cancel()
+        inv = frappe.get_doc("Sales Invoice", existing.name); inv.flags.ignore_permissions = True; inv.cancel()
         existing = None
 
     if existing and existing.docstatus == 0:
@@ -906,11 +902,11 @@ def _get_or_create_books_order_invoice(order_data, customer_name):
         }
     )
     invoice.insert(ignore_permissions=True)
-    invoice.submit()
+    invoice.flags.ignore_permissions = True; invoice.submit()
     return invoice.name, flt(invoice.outstanding_amount)
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=True)
 def initiate_books_order_payment(order_data):
     session_customer = frappe.db.get_value(
         "Portal User", {"user": frappe.session.user}, "parent"
@@ -918,10 +914,8 @@ def initiate_books_order_payment(order_data):
     if not session_customer:
         frappe.throw("Please save School Information first.")
 
-    original_user = frappe.session.user
     original_ignore_permissions = frappe.flags.ignore_permissions
     try:
-        frappe.set_user("Administrator")
         frappe.flags.ignore_permissions = True
 
         invoice_name, pay_amount = _get_or_create_books_order_invoice(
@@ -933,7 +927,6 @@ def initiate_books_order_payment(order_data):
         )
     finally:
         frappe.flags.ignore_permissions = original_ignore_permissions
-        frappe.set_user(original_user)
 
     checkout_token = parse_qs(urlparse(result["checkout_url"]).query).get("token", [None])[0]
     if not checkout_token:
@@ -947,24 +940,29 @@ def initiate_books_order_payment(order_data):
 def confirm_books_order_payment(
     integration_request, razorpay_payment_id, razorpay_order_id, razorpay_signature
 ):
-    result = checkout_success(
-        integration_request=integration_request,
-        razorpay_payment_id=razorpay_payment_id,
-        razorpay_order_id=razorpay_order_id,
-        razorpay_signature=razorpay_signature,
-    )
+    original_ignore_permissions = frappe.flags.ignore_permissions
+    try:
+        frappe.flags.ignore_permissions = True
 
-    integration = frappe.get_doc("Integration Request", integration_request)
-    data = frappe.parse_json(integration.data or "{}")
-    transaction = frappe.get_doc("Razorpay Transaction", data["razorpay_transaction"])
+        result = checkout_success(
+            integration_request=integration_request,
+            razorpay_payment_id=razorpay_payment_id,
+            razorpay_order_id=razorpay_order_id,
+            razorpay_signature=razorpay_signature,
+        )
 
-    return {
-        "paid": transaction.status == "Completed",
-        "payment_entry": transaction.payment_entry,
-        "sales_invoice": transaction.reference_docname,
-        "redirect_to": result.get("redirect_to"),
-    }
+        integration = frappe.get_doc("Integration Request", integration_request)
+        data = frappe.parse_json(integration.data or "{}")
+        transaction = frappe.get_doc("Razorpay Transaction", data["razorpay_transaction"])
 
+        return {
+            "paid": transaction.status == "Completed",
+            "payment_entry": transaction.payment_entry,
+            "sales_invoice": transaction.reference_docname,
+            "redirect_to": result.get("redirect_to"),
+        }
+    finally:
+        frappe.flags.ignore_permissions = original_ignore_permissions
 
 @frappe.whitelist(allow_guest=True)
 def get_school_by_token(token):
@@ -995,18 +993,56 @@ def extract_class_number(value):
     match = re.search(r'(\d+)', str(value))
     return int(match.group(1)) if match else None
 
-
 @frappe.whitelist(allow_guest=True)
-def get_class_options(is_little_champ=0):
-    """Returns the ordered list of Class names for the given category."""
+def get_class_options(token, is_little_champ=0):
+    """Returns the ordered list of Class names actually configured
+    for this school's assigned subjects."""
     is_little_champ = int(is_little_champ)
 
-    classes = frappe.get_all(
-        'Class',
-        filters={'little_champ': is_little_champ},
-        fields=['name']
-    )
-    names = [c.name for c in classes]
+    customer = frappe.db.get_value('Customer', {'custom_consent_token': token}, 'name')
+    if not customer:
+        frappe.throw('Invalid or expired link')
+
+    es_name = frappe.db.get_value('Exams Summary', {'customer': customer})
+    if not es_name:
+        return {'classes': []}
+
+    es_doc = frappe.get_doc('Exams Summary', es_name)
+    if not es_doc.exam_detail:
+        return {'classes': []}
+
+    yearly_exam = frappe.get_doc('Yearly Exam Date', es_doc.exam_detail)
+
+    found = set()
+
+    for row in yearly_exam.target_dates:
+        if not row.subject or not frappe.db.exists('School Subject', row.subject):
+            continue
+
+        subject_doc = frappe.get_doc('School Subject', row.subject)
+
+        if bool(subject_doc.little_champ) != bool(is_little_champ):
+            continue
+
+        if is_little_champ:
+            child_tables = [subject_doc.text_book, subject_doc.work_book]
+            for table in child_tables:
+                for d in table:
+                    if d.get('class'):
+                        found.add(str(d.get('class')))
+        else:
+            child_tables = [
+                subject_doc.practice_workbook_110,
+                subject_doc.student_guide_220,
+                subject_doc.prev_year_paper_160,
+            ]
+            for table in child_tables:
+                for d in table:
+                    cls = extract_class_number(d.get('class'))
+                    if cls is not None:
+                        found.add(str(cls))
+
+    names = list(found)
 
     if is_little_champ:
         names.sort(

@@ -115,14 +115,14 @@ def initiate_little_champ_registration_payment(customer=None):
         invoice_name = invoice.name
         pay_amount = flt(invoice.outstanding_amount)
 
-    original_user = frappe.session.user
+    original_ignore_permissions = frappe.flags.ignore_permissions
     try:
-        frappe.set_user("Administrator")
+        frappe.flags.ignore_permissions = True
         result = create_payment_for_sales_invoice(
             sales_invoice=invoice_name, amount=pay_amount, page=PAGE
         )
     finally:
-        frappe.set_user(original_user)
+        frappe.flags.ignore_permissions = original_ignore_permissions
 
     token = parse_qs(urlparse(result["checkout_url"]).query).get("token", [None])[0]
     if not token:
