@@ -104,9 +104,10 @@ def save_books_order(registration_data):
                 )
 
             books_selection = data.get("books_selection", [])
+            is_submitted = bool(data.get("submitted", False))
 
             if books_selection:
-                create_or_update_books_selection(customer, books_selection)
+                create_or_update_books_selection(customer, books_selection, is_submitted=is_submitted)
 
             # NO explicit commit - let Frappe handle it
             return {
@@ -134,7 +135,8 @@ def save_books_order(registration_data):
 
 def create_or_update_books_selection(
     customer_name,
-    books_selection
+    books_selection,
+    is_submitted=False
 ):
     books_name = frappe.db.get_value(
         "Books Selection",
@@ -209,6 +211,9 @@ def create_or_update_books_selection(
                     )
             }
         )
+
+    if is_submitted:
+        books_doc.is_submitted = 1
 
     if books_doc.is_new():
         books_doc.insert(
@@ -963,6 +968,56 @@ def confirm_books_order_payment(
         }
     finally:
         frappe.flags.ignore_permissions = original_ignore_permissions
+
+
+@frappe.whitelist(allow_guest=True)
+def get_books_order_payment_status():
+    """Check if the current session customer's books order invoice has been paid."""
+    session_customer = frappe.db.get_value(
+        "Portal User", {"user": frappe.session.user}, "parent"
+    )
+    if not session_customer:
+        return {"paid": False}
+
+    # Build filters — company is optional (fall back gracefully if settings missing)
+    filters = {
+        "customer": session_customer,
+        "remarks": BOOKS_ORDER_INVOICE_REMARK,
+        "docstatus": 1,
+    }
+    try:
+        company = get_settings_for_page(PAGE).company
+        if company:
+            filters["company"] = company
+    except Exception:
+        pass  # No Razorpay page settings configured — search across all companies
+
+    invoices = frappe.get_all(
+        "Sales Invoice",
+        filters=filters,
+        fields=["name", "outstanding_amount"],
+        order_by="creation desc",
+        limit=1,
+    )
+
+    if not invoices:
+        return {"paid": False}
+
+    invoice = invoices[0]
+    if flt(invoice.outstanding_amount) > 0:
+        return {"paid": False, "sales_invoice": invoice.name}
+
+    payment_entry = frappe.db.get_value(
+        "Payment Entry Reference",
+        {"reference_doctype": "Sales Invoice", "reference_name": invoice.name},
+        "parent",
+        order_by="creation desc",
+    )
+    return {
+        "paid": True,
+        "sales_invoice": invoice.name,
+        "payment_entry": payment_entry,
+    }
 
 @frappe.whitelist(allow_guest=True)
 def get_school_by_token(token):

@@ -9,6 +9,7 @@
   "customer",
   "academic_year",
   "order_date",
+  "is_submitted",
   "select_books"
  ],
  "fields": [
@@ -35,13 +36,19 @@
    "fieldname": "order_date",
    "fieldtype": "Date",
    "label": "Order Date"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_submitted",
+   "fieldtype": "Check",
+   "label": "Is Submitted"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-11 09:52:18.664424",
- "modified_by": "kaustubh.sharma@finbyz.tech",
+ "modified": "2026-07-30 12:02:00.000000",
+ "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Books Selection",
  "naming_rule": "By fieldname",

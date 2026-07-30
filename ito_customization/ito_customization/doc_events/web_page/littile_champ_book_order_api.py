@@ -1667,7 +1667,17 @@ def initiate_little_champ_books_order_payment(sales_order, customer=None):
         if existing_invoice:
             invoice = existing_invoice[0]
             if invoice.docstatus == 1 and flt(invoice.outstanding_amount) <= 0:
-                frappe.throw(_('This book order has already been paid.'))
+                payment_entry = frappe.db.get_value(
+                    "Payment Entry Reference",
+                    {"reference_doctype": "Sales Invoice", "reference_name": invoice.name},
+                    "parent",
+                    order_by="creation desc",
+                )
+                return {
+                    "already_paid": True,
+                    "sales_invoice": invoice.name,
+                    "payment_entry": payment_entry,
+                }
             if invoice.docstatus == 1:
                 invoice_name = invoice.name
                 pay_amount = flt(invoice.outstanding_amount)
@@ -1728,3 +1738,56 @@ def confirm_little_champ_books_order_payment(
         }
     finally:
         frappe.flags.ignore_permissions = original_ignore_permissions
+
+
+@frappe.whitelist(allow_guest=True)
+def get_little_champ_books_order_payment_status(sales_order=None):
+    if not sales_order:
+        session_customer = frappe.db.get_value('Portal User', {'user': frappe.session.user}, 'parent')
+        if not session_customer:
+            return {"paid": False}
+        
+        # Find latest Sales Order for this customer
+        sales_order_doc = frappe.db.sql(
+            """
+            select so.name
+            from `tabSales Order` so
+            where so.customer = %s
+            order by so.creation desc limit 1
+            """,
+            session_customer,
+            as_dict=True
+        )
+        if not sales_order_doc:
+            return {"paid": False}
+            
+        sales_order = sales_order_doc[0].name
+
+    existing_invoice = frappe.db.sql(
+        """
+        select si.name, si.docstatus, si.outstanding_amount
+        from `tabSales Invoice` si
+        inner join `tabSales Invoice Item` sii on sii.parent = si.name
+        where sii.sales_order = %s and si.docstatus = 1
+        order by si.creation desc limit 1
+        """,
+        sales_order,
+        as_dict=True,
+    )
+    
+    if existing_invoice:
+        invoice = existing_invoice[0]
+        if flt(invoice.outstanding_amount) <= 0:
+            payment_entry = frappe.db.get_value(
+                "Payment Entry Reference",
+                {"reference_doctype": "Sales Invoice", "reference_name": invoice.name},
+                "parent",
+                order_by="creation desc",
+            )
+            return {
+                "paid": True,
+                "sales_invoice": invoice.name,
+                "payment_entry": payment_entry,
+            }
+            
+    return {"paid": False}

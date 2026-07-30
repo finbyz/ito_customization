@@ -647,9 +647,11 @@ def get_customer_from_session_user():
 
 	# Books Selection
 	books_selection = []
+	books_order_submitted = False
 	bs_name = frappe.db.get_value("Books Selection", {"customer": customer.name})
 	if bs_name:
 		bs_doc = frappe.get_doc("Books Selection", bs_name)
+		books_order_submitted = bool(bs_doc.is_submitted)
 		for row in bs_doc.select_books:
 			books_selection.append({
 				"subject": row.subject,
@@ -674,6 +676,7 @@ def get_customer_from_session_user():
 		"session_user": frappe.session.user,
 		"teachers": teachers_data,
 		"books_selection": books_selection,
+		"books_order_submitted": books_order_submitted,
 		"custom_is_little_champ": customer.get("custom_is_little_champ") or 0,
 	}
 
@@ -1709,7 +1712,7 @@ def save_parent_consent(data):
 		pc_doc.set("class", student_profile.get("class_grade"))
 		pc_doc.section = student_profile.get("section")
 		pc_doc.parent_name = student_profile.get("parent_name")
-		pc_doc.parent_email = student_profile.get("parent_email")
+		pc_doc.email = student_profile.get("parent_email")
 		pc_doc.city = student_profile.get("city")
 		pc_doc.mobile_no = student_profile.get("parent_mobile")
 		pc_doc.total_amount = total_amount
@@ -1717,24 +1720,28 @@ def save_parent_consent(data):
 		pc_doc.payment_entry = payment_entry
 		pc_doc.book_order_token = book_order_token
 
-		# 3. Populate Child table
-		if is_little_champ:
-			for sel in selections:
-				sub_code = sel.get("subject_code")
-				subject_name = sub_code
-				
-				# Check if subject is valid/exists in School Subject directly
-				if not frappe.db.exists("School Subject", sub_code):
-					# Try fallback to matching the code inside brackets like "(LCAO)"
-					found_sub = frappe.db.get_value("School Subject", {"name": ["like", f"%({sub_code})%"]}, "name")
-					if found_sub:
-						subject_name = found_sub
-				
-				pc_doc.append("little_champ_consent", {
-					"subject": subject_name,
-					"text_book": 1 if sel.get("tb") else 0,
-					"work_book": 1 if sel.get("wb") else 0
-				})
+		# 3. Populate Book Order Selection child table
+		for sel in selections:
+			sub_code = sel.get("subject_code")
+			subject_name = sub_code
+
+			# Resolve School Subject
+			if not frappe.db.exists("School Subject", sub_code):
+				found_sub = frappe.db.get_value(
+					"School Subject",
+					{"name": ["like", f"%({sub_code})%"]},
+					"name"
+				)
+				if found_sub:
+					subject_name = found_sub
+
+			pc_doc.append("book_order_selection", {
+				"subject": subject_name,
+				"workbook": 1 if sel.get("wb") else 0,
+				"student_guide": 1 if sel.get("sg") else 0,
+				"past_paper": 1 if sel.get("yp") else 0,
+				"text_book": 1 if sel.get("tb") else 0,
+			})
 		else:
 			for sel in selections:
 				sub_code = sel.get("subject_code")
@@ -1747,8 +1754,12 @@ def save_parent_consent(data):
 					if found_sub:
 						subject_name = found_sub
 				
-				pc_doc.append("student_consent", {
-					"subject": subject_name
+				pc_doc.append("book_order_selection", {
+					"subject": subject_name,
+					"workbook": 1 if sel.get("wb") else 0,
+					"student_guide": 1 if sel.get("sg") else 0,
+					"past_paper": 1 if sel.get("yp") else 0,
+					"text_book": 1 if sel.get("tb") else 0,
 				})
 		
 		pc_doc.insert(ignore_permissions=True)

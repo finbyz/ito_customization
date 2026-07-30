@@ -92,7 +92,18 @@ def initiate_little_champ_registration_payment(customer=None):
 
     existing = _find_fee_invoice(customer, company)
     if existing and existing.docstatus == 1 and flt(existing.outstanding_amount) <= 0:
-        frappe.throw(_("Little Champ registration fee has already been paid."))
+        # Return friendly signal instead of throwing — frontend will show "already paid" message
+        payment_entry = frappe.db.get_value(
+            "Payment Entry Reference",
+            {"reference_doctype": "Sales Invoice", "reference_name": existing.name},
+            "parent",
+            order_by="creation desc",
+        )
+        return {
+            "already_paid": True,
+            "sales_invoice": existing.name,
+            "payment_entry": payment_entry,
+        }
     if existing and existing.docstatus == 1 and abs(flt(existing.grand_total) - amount) > 0.01:
         frappe.get_doc("Sales Invoice", existing.name).cancel()
         existing = None
@@ -151,3 +162,55 @@ def confirm_little_champ_registration_payment(
         "sales_invoice": transaction.reference_docname,
         "redirect_to": result.get("redirect_to"),
     }
+
+
+@frappe.whitelist(allow_guest=True)
+def get_little_champ_payment_status():
+    """Check if the current session customer's Little Champ fee has been paid."""
+    session_customer = frappe.db.get_value(
+        "Portal User", {"user": frappe.session.user}, "parent"
+    )
+    if not session_customer:
+        return {"paid": False}
+
+    try:
+        company = get_settings_for_page(PAGE).company
+    except Exception:
+        company = None
+
+    filters = {
+        "customer": session_customer,
+        "docstatus": 1,
+    }
+    if company:
+        filters["company"] = company
+
+    invoices = frappe.get_all(
+        "Sales Invoice",
+        filters=filters,
+        fields=["name", "outstanding_amount"],
+        order_by="creation desc",
+    )
+
+    try:
+        fee_item = _get_or_create_fee_item(company or "")
+    except Exception:
+        fee_item = None
+
+    for invoice in invoices:
+        if fee_item and not frappe.db.exists("Sales Invoice Item", {"parent": invoice.name, "item_code": fee_item}):
+            continue
+        if flt(invoice.outstanding_amount) <= 0:
+            payment_entry = frappe.db.get_value(
+                "Payment Entry Reference",
+                {"reference_doctype": "Sales Invoice", "reference_name": invoice.name},
+                "parent",
+                order_by="creation desc",
+            )
+            return {
+                "paid": True,
+                "sales_invoice": invoice.name,
+                "payment_entry": payment_entry,
+            }
+
+    return {"paid": False}

@@ -1,0 +1,20 @@
+{
+ "actions": [],
+ "creation": "2026-07-30 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["subject", "workbook", "student_guide", "past_paper", "text_book"],
+ "fields": [
+  { "fieldname": "subject", "fieldtype": "Link", "label": "Subject", "options": "School Subject", "in_list_view": 1 },
+  { "fieldname": "workbook", "fieldtype": "Check", "label": "Workbook", "in_list_view": 1 },
+  { "fieldname": "student_guide", "fieldtype": "Check", "label": "Student Guide", "in_list_view": 1 },
+  { "fieldname": "past_paper", "fieldtype": "Check", "label": "Past Paper", "in_list_view": 1 },
+  { "fieldname": "text_book", "fieldtype": "Check", "label": "Text Book", "in_list_view": 1 }
+ ],
+ "istable": 1,
+ "module": "ITO Customization",
+ "name": "Book Order Selection CT",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC"
+}
