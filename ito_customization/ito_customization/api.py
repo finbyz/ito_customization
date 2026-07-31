@@ -1693,22 +1693,13 @@ def save_parent_consent(data):
 		gender = gender_map.get(student_profile.get("gender"), student_profile.get("gender"))
 		
 		# 2. Create Parent Consent doc
-		pc_doc = frappe.new_doc("Parent Consent")
+		pc_doc = frappe.new_doc("Parent Consent Registration")
 		pc_doc.customer = customer
 		pc_doc.is_little_champ = 1 if is_little_champ else 0
 		pc_doc.student_name = student_profile.get("student_name")
 		pc_doc.gender = gender
-		pc_doc.class_grade = student_profile.get("class_grade")  # Wait, let's verify if the fieldname is class or class_grade in json? Wait! Let's check parent_consent.json again!
-		# In parent_consent.json:
-		# {
-		#  "fieldname": "class",
-		#  "fieldtype": "Link",
-		#  "label": "Class",
-		#  "options": "Class"
-		# }
-		# The fieldname in json is "class"! Let's use pc_doc.set("class", ...) or getattr/setattr because "class" is a reserved keyword in python.
-		# Frappe docs use pc_doc.set("class", ...) or pc_doc.class is sometimes problematic in Python, but let's use:
-		# pc_doc.set("class", student_profile.get("class_grade"))
+		# Fieldname in parent_consent.json is "class" (reserved word in Python),
+		# so it must be set via pc_doc.set(...) rather than attribute access.
 		pc_doc.set("class", student_profile.get("class_grade"))
 		pc_doc.section = student_profile.get("section")
 		pc_doc.parent_name = student_profile.get("parent_name")
@@ -1735,33 +1726,14 @@ def save_parent_consent(data):
 				if found_sub:
 					subject_name = found_sub
 
-			pc_doc.append("book_order_selection", {
-				"subject": subject_name,
-				"workbook": 1 if sel.get("wb") else 0,
-				"student_guide": 1 if sel.get("sg") else 0,
-				"past_paper": 1 if sel.get("yp") else 0,
-				"text_book": 1 if sel.get("tb") else 0,
-			})
-		else:
-			for sel in selections:
-				sub_code = sel.get("subject_code")
-				subject_name = sub_code
-				
-				# Check if subject is valid/exists in School Subject directly
-				if not frappe.db.exists("School Subject", sub_code):
-					# Try fallback to matching the code inside brackets like "(IMO)"
-					found_sub = frappe.db.get_value("School Subject", {"name": ["like", f"%({sub_code})%"]}, "name")
-					if found_sub:
-						subject_name = found_sub
-				
-				pc_doc.append("book_order_selection", {
-					"subject": subject_name,
-					"workbook": 1 if sel.get("wb") else 0,
-					"student_guide": 1 if sel.get("sg") else 0,
-					"past_paper": 1 if sel.get("yp") else 0,
-					"text_book": 1 if sel.get("tb") else 0,
-				})
-		
+			# pc_doc.append("book_order_selection", {
+			# 	"subject": subject_name,
+			# 	"workbook": 1 if sel.get("wb") else 0,
+			# 	"student_guide": 1 if sel.get("sg") else 0,
+			# 	"past_paper": 1 if sel.get("yp") else 0,
+			# 	"text_book": 1 if sel.get("tb") else 0,
+			# })
+
 		pc_doc.insert(ignore_permissions=True)
 		
 		return {"success": True, "message": "Parent Consent registered successfully", "docname": pc_doc.name, "book_order_token": book_order_token}

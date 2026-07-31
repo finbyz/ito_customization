@@ -881,8 +881,11 @@ def _get_or_create_books_order_invoice(order_data, customer_name):
     company = get_settings_for_page(PAGE).company
     existing = _find_existing_books_order_invoice(customer_name, company)
 
+    # ═══════════════════════════════════════════════════════════════
+    # FIXED: Fully paid invoice → create a fresh one instead of throwing
+    # ═══════════════════════════════════════════════════════════════
     if existing and existing.docstatus == 1 and flt(existing.outstanding_amount) <= 0:
-        frappe.throw("This book order has already been paid.")
+        existing = None
 
     if existing and existing.docstatus == 1 and not _invoice_matches_books_order(existing.name, valid_items):
         if flt(existing.outstanding_amount) < flt(existing.grand_total):
