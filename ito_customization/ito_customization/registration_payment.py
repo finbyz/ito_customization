@@ -119,8 +119,8 @@ def initiate_registration_fee_payment(free_registrations=0):
         frappe.throw(_("No outstanding registration fee to pay."))
 
     existing = _find_registration_fee_invoice(customer, company)
-    if existing and existing.docstatus == 1 and flt(existing.outstanding_amount) <= 0:
-        frappe.throw(_("Registration fee has already been paid."))
+    # if existing and existing.docstatus == 1 and flt(existing.outstanding_amount) <= 0:
+    #     frappe.throw(_("Registration fee has already been paid."))
 
     # The fee can change between two "Pay Now" clicks (e.g. more students added
     # to Exams Summary after an earlier unpaid invoice was created) - an unpaid
