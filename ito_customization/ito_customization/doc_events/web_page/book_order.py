@@ -36,7 +36,7 @@ def get_book_order_prefill(token):
             "parent_name": reg.parent_name,
             "parent_mobile": reg.mobile_no,
             "city": reg.city,
-            "parent_email": reg.parent_email,   # StudentProfile contract unchanged
+            "parent_email": reg.email,  # StudentProfile contract unchanged
         },
     }
 
@@ -72,7 +72,7 @@ def confirm_book_order_payment(integration_request, razorpay_payment_id, razorpa
         bo.is_little_champ = reg.is_little_champ
         bo.student_name = reg.student_name
         bo.parent_name = reg.parent_name
-        bo.email = reg.parent_email             # note the field-name mismatch
+        bo.email = reg.email            # note the field-name mismatch
         bo.city = reg.city
         bo.gender = reg.gender
         bo.mobile_no = reg.mobile_no

@@ -1,135 +1,73 @@
 {
- "actions": [],
- "allow_rename": 1,
- "creation": "2026-07-27 00:00:00.000000",
- "doctype": "DocType",
- "engine": "InnoDB",
- "field_order": [
-  "customer",
-  "column_break_fual",
-  "is_little_champ",
-  "section_break_crlt",
-  "student_name",
-  "parent_name",
-  "city",
-  "column_break_vbgb",
-  "gender",
-  "mobile_no",
-  "email",
-  "column_break_mwzd",
-  "section",
-  "class",
-  "amended_from"
- ],
- "fields": [
-  {
-   "fieldname": "customer",
-   "fieldtype": "Link",
-   "label": "Customer",
-   "options": "Customer"
-  },
-  {
-   "fieldname": "column_break_fual",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "0",
-   "fieldname": "is_little_champ",
-   "fieldtype": "Check",
-   "label": "Is Little Champ"
-  },
-  {
-   "fieldname": "section_break_crlt",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "student_name",
-   "fieldtype": "Data",
-   "label": "Student Name"
-  },
-  {
-   "fieldname": "parent_name",
-   "fieldtype": "Data",
-   "label": "Parent Name"
-  },
-  {
-   "fieldname": "city",
-   "fieldtype": "Data",
-   "label": "City"
-  },
-  {
-   "fieldname": "column_break_vbgb",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "gender",
-   "fieldtype": "Select",
-   "label": "Gender",
-   "options": "\nBoy\nGirl"
-  },
-  {
-   "fieldname": "mobile_no",
-   "fieldtype": "Data",
-   "label": "Mobile No"
-  },
-  {
-   "fieldname": "email",
-   "fieldtype": "Data",
-   "label": "Email",
-   "options": "Email"
-  },
-  {
-   "fieldname": "column_break_mwzd",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "section",
-   "fieldtype": "Data",
-   "label": "Section"
-  },
-  {
-   "fieldname": "class",
-   "fieldtype": "Link",
-   "label": "Class",
-   "options": "Class"
-  },
-  {
-   "fieldname": "amended_from",
-   "fieldtype": "Link",
-   "label": "Amended From",
-   "no_copy": 1,
-   "options": "Parent Consent Registration",
-   "print_hide": 1,
-   "read_only": 1,
-   "search_index": 1
-  }
- ],
- "grid_page_length": 50,
- "index_web_pages_for_search": 1,
- "is_submittable": 1,
- "links": [],
- "modified": "2026-07-27 00:00:00.000000",
- "modified_by": "Administrator",
- "module": "ITO Customization",
- "name": "Parent Consent Registration",
- "owner": "Administrator",
- "permissions": [
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  }
- ],
- "row_format": "Dynamic",
- "rows_threshold_for_grid_search": 20,
- "sort_field": "creation",
- "sort_order": "DESC",
- "states": []
+    "actions": [],
+    "allow_rename": 1,
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "customer",
+        "column_break_fual",
+        "is_little_champ",
+        "section_break_crlt",
+        "student_name",
+        "parent_name",
+        "parent_email",
+        "city",
+        "column_break_vbgb",
+        "gender",
+        "mobile_no",
+        "column_break_mwzd",
+        "section",
+        "class",
+        "section_break_qbzf",
+        "student_consent",
+        "little_champ_consent",
+        "payment_section",
+        "total_amount",
+        "column_break_payment",
+        "sales_invoice",
+        "payment_entry",
+        "book_order_token",
+        "amended_from"
+    ],
+    "fields": [
+        { "fieldname": "customer", "fieldtype": "Link", "label": "Customer", "options": "Customer" },
+        { "fieldname": "section_break_crlt", "fieldtype": "Section Break" },
+        { "fieldname": "student_name", "fieldtype": "Data", "label": "Student Name" },
+        { "fieldname": "gender", "fieldtype": "Select", "label": "Gender", "options": "\nBoy\nGirl" },
+        { "fieldname": "class", "fieldtype": "Link", "label": "Class", "options": "Class" },
+        { "fieldname": "section", "fieldtype": "Data", "label": "Section" },
+        { "fieldname": "parent_name", "fieldtype": "Data", "label": "Parent Name" },
+        { "fieldname": "parent_email", "fieldtype": "Data", "label": "Parent Email" },
+        { "fieldname": "city", "fieldtype": "Data", "label": "City" },
+        { "fieldname": "column_break_vbgb", "fieldtype": "Column Break" },
+        { "fieldname": "mobile_no", "fieldtype": "Data", "label": "Mobile No" },
+        { "fieldname": "column_break_mwzd", "fieldtype": "Column Break" },
+        { "fieldname": "section_break_qbzf", "fieldtype": "Section Break" },
+        { "depends_on": "eval:doc.is_little_champ == 0", "fieldname": "student_consent", "fieldtype": "Table", "label": "Student Consent", "options": "Consent Student CT" },
+        { "depends_on": "is_little_champ", "fieldname": "little_champ_consent", "fieldtype": "Table", "label": "Little Champ Consent", "options": "Consent LC CT" },
+        { "fieldname": "column_break_fual", "fieldtype": "Column Break" },
+        { "default": "0", "fieldname": "is_little_champ", "fieldtype": "Check", "label": "Is Little Champ" },
+        { "fieldname": "payment_section", "fieldtype": "Section Break", "label": "Payment" },
+        { "fieldname": "total_amount", "fieldtype": "Currency", "label": "Total Amount", "read_only": 1 },
+        { "fieldname": "column_break_payment", "fieldtype": "Column Break" },
+        { "fieldname": "sales_invoice", "fieldtype": "Link", "label": "Sales Invoice", "options": "Sales Invoice", "read_only": 1 },
+        { "fieldname": "payment_entry", "fieldtype": "Link", "label": "Payment Entry", "options": "Payment Entry", "read_only": 1 },
+        { "fieldname": "book_order_token", "fieldtype": "Data", "label": "Book Order Token", "read_only": 1 },
+        { "fieldname": "amended_from", "fieldtype": "Link", "label": "Amended From", "no_copy": 1, "options": "Parent Consent Registration", "print_hide": 1, "read_only": 1, "search_index": 1 }
+    ],
+    "grid_page_length": 50,
+    "index_web_pages_for_search": 1,
+    "is_submittable": 1,
+    "links": [],
+    "module": "ITO Customization",
+    "name": "Parent Consent Registration",
+    "owner": "Administrator",
+    "permissions": [
+        { "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1 }
+    ],
+    "row_format": "Dynamic",
+    "rows_threshold_for_grid_search": 20,
+    "sort_field": "creation",
+    "sort_order": "DESC",
+    "states": []
 }

@@ -21,6 +21,7 @@ from multi_company_razorpay.api import (
 FEE_ITEM_NAME = "ITO Consent & Books Fee"
 FEE_ITEM_GROUP = "Fee Component"
 PAGE = "Parent Consent"
+REGISTRATION_FEE = 175
 
 
 def _resolve_customer_by_token(token):
@@ -79,9 +80,9 @@ def _compute_grand_total(school_name, selected_class, selections):
     discount = min(selected_exam_fees) if exam_count >= 4 and selected_exam_fees else 0.0
     
     if is_little_champ:
-        return flt(tb_fee + wb_fee)
+        return flt(REGISTRATION_FEE + tb_fee + wb_fee)
     else:
-        return flt(exam_fee - discount)
+        return flt(REGISTRATION_FEE + exam_fee - discount)
 
 
 def _get_or_create_fee_item(company):
@@ -141,10 +142,14 @@ def initiate_parent_consent_payment(data):
 
     customer, school_name, _is_little_champ = _resolve_customer_by_token(token)
     amount = _compute_grand_total(school_name, selected_class, selections)
+
     if amount <= 0:
-        frappe.throw(_("No fees due for the current selection."))
+        # Nothing owed for this selection - no invoice/payment needed,
+        # frontend should treat this as consent-complete.
+        return {"no_payment_required": True}
 
     existing = _find_consent_fee_invoice(customer, company)
+    
     if existing and existing.docstatus == 1 and flt(existing.outstanding_amount) <= 0:
         frappe.throw(_("Fees have already been paid for this consent."))
 
@@ -180,15 +185,15 @@ def initiate_parent_consent_payment(data):
     # Guest (allow_guest=True) endpoint - create_payment_for_sales_invoice enforces
     # a real Sales Invoice read-permission check that no guest/session has. The
     # invoice above was just created for the token-resolved customer, so it's
-    # safe to elevate only for this one call.
-    original_user = frappe.session.user
+    # safe to bypass permissions only for this one call.
+    original_ignore_permissions = frappe.flags.ignore_permissions
     try:
-        frappe.set_user("Administrator")
+        frappe.flags.ignore_permissions = True
         result = create_payment_for_sales_invoice(
             sales_invoice=invoice_name, amount=pay_amount, page=PAGE
         )
     finally:
-        frappe.set_user(original_user)
+        frappe.flags.ignore_permissions = original_ignore_permissions
 
     checkout_token = parse_qs(urlparse(result["checkout_url"]).query).get("token", [None])[0]
     if not checkout_token:

@@ -105,7 +105,10 @@ def initiate_little_champ_registration_payment(customer=None):
             "payment_entry": payment_entry,
         }
     if existing and existing.docstatus == 1 and abs(flt(existing.grand_total) - amount) > 0.01:
-        frappe.get_doc("Sales Invoice", existing.name).cancel()
+        doc = frappe.get_doc("Sales Invoice", existing.name)
+        doc.flags.ignore_permissions = True
+        doc.flags.ignore_user_permissions = True
+        doc.cancel()
         existing = None
 
     if existing and existing.docstatus == 1:

@@ -1692,6 +1692,7 @@ def initiate_little_champ_books_order_payment(sales_order, customer=None):
 
             sales_invoice = make_sales_invoice(sales_order_doc.name, ignore_permissions=True)
             sales_invoice.set_posting_time = 1
+            sales_invoice.flags.ignore_permissions = True
             sales_invoice.insert(ignore_permissions=True)
             sales_invoice.submit()
             invoice_name = sales_invoice.name

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from urllib.parse import parse_qs, urlparse
+# from contextlib import contextmanager
 
 import frappe
 from frappe import _
@@ -126,7 +127,10 @@ def initiate_registration_fee_payment(free_registrations=0):
     # invoice whose total no longer matches the current fee is stale, so cancel
     # it and start fresh rather than silently charging the old amount.
     if existing and existing.docstatus == 1 and abs(flt(existing.grand_total) - amount) > 0.01:
-        frappe.get_doc("Sales Invoice", existing.name).cancel()
+        if frappe.db.exists("Sales Invoice",existing.name):
+            doc = frappe.get_doc("Sales Invoice", existing.name)
+            doc.flags.ignore_permissions = True
+            doc.cancel()
         existing = None
 
     if existing and existing.docstatus == 1:
@@ -137,6 +141,7 @@ def initiate_registration_fee_payment(free_registrations=0):
             frappe.delete_doc("Sales Invoice", existing.name, ignore_permissions=True)
 
         item = _get_or_create_fee_item(company)
+        frappe.flags.ignore_permissions = True
         invoice = frappe.get_doc(
             {
                 "doctype": "Sales Invoice",
@@ -151,6 +156,9 @@ def initiate_registration_fee_payment(free_registrations=0):
                 ],
             }
         )
+        frappe.flags.ignore_permissions = True
+        invoice.flags.ignore_permissions = True
+        invoice.flags.ignore_user_permissions = True
         invoice.insert(ignore_permissions=True)
         
         # submit() doesn't accept ignore_permissions - use frappe.flags instead
@@ -189,24 +197,72 @@ def initiate_registration_fee_payment(free_registrations=0):
 @frappe.whitelist(allow_guest=True)
 def confirm_registration_fee_payment(
     integration_request, razorpay_payment_id, razorpay_order_id, razorpay_signature
-):
-    result = checkout_success(
-        integration_request=integration_request,
-        razorpay_payment_id=razorpay_payment_id,
-        razorpay_order_id=razorpay_order_id,
-        razorpay_signature=razorpay_signature,
-    )
+):  
+    try:
+        result = checkout_success(
+            integration_request=integration_request,
+            razorpay_payment_id=razorpay_payment_id,
+            razorpay_order_id=razorpay_order_id,
+            razorpay_signature=razorpay_signature,
+        )
 
-    integration = frappe.get_doc("Integration Request", integration_request)
-    data = frappe.parse_json(integration.data or "{}")
-    transaction = frappe.get_doc("Razorpay Transaction", data["razorpay_transaction"])
+        integration = frappe.get_doc("Integration Request", integration_request)
+        data = frappe.parse_json(integration.data or "{}")
+        transaction = frappe.get_doc("Razorpay Transaction", data["razorpay_transaction"])
 
-    return {
-        "paid": transaction.status == "Completed",
-        "payment_entry": transaction.payment_entry,
-        "sales_invoice": transaction.reference_docname,
-        "redirect_to": result.get("redirect_to"),
-    }
+        return {
+            "paid": transaction.status == "Completed",
+            "payment_entry": transaction.payment_entry,
+            "sales_invoice": transaction.reference_docname,
+            "redirect_to": result.get("redirect_to"),
+        }
+    except Exception:
+        frappe.log_error(
+            title="Error in confirm_registration_fee_payment",
+            message=frappe.get_traceback()
+        )
+        raise
+
+
+
+# @frappe.whitelist(allow_guest=True)
+# def confirm_registration_fee_payment(
+#     integration_request, razorpay_payment_id, razorpay_order_id, razorpay_signature
+# ):
+#     original_has_permission = frappe.has_permission
+
+#     def _bypass_has_permission(*args, **kwargs):
+#         return True
+
+#     frappe.has_permission = _bypass_has_permission
+#     try:
+#         result = checkout_success(
+#             integration_request=integration_request,
+#             razorpay_payment_id=razorpay_payment_id,
+#             razorpay_order_id=razorpay_order_id,
+#             razorpay_signature=razorpay_signature,
+#         )
+
+#         integration = frappe.get_doc("Integration Request", integration_request)
+#         data = frappe.parse_json(integration.data or "{}")
+#         transaction = frappe.get_doc("Razorpay Transaction", data["razorpay_transaction"])
+
+#         return {
+#             "paid": transaction.status == "Completed",
+#             "payment_entry": transaction.payment_entry,
+#             "sales_invoice": transaction.reference_docname,
+#             "redirect_to": result.get("redirect_to"),
+#         }
+#     except Exception:
+#         frappe.log_error(
+#             title="Error in confirm_registration_fee_payment",
+#             message=frappe.get_traceback()
+#         )
+#         raise
+#     finally:
+#         # Always restore, even on exception — this is a module attribute,
+#         # not a DB record, so it can't "leak" if the process dies.
+#         frappe.has_permission = original_has_permission
 
 
 @frappe.whitelist(allow_guest=True)
