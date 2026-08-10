@@ -156,8 +156,10 @@ doc_events = {
         "validate": "ito_customization.ito_customization.doc_events.item_price.validate_item_price"
     },
     "Customer": {
-        "on_update": "ito_customization.ito_customization.doc_events.customer.sync_teachers",
-        "on_update": "ito_customization.ito_customization.doc_events.customer.sync_school_code",
+        "on_update": [
+            "ito_customization.ito_customization.doc_events.customer.sync_teachers",
+            "ito_customization.ito_customization.doc_events.customer.sync_school_code",
+        ],
         "autoname": "ito_customization.ito_customization.doc_events.customer.autoname",
         "validate": "ito_customization.ito_customization.doc_events.customer.validate"
     }
@@ -206,6 +208,11 @@ override_doctype_class = {
 # Overriding Methods
 # ------------------------------
 #
+
+override_whitelisted_methods = {
+    "erpnext.crm.doctype.lead.lead.make_customer": "ito_customization.ito_customization.doc_events.lead.make_customer"
+}
+
 # override_whitelisted_methods = {
 # 	"frappe.desk.doctype.event.event.get_events": "ito_customization.event.get_events"
 # }

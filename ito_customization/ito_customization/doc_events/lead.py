@@ -137,8 +137,10 @@
 #                 indicator="blue"
 #             )
 
+
 import frappe
 from frappe import _
+from frappe.model.mapper import get_mapped_doc
 
 def on_update(doc, method=None):
     create_principal_contact(doc)
@@ -410,3 +412,51 @@ def validate_duplicate_lead(doc, method=None):
                 .format(label, existing.name),
                 title=_("Duplicate Lead")
             )
+
+@frappe.whitelist()
+def make_customer(source_name, target_doc=None):
+    def set_missing_values(source, target):
+        if source.company_name:
+            target.customer_type = "Company"
+            target.customer_name = source.company_name
+        else:
+            target.customer_type = "Individual"
+            target.customer_name = source.lead_name
+
+        target.customer_group = source.market_segment or frappe.db.get_single_value(
+            "Selling Settings", "customer_group"
+        )
+
+        lead_category_map = {
+            "School Lead": "School Customer",
+            "Online Student Lead": "Online Student Customer",
+        }
+        target.custom_customer_category = lead_category_map.get(
+            source.custom_lead_category
+        )
+
+    doclist = get_mapped_doc(
+        "Lead",
+        source_name,
+        {
+            "Lead": {
+                "doctype": "Customer",
+                "field_map": {
+                    "name": "lead_name",
+                    "company_name": "customer_name",
+                    "custom_school_name": "custom_school_name",
+                    "custom_no_of_students": "custom_student_strength",
+                    "custom_district": "custom_district",
+                    "custom_taluka": "custom_taluka",
+                    "custom_pincode": "custom_pincode",
+                    "custom_stateprovince": "custom_state",
+                    "custom_city2": "custom_city",
+                    "country": "custom_country",
+                },
+            }
+        },
+        target_doc,
+        set_missing_values,
+    )
+
+    return doclist
