@@ -91,19 +91,7 @@ def initiate_little_champ_registration_payment(customer=None):
         frappe.throw(_("No Little Champ registration fee is due."))
 
     existing = _find_fee_invoice(customer, company)
-    # if existing and existing.docstatus == 1 and flt(existing.outstanding_amount) <= 0:
-    #     # Return friendly signal instead of throwing — frontend will show "already paid" message
-    #     payment_entry = frappe.db.get_value(
-    #         "Payment Entry Reference",
-    #         {"reference_doctype": "Sales Invoice", "reference_name": existing.name},
-    #         "parent",
-    #         order_by="creation desc",
-    #     )
-    #     return {
-    #         "already_paid": True,
-    #         "sales_invoice": existing.name,
-    #         "payment_entry": payment_entry,
-    #     }
+
     if existing and existing.docstatus == 1 and abs(flt(existing.grand_total) - amount) > 0.01:
         doc = frappe.get_doc("Sales Invoice", existing.name)
         doc.flags.ignore_permissions = True
@@ -125,7 +113,7 @@ def initiate_little_champ_registration_payment(customer=None):
             "items": [{"item_code": item, "qty": 1, "rate": amount}],
         })
         invoice.insert(ignore_permissions=True)
-        invoice.submit()
+        # invoice.submit()
         invoice_name = invoice.name
         pay_amount = flt(invoice.outstanding_amount)
 

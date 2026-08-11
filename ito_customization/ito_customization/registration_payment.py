@@ -129,46 +129,72 @@ def initiate_registration_fee_payment(free_registrations=0):
     if existing and existing.docstatus == 1 and abs(flt(existing.grand_total) - amount) > 0.01:
         if frappe.db.exists("Sales Invoice",existing.name):
             doc = frappe.get_doc("Sales Invoice", existing.name)
-            doc.flags.ignore_permissions = True
-            doc.cancel()
+            if doc.status != "Paid":
+                doc.flags.ignore_permissions = True
+                doc.cancel()
         existing = None
 
     if existing and existing.docstatus == 1:
         invoice_name = existing.name
         pay_amount = flt(existing.outstanding_amount)
     else:
-        if existing and existing.docstatus == 0:
-            frappe.delete_doc("Sales Invoice", existing.name, ignore_permissions=True)
-
         item = _get_or_create_fee_item(company)
-        frappe.flags.ignore_permissions = True
-        invoice = frappe.get_doc(
-            {
-                "doctype": "Sales Invoice",
-                "customer": customer,
-                "company": company,
-                "items": [
+
+        if existing and existing.docstatus == 0:
+            invoice = frappe.get_doc("Sales Invoice", existing.name)
+            invoice.flags.ignore_permissions = True
+            invoice.flags.ignore_user_permissions = True
+
+            needs_update = False
+
+            # Ensure there is exactly one item row
+            if len(invoice.items) != 1:
+                invoice.set("items", [])
+                invoice.append(
+                    "items",
                     {
                         "item_code": item,
                         "qty": 1,
                         "rate": amount,
-                    }
-                ],
-            }
-        )
-        frappe.flags.ignore_permissions = True
-        invoice.flags.ignore_permissions = True
-        invoice.flags.ignore_user_permissions = True
-        invoice.insert(ignore_permissions=True)
-        
-        # submit() doesn't accept ignore_permissions - use frappe.flags instead
-        original_ignore_permissions = frappe.flags.ignore_permissions
-        try:
-            frappe.flags.ignore_permissions = True
-            invoice.submit()
-        finally:
-            frappe.flags.ignore_permissions = original_ignore_permissions
-        
+                    },
+                )
+                needs_update = True
+            else:
+                row = invoice.items[0]
+
+                if (
+                    row.item_code != item
+                    or flt(row.qty) != 1
+                    or abs(flt(row.rate) - amount) > 0.01
+                ):
+                    row.item_code = item
+                    row.qty = 1
+                    row.rate = amount
+                    needs_update = True
+
+            if needs_update:
+                invoice.save(ignore_permissions=True)
+
+        else:
+            invoice = frappe.get_doc(
+                {
+                    "doctype": "Sales Invoice",
+                    "customer": customer,
+                    "company": company,
+                    "items": [
+                        {
+                            "item_code": item,
+                            "qty": 1,
+                            "rate": amount,
+                        }
+                    ],
+                }
+            )
+
+            invoice.flags.ignore_permissions = True
+            invoice.flags.ignore_user_permissions = True
+            invoice.insert(ignore_permissions=True)
+
         invoice_name = invoice.name
         pay_amount = flt(invoice.outstanding_amount)
 
@@ -179,6 +205,7 @@ def initiate_registration_fee_payment(free_registrations=0):
     # permissions just for this one call.
     original_ignore_permissions = frappe.flags.ignore_permissions
     try:
+        
         frappe.flags.ignore_permissions = True
         result = create_payment_for_sales_invoice(
             sales_invoice=invoice_name, amount=pay_amount, page=PAGE

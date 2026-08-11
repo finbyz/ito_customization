@@ -890,7 +890,11 @@ def _get_or_create_books_order_invoice(order_data, customer_name):
     if existing and existing.docstatus == 1 and not _invoice_matches_books_order(existing.name, valid_items):
         if flt(existing.outstanding_amount) < flt(existing.grand_total):
             frappe.throw("An earlier invoice for this book order is partially paid. Please contact support.")
-        inv = frappe.get_doc("Sales Invoice", existing.name); inv.flags.ignore_permissions = True; inv.cancel()
+            
+        inv = frappe.get_doc("Sales Invoice", existing.name); 
+        if inv.status != "Paid":
+            inv.flags.ignore_permissions = True
+            inv.cancel()
         existing = None
 
     if existing and existing.docstatus == 0:
@@ -910,7 +914,7 @@ def _get_or_create_books_order_invoice(order_data, customer_name):
         }
     )
     invoice.insert(ignore_permissions=True)
-    invoice.flags.ignore_permissions = True; invoice.submit()
+    # invoice.flags.ignore_permissions = True; invoice.submit()
     return invoice.name, flt(invoice.outstanding_amount)
 
 
