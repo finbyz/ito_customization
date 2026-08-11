@@ -1,0 +1,65 @@
+{
+ "actions": [],
+ "allow_bulk_edit": 1,
+ "allow_rename": 1,
+ "creation": "2026-08-10 13:51:00.792169",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "box_no",
+  "total_boxes",
+  "column_break_rzjk",
+  "tracking__consignment_no",
+  "destination__speed_post_code"
+ ],
+ "fields": [
+  {
+   "columns": 1,
+   "fieldname": "box_no",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Box No"
+  },
+  {
+   "columns": 1,
+   "fieldname": "total_boxes",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Total Boxes"
+  },
+  {
+   "columns": 2,
+   "fieldname": "column_break_rzjk",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "tracking__consignment_no",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Tracking / Consignment No"
+  },
+  {
+   "columns": 2,
+   "fieldname": "destination__speed_post_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Destination / Speed Post Code"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-10 14:01:52.323839",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "Delivery Note Box Detail",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

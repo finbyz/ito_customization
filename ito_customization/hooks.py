@@ -288,3 +288,12 @@ override_whitelisted_methods = {
 
 update_website_context = "ito_customization.ito_customization.doc_events.web_page.website_redirects.update_website_context"
 
+
+
+
+
+jinja = {
+    "methods": [
+        "ito_customization.ito_customization.doc_events.barcode.get_barcode_base64"
+    ]
+}
