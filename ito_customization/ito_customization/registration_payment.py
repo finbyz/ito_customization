@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from urllib.parse import parse_qs, urlparse
 # from contextlib import contextmanager
-
+from frappe.desk.form import assign_to
+from frappe.desk.form import assign_to
 import frappe
 from frappe import _
 from frappe.utils import cint, flt
@@ -102,54 +103,243 @@ def _find_registration_fee_invoice(customer, company):
 
 @frappe.whitelist(allow_guest=True)
 def initiate_registration_fee_payment(free_registrations=0):
-    customer = _get_session_customer()
+    try:
+        customer = _get_session_customer()
 
-    # The admin's page routing (Multi Company Razorpay Settings' "Used For"
-    # tag) decides both which Razorpay account AND which company this
-    # registration fee is invoiced under - not a hardcoded company.
-    settings = get_settings_for_page(PAGE)
-    company = settings.company
+        # The admin's page routing (Multi Company Razorpay Settings
+        # "Used For" tag) decides both Razorpay account and company.
+        settings = get_settings_for_page(PAGE)
+        company = settings.company
 
-    total_students = _get_total_students(customer)
-    free_registrations = max(0, min(cint(free_registrations), total_students))
-    paid_students = total_students - free_registrations
-    amount = flt(paid_students * RATE_PER_STUDENT_INR)
+        total_students = _get_total_students(customer)
 
-    if amount <= 0:
-        frappe.throw(_("No outstanding registration fee to pay."))
+        free_registrations = max(
+            0,
+            min(cint(free_registrations), total_students),
+        )
 
-    existing = _find_registration_fee_invoice(customer, company)
-    # if existing and existing.docstatus == 1 and flt(existing.outstanding_amount) <= 0:
-    #     frappe.throw(_("Registration fee has already been paid."))
+        paid_students = total_students - free_registrations
+        amount = flt(paid_students * RATE_PER_STUDENT_INR)
 
-    # The fee can change between two "Pay Now" clicks (e.g. more students added
-    # to Exams Summary after an earlier unpaid invoice was created) - an unpaid
-    # invoice whose total no longer matches the current fee is stale, so cancel
-    # it and start fresh rather than silently charging the old amount.
-    if existing and existing.docstatus == 1 and abs(flt(existing.grand_total) - amount) > 0.01:
-        if frappe.db.exists("Sales Invoice",existing.name):
-            doc = frappe.get_doc("Sales Invoice", existing.name)
-            if doc.status != "Paid":
-                doc.flags.ignore_permissions = True
-                doc.cancel()
-        existing = None
+        if amount <= 0:
+            frappe.throw(
+                _("No outstanding registration fee to pay.")
+            )
 
-    if existing and existing.docstatus == 1:
-        invoice_name = existing.name
-        pay_amount = flt(existing.outstanding_amount)
-    else:
-        item = _get_or_create_fee_item(company)
+        # ---------------------------------------------------------
+        # Find existing registration fee invoice
+        # ---------------------------------------------------------
+        existing = _find_registration_fee_invoice(
+            customer,
+            company,
+        )
 
-        if existing and existing.docstatus == 0:
-            invoice = frappe.get_doc("Sales Invoice", existing.name)
-            invoice.flags.ignore_permissions = True
-            invoice.flags.ignore_user_permissions = True
+        # ---------------------------------------------------------
+        # If submitted invoice exists but amount has changed,
+        # cancel the old invoice and create a new one.
+        # ---------------------------------------------------------
+        if (
+            existing
+            and existing.docstatus == 1
+            and abs(flt(existing.grand_total) - amount) > 0.01
+        ):
+            if frappe.db.exists("Sales Invoice", existing.name):
+                invoice = frappe.get_doc(
+                    "Sales Invoice",
+                    existing.name,
+                )
 
-            needs_update = False
+                if invoice.status != "Paid":
+                    invoice.flags.ignore_permissions = True
+                    invoice.flags.ignore_user_permissions = True
+                    invoice.cancel()
 
-            # Ensure there is exactly one item row
-            if len(invoice.items) != 1:
-                invoice.set("items", [])
+            existing = None
+
+        # ---------------------------------------------------------
+        # Existing submitted invoice
+        # ---------------------------------------------------------
+        if existing and existing.docstatus == 1:
+            invoice_name = existing.name
+            pay_amount = flt(existing.outstanding_amount)
+
+            if pay_amount <= 0:
+                frappe.throw(
+                    _("There is no outstanding amount on the registration invoice.")
+                )
+
+        else:
+            # -----------------------------------------------------
+            # Get/Create Registration Fee Item
+            # -----------------------------------------------------
+            item = _get_or_create_fee_item(company)
+
+            # -----------------------------------------------------
+            # Get Customer Receivable Account
+            #
+            # Priority:
+            # 1. Customer's Party Account for this Company
+            # 2. Company's default_receivable_account
+            # -----------------------------------------------------
+            debit_to = frappe.db.get_value(
+                "Party Account",
+                {
+                    "parent": customer,
+                    "parenttype": "Customer",
+                    "company": company,
+                },
+                "account",
+            )
+
+            # -----------------------------------------------------
+            # Fallback to Company's Default Receivable Account
+            # -----------------------------------------------------
+            if not debit_to:
+                debit_to = frappe.db.get_value(
+                    "Company",
+                    company,
+                    "default_receivable_account",
+                )
+
+            if not debit_to:
+                frappe.throw(
+                    _(
+                        "No receivable account found for Customer {0} "
+                        "and no Default Receivable Account is configured "
+                        "for Company {1}."
+                    ).format(
+                        customer,
+                        company,
+                    )
+                )
+
+            # -----------------------------------------------------
+            # Get Company's Default Address
+            # -----------------------------------------------------
+            company_address = frappe.db.get_value(
+                "Address",
+                {
+                    "is_your_company_address": 1,
+                    "link_doctype": "Company",
+                    "link_name": company,
+                },
+                "name",
+            )
+
+            # -----------------------------------------------------
+            # Existing Draft Invoice
+            # -----------------------------------------------------
+            if existing and existing.docstatus == 0:
+                invoice = frappe.get_doc(
+                    "Sales Invoice",
+                    existing.name,
+                )
+
+                invoice.flags.ignore_permissions = True
+                invoice.flags.ignore_user_permissions = True
+
+                needs_update = False
+
+                # -------------------------------------------------
+                # Ensure Customer
+                # -------------------------------------------------
+                if invoice.customer != customer:
+                    invoice.customer = customer
+                    needs_update = True
+
+                # -------------------------------------------------
+                # Ensure Company
+                # -------------------------------------------------
+                if invoice.company != company:
+                    invoice.company = company
+                    needs_update = True
+
+                # -------------------------------------------------
+                # Ensure Receivable Account
+                # -------------------------------------------------
+                if invoice.debit_to != debit_to:
+                    invoice.debit_to = debit_to
+                    needs_update = True
+
+                # -------------------------------------------------
+                # Ensure Company Address
+                # -------------------------------------------------
+                if (
+                    company_address
+                    and invoice.company_address != company_address
+                ):
+                    invoice.company_address = company_address
+                    needs_update = True
+
+                # -------------------------------------------------
+                # Ensure exactly one item row
+                # -------------------------------------------------
+                if len(invoice.items) != 1:
+                    invoice.set("items", [])
+
+                    invoice.append(
+                        "items",
+                        {
+                            "item_code": item,
+                            "qty": 1,
+                            "rate": amount,
+                        },
+                    )
+
+                    needs_update = True
+
+                else:
+                    row = invoice.items[0]
+
+                    if (
+                        row.item_code != item
+                        or flt(row.qty) != 1
+                        or abs(flt(row.rate) - amount) > 0.01
+                    ):
+                        row.item_code = item
+                        row.qty = 1
+                        row.rate = amount
+
+                        needs_update = True
+
+                # -------------------------------------------------
+                # Save only when something changed
+                # -------------------------------------------------
+                if needs_update:
+                    _original = frappe.flags.ignore_permissions
+                    try:
+                        frappe.flags.ignore_permissions = True
+                        invoice.save(ignore_permissions=True)
+                    finally:
+                        frappe.flags.ignore_permissions = _original
+
+                invoice_name = invoice.name
+                pay_amount = amount
+
+            # -----------------------------------------------------
+            # No Existing Invoice
+            # -----------------------------------------------------
+            else:
+                invoice = frappe.new_doc(
+                    "Sales Invoice"
+                )
+
+                invoice.flags.ignore_permissions = True
+                invoice.flags.ignore_user_permissions = True
+
+                invoice.customer = customer
+                invoice.company = company
+                invoice.debit_to = debit_to
+
+                # -------------------------------------------------
+                # Set Company Address
+                # -------------------------------------------------
+                if company_address:
+                    invoice.company_address = company_address
+
+                # -------------------------------------------------
+                # Add Registration Fee Item
+                # -------------------------------------------------
                 invoice.append(
                     "items",
                     {
@@ -158,68 +348,74 @@ def initiate_registration_fee_payment(free_registrations=0):
                         "rate": amount,
                     },
                 )
-                needs_update = True
-            else:
-                row = invoice.items[0]
 
-                if (
-                    row.item_code != item
-                    or flt(row.qty) != 1
-                    or abs(flt(row.rate) - amount) > 0.01
-                ):
-                    row.item_code = item
-                    row.qty = 1
-                    row.rate = amount
-                    needs_update = True
+                # -------------------------------------------------
+                # Insert new Sales Invoice
+                # -------------------------------------------------
+                _original = frappe.flags.ignore_permissions
+                try:
+                    frappe.flags.ignore_permissions = True
+                    invoice.insert(ignore_permissions=True)
+                finally:
+                    frappe.flags.ignore_permissions = _original
 
-            if needs_update:
-                invoice.save(ignore_permissions=True)
+                invoice_name = invoice.name
+                pay_amount = amount
 
-        else:
-            invoice = frappe.get_doc(
-                {
-                    "doctype": "Sales Invoice",
-                    "customer": customer,
-                    "company": company,
-                    "items": [
-                        {
-                            "item_code": item,
-                            "qty": 1,
-                            "rate": amount,
-                        }
-                    ],
-                }
+        # ---------------------------------------------------------
+        # Create Razorpay Payment
+        # ---------------------------------------------------------
+        original_ignore_permissions = (
+            frappe.flags.ignore_permissions
+        )
+
+        try:
+            frappe.flags.ignore_permissions = True
+
+            result = create_payment_for_sales_invoice(
+                sales_invoice=invoice_name,
+                amount=pay_amount,
+                page=PAGE,
             )
 
-            invoice.flags.ignore_permissions = True
-            invoice.flags.ignore_user_permissions = True
-            invoice.insert(ignore_permissions=True)
+        finally:
+            frappe.flags.ignore_permissions = (
+                original_ignore_permissions
+            )
 
-        invoice_name = invoice.name
-        pay_amount = flt(invoice.outstanding_amount)
+        # ---------------------------------------------------------
+        # Extract Razorpay Checkout Token
+        # ---------------------------------------------------------
+        token = parse_qs(
+            urlparse(result["checkout_url"]).query
+        ).get("token", [None])[0]
 
-    # create_payment_for_sales_invoice enforces a real Sales Invoice read-permission
-    # check, which portal Customer users don't have directly. _get_session_customer()
-    # above already established that the current session legitimately owns `customer`,
-    # and invoice_name is always scoped to that same customer, so it's safe to bypass
-    # permissions just for this one call.
-    original_ignore_permissions = frappe.flags.ignore_permissions
-    try:
-        
-        frappe.flags.ignore_permissions = True
-        result = create_payment_for_sales_invoice(
-            sales_invoice=invoice_name, amount=pay_amount, page=PAGE
+        if not token:
+            frappe.throw(
+                _("Unable to start Razorpay checkout.")
+            )
+
+        # ---------------------------------------------------------
+        # Get Checkout Context
+        # ---------------------------------------------------------
+        checkout_context = get_checkout_context(token)
+
+        checkout_context["sales_invoice"] = invoice_name
+
+        return checkout_context
+
+    except Exception:
+        frappe.log_error(
+            title="Registration Fee Payment Failed",
+            message=frappe.get_traceback(),
         )
-    finally:
-        frappe.flags.ignore_permissions = original_ignore_permissions
-    token = parse_qs(urlparse(result["checkout_url"]).query).get("token", [None])[0]
-    if not token:
-        frappe.throw(_("Unable to start Razorpay checkout."))
 
-    checkout_context = get_checkout_context(token)
-    checkout_context["sales_invoice"] = invoice_name
-    return checkout_context
-
+        frappe.throw(
+            _(
+                "Unable to initiate registration fee payment. "
+                "Please try again or contact support."
+            )
+        )
 
 @frappe.whitelist(allow_guest=True)
 def confirm_registration_fee_payment(
@@ -250,46 +446,6 @@ def confirm_registration_fee_payment(
         )
         raise
 
-
-
-# @frappe.whitelist(allow_guest=True)
-# def confirm_registration_fee_payment(
-#     integration_request, razorpay_payment_id, razorpay_order_id, razorpay_signature
-# ):
-#     original_has_permission = frappe.has_permission
-
-#     def _bypass_has_permission(*args, **kwargs):
-#         return True
-
-#     frappe.has_permission = _bypass_has_permission
-#     try:
-#         result = checkout_success(
-#             integration_request=integration_request,
-#             razorpay_payment_id=razorpay_payment_id,
-#             razorpay_order_id=razorpay_order_id,
-#             razorpay_signature=razorpay_signature,
-#         )
-
-#         integration = frappe.get_doc("Integration Request", integration_request)
-#         data = frappe.parse_json(integration.data or "{}")
-#         transaction = frappe.get_doc("Razorpay Transaction", data["razorpay_transaction"])
-
-#         return {
-#             "paid": transaction.status == "Completed",
-#             "payment_entry": transaction.payment_entry,
-#             "sales_invoice": transaction.reference_docname,
-#             "redirect_to": result.get("redirect_to"),
-#         }
-#     except Exception:
-#         frappe.log_error(
-#             title="Error in confirm_registration_fee_payment",
-#             message=frappe.get_traceback()
-#         )
-#         raise
-#     finally:
-#         # Always restore, even on exception — this is a module attribute,
-#         # not a DB record, so it can't "leak" if the process dies.
-#         frappe.has_permission = original_has_permission
 
 
 @frappe.whitelist(allow_guest=True)

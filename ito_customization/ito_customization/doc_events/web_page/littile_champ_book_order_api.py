@@ -5,16 +5,13 @@ import frappe
 from frappe import _
 import json
 from urllib.parse import parse_qs, urlparse
-from frappe.utils import cint, today
-from frappe.utils import flt
+from frappe.utils import cint, today,add_days,flt,getdate
 from multi_company_razorpay.api import (
     get_checkout_context,
     get_settings_for_page,
 )
 from frappe.desk.form import assign_to
 from frappe.model.base_document import get_controller
-from frappe.utils import cint, today, add_days
-from frappe.utils import flt
 
 RAZORPAY_PAGE = 'Little Champ Book Order'
 def ensure_subject_exists(subject_name):
@@ -1517,112 +1514,191 @@ def create_quotation_from_books_order(order_data):
     
 @frappe.whitelist(allow_guest=True)
 def create_sales_order_from_books_order(order_data, customer=None):
-    data = (
-        json.loads(order_data)
-        if isinstance(order_data, str)
-        else order_data
-    )
+    try:
+        data = (
+            json.loads(order_data)
+            if isinstance(order_data, str)
+            else order_data
+        )
 
-    session_customer = frappe.db.get_value(
-        "Portal User",
-        {"user": frappe.session.user},
-        "parent"
-    )
-    customer_name = session_customer or customer
+        session_customer = frappe.db.get_value(
+            "Portal User",
+            {"user": frappe.session.user},
+            "parent"
+        )
 
-    if session_customer and customer and session_customer != customer:
-        frappe.throw(_("You are not allowed to create an order for this customer."), frappe.PermissionError)
-    if not customer_name or not frappe.db.exists("Customer", customer_name):
-        return {
-            "success": False,
-            "message": "Customer not found",
-            "alert": True
-        }
+        customer_name = session_customer or customer
 
-    # -----------------------------------
-    # Filter valid items
-    # -----------------------------------
+        # -----------------------------------
+        # Validate Customer Access
+        # -----------------------------------
 
-    delivery_date = add_days(today(), 7)  # adjust default lead time as needed
-    payment_company = get_settings_for_page(RAZORPAY_PAGE).company
-    delivery_warehouse = _get_delivery_warehouse(payment_company)
+        if session_customer and customer and session_customer != customer:
+            frappe.throw(
+                _("You are not allowed to create an order for this customer."),
+                frappe.PermissionError
+            )
 
-    valid_items = []
-    for row in data:
-        item_code = row.get("item")
-        qty = flt(row.get("qty"))
-        rate = flt(row.get("rate"))
+        if not customer_name or not frappe.db.exists("Customer", customer_name):
+            return {
+                "success": False,
+                "message": "Customer not found",
+                "alert": True
+            }
 
-        if item_code and qty > 0:
-            valid_items.append({
-                "item_code": item_code,
-                "qty": qty,
-                "rate": rate,
-                "delivery_date": delivery_date,
-                "warehouse": delivery_warehouse,
-            })
+        # -----------------------------------
+        # Filter Valid Items
+        # -----------------------------------
 
-    # -----------------------------------
-    # No items selected — return friendly alert
-    # -----------------------------------
+        delivery_date = add_days(today(), 7)
 
-    if not valid_items:
+        payment_company = get_settings_for_page(RAZORPAY_PAGE).company
+
+        delivery_warehouse = _get_delivery_warehouse(payment_company)
+
+        valid_items = []
+
+        # Bypass permissions globally so that internal Item.check_permission()
+        # in set_missing_item_details does not fail for portal users.
+        original_ignore_permissions = frappe.flags.ignore_permissions
+        frappe.flags.ignore_permissions = True
+
+        try:
+            for row in data:
+                item_code = row.get("item")
+                qty = flt(row.get("qty"))
+                rate = flt(row.get("rate"))
+
+                if item_code and qty > 0:
+                    valid_items.append({
+                        "item_code": item_code,
+                        "item_name": frappe.db.get_value("Item", item_code, "item_name"),
+                        "uom": frappe.db.get_value("Item", item_code, "stock_uom"),
+                        "qty": qty,
+                        "rate": rate,
+                        "delivery_date": delivery_date,
+                        "warehouse": delivery_warehouse,
+                    })
+                    frappe.share.add_docshare(
+                        "Item",
+                        item_code,
+                        user=frappe.session.user,
+                        read=1,
+                        write = 1,
+                        flags={"ignore_share_permission": True},
+                    )
+
+            # -----------------------------------
+            # No Items Selected
+            # -----------------------------------
+
+            if not valid_items:
+                return {
+                    "success": True,
+                    "sales_order": None,
+                    "message": (
+                        "No sales order created. Please select items "
+                        "if you want to create a sales order."
+                    ),
+                    "alert": True
+                }
+
+            # -----------------------------------
+            # Check Existing Draft Sales Order
+            # -----------------------------------
+
+            sales_order_name = frappe.db.get_value(
+                "Sales Order",
+                {
+                    "customer": customer_name,
+                    "company": payment_company,
+                    "docstatus": 0
+                },
+                "name",
+                order_by="creation desc"
+            )
+
+            # -----------------------------------
+            # Update Existing or Create New
+            # -----------------------------------
+
+            if sales_order_name:
+                sales_order = frappe.get_doc(
+                    "Sales Order",
+                    sales_order_name
+                )
+
+                sales_order.set("items", [])
+
+                is_update = True
+
+            else:
+                sales_order = frappe.new_doc("Sales Order")
+
+                sales_order.customer = customer_name
+                sales_order.company = payment_company
+                sales_order.currency = frappe.db.get_value("Customer",customer_name,"default_currency")
+                formatted_date = getdate(today()).strftime("%d-%m-%Y")
+                sales_order.transaction_date = today()
+                sales_order.delivery_date = delivery_date
+
+                is_update = False
+
+            # -----------------------------------
+            # Append Items
+            # -----------------------------------
+            frappe.log_error(
+                title="Valid Items",
+                message=json.dumps(valid_items, indent=2, default=str))
+            for item in valid_items:
+                sales_order.append("items", item)
+            frappe.log_error("Sales Order Items", frappe.as_json(sales_order))
+            # -----------------------------------
+            # Save Sales Order
+            # -----------------------------------
+
+            if sales_order.is_new():
+                frappe.flags.ignore_permission = True
+                sales_order.save(ignore_permissions=True)
+            else:
+                frappe.flags.ignore_permission = True
+                sales_order.save(ignore_permissions=True)
+        finally:
+            frappe.flags.ignore_permissions = original_ignore_permissions
+
+        # -----------------------------------
+        # Success Response
+        # -----------------------------------
+
         return {
             "success": True,
-            "sales_order": None,
-            "message": "No sales order created. Please select items if you want to create a sales order.",
-            "alert": True
+            "sales_order": sales_order.name,
+            "message": (
+                "Sales Order Updated"
+                if is_update
+                else "Sales Order Created"
+            )
         }
 
-    sales_order_name = frappe.db.get_value(
-        "Sales Order",
-        {
-            "customer": customer_name,
-            "company": payment_company,
-            "docstatus": 0
-        },
-        "name",
-        order_by="creation desc"
-    )
 
-    # -----------------------------------
-    # Update Existing or Create New
-    # -----------------------------------
+    except Exception as e:
+        # -----------------------------------
+        # Log Complete Error
+        # -----------------------------------
 
-    if sales_order_name:
-        sales_order = frappe.get_doc("Sales Order", sales_order_name)
-        sales_order.set("items", [])
-        is_update = True
-    else:
-        sales_order = frappe.new_doc("Sales Order")
-        sales_order.customer = customer_name
-        sales_order.company = payment_company
-        sales_order.transaction_date = today()
-        sales_order.delivery_date = delivery_date
-        is_update = False
+        frappe.log_error(
+            title="Create Sales Order From Books Order Error",
+            message=frappe.get_traceback()
+        )
 
-    # -----------------------------------
-    # Append Items
-    # -----------------------------------
 
-    for item in valid_items:
-        sales_order.append("items", item)
-
-    # -----------------------------------
-    # Save
-    # -----------------------------------
-
-    if sales_order.is_new():
-        sales_order.insert(ignore_permissions=True)
-    else:
-        sales_order.save(ignore_permissions=True)
-
-    return {
-        "success": True,
-        "sales_order": sales_order.name,
-        "message": "Sales Order Updated" if is_update else "Sales Order Created"
-    }
-
+        return {
+            "success": False,
+            "sales_order": None,
+            "message": str(e),
+            "alert": True
+        }
+        
 @frappe.whitelist(allow_guest=True)
 def initiate_little_champ_books_order_payment(sales_order, customer=None, trans_item_json=None):
     """Initiate Razorpay payment WITHOUT submitting the Sales Order or creating
@@ -2092,7 +2168,6 @@ def confirm_little_champ_books_order_payment(
         )
 
         # Same logic as existing create_payment_entry()
-        payment_entry.flags.ignore_validate = True
         payment_entry.flags.ignore_permissions = True
 
         # validate() is skipped, therefore set title manually
