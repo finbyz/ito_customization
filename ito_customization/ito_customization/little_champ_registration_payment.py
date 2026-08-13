@@ -85,15 +85,9 @@ def initiate_little_champ_registration_payment(customer=None):
     try:
         customer = _get_customer(customer)
 
-        # ---------------------------------------------------------
-        # Get company from page-specific Razorpay settings
-        # ---------------------------------------------------------
         settings = get_settings_for_page(PAGE)
         company = settings.company
 
-        # ---------------------------------------------------------
-        # Calculate Little Champ Registration Fee
-        # ---------------------------------------------------------
         total_students = _get_total_students(customer)
         amount = flt(total_students * RATE_PER_STUDENT_INR)
 
@@ -102,18 +96,11 @@ def initiate_little_champ_registration_payment(customer=None):
                 _("No Little Champ registration fee is due.")
             )
 
-        # ---------------------------------------------------------
-        # Find Existing Little Champ Fee Invoice
-        # ---------------------------------------------------------
         existing = _find_fee_invoice(
             customer,
             company,
         )
 
-        # ---------------------------------------------------------
-        # If submitted invoice exists but amount changed:
-        # cancel old invoice and create a new one
-        # ---------------------------------------------------------
         if (
             existing
             and existing.docstatus == 1
@@ -135,33 +122,18 @@ def initiate_little_champ_registration_payment(customer=None):
 
             existing = None
 
-        # ---------------------------------------------------------
-        # Existing Submitted Invoice
-        # ---------------------------------------------------------
         if existing and existing.docstatus == 1:
             invoice_name = existing.name
             pay_amount = flt(existing.outstanding_amount)
 
             if pay_amount <= 0:
                 frappe.throw(
-                    _(
-                        "Little Champ registration fee is already paid."
-                    )
+                    _("Little Champ registration fee is already paid.")
                 )
 
         else:
-            # -----------------------------------------------------
-            # Get/Create Little Champ Fee Item
-            # -----------------------------------------------------
             item = _get_or_create_fee_item(company)
 
-            # -----------------------------------------------------
-            # Get Customer Receivable Account
-            #
-            # Priority:
-            # 1. Customer's Party Account for this Company
-            # 2. Company's Default Receivable Account
-            # -----------------------------------------------------
             debit_to = frappe.db.get_value(
                 "Party Account",
                 {
@@ -172,9 +144,6 @@ def initiate_little_champ_registration_payment(customer=None):
                 "account",
             )
 
-            # -----------------------------------------------------
-            # Fallback to Company's Default Receivable Account
-            # -----------------------------------------------------
             if not debit_to:
                 debit_to = frappe.db.get_value(
                     "Company",
@@ -182,9 +151,6 @@ def initiate_little_champ_registration_payment(customer=None):
                     "default_receivable_account",
                 )
 
-            # -----------------------------------------------------
-            # No Receivable Account Found
-            # -----------------------------------------------------
             if not debit_to:
                 frappe.throw(
                     _(
@@ -197,9 +163,6 @@ def initiate_little_champ_registration_payment(customer=None):
                     )
                 )
 
-            # -----------------------------------------------------
-            # Get Company's Default Address
-            # -----------------------------------------------------
             company_address = frappe.db.get_value(
                 "Address",
                 {
@@ -210,9 +173,6 @@ def initiate_little_champ_registration_payment(customer=None):
                 "name",
             )
 
-            # -----------------------------------------------------
-            # Existing Draft Invoice
-            # -----------------------------------------------------
             if existing and existing.docstatus == 0:
                 invoice = frappe.get_doc(
                     "Sales Invoice",
@@ -224,30 +184,18 @@ def initiate_little_champ_registration_payment(customer=None):
 
                 needs_update = False
 
-                # -------------------------------------------------
-                # Ensure Customer
-                # -------------------------------------------------
                 if invoice.customer != customer:
                     invoice.customer = customer
                     needs_update = True
 
-                # -------------------------------------------------
-                # Ensure Company
-                # -------------------------------------------------
                 if invoice.company != company:
                     invoice.company = company
                     needs_update = True
 
-                # -------------------------------------------------
-                # Ensure Debit To / Receivable Account
-                # -------------------------------------------------
                 if invoice.debit_to != debit_to:
                     invoice.debit_to = debit_to
                     needs_update = True
 
-                # -------------------------------------------------
-                # Ensure Company Address
-                # -------------------------------------------------
                 if (
                     company_address
                     and invoice.company_address != company_address
@@ -255,9 +203,6 @@ def initiate_little_champ_registration_payment(customer=None):
                     invoice.company_address = company_address
                     needs_update = True
 
-                # -------------------------------------------------
-                # Ensure exactly one item
-                # -------------------------------------------------
                 if len(invoice.items) != 1:
                     invoice.set("items", [])
 
@@ -265,11 +210,43 @@ def initiate_little_champ_registration_payment(customer=None):
                         "items",
                         {
                             "item_code": item,
-                            "item_name":frappe.db.get_value("Item", item, "item_name"),
-                            "uom":frappe.db.get_value("Item", item, "stock_uom"),
+                            "item_name": frappe.db.get_value(
+                                "Item",
+                                item,
+                                "item_name",
+                            ),
+                            "uom": frappe.db.get_value(
+                                "Item",
+                                item,
+                                "stock_uom",
+                            ),
                             "qty": 1,
                             "rate": amount,
+                            "income_account": frappe.db.get_value(
+                                "Company",
+                                company,
+                                "default_income_account",
+                            ),
+                            "expense_account": frappe.db.get_value(
+                                "Company",
+                                company,
+                                "default_expense_account",
+                            ),
+                            "cost_center": frappe.db.get_value(
+                                "Company",
+                                company,
+                                "cost_center",
+                            ),
                         },
+                    )
+
+                    frappe.share.add_docshare(
+                        "Item",
+                        item,
+                        user=frappe.session.user,
+                        read=1,
+                        write=1,
+                        flags={"ignore_share_permission": True},
                     )
 
                     needs_update = True
@@ -285,12 +262,50 @@ def initiate_little_champ_registration_payment(customer=None):
                         row.item_code = item
                         row.qty = 1
                         row.rate = amount
-
+                        row.income_account = frappe.db.get_value(
+                            "Company",
+                            company,
+                            "default_income_account",
+                        )
+                        row.expense_account = frappe.db.get_value(
+                            "Company",
+                            company,
+                            "default_expense_account",
+                        )
+                        row.cost_center = frappe.db.get_value(
+                            "Company",
+                            company,
+                            "cost_center",
+                        )
                         needs_update = True
 
-                # -------------------------------------------------
-                # Save only if something changed
-                # -------------------------------------------------
+                        frappe.share.add_docshare(
+                            "Item",
+                            item,
+                            user=frappe.session.user,
+                            read=1,
+                            write=1,
+                            flags={"ignore_share_permission": True},
+                        )
+
+                invoice.set("taxes", [])
+                invoice.tax_category = None
+                invoice.total_taxes_and_charges = 0
+                invoice.base_total_taxes_and_charges = 0
+
+                invoice.calculate_taxes_and_totals()
+
+                invoice.total_taxes_and_charges = 0
+                invoice.base_total_taxes_and_charges = 0
+                invoice.grand_total = invoice.net_total
+                invoice.base_grand_total = invoice.base_net_total
+
+                if invoice.disable_rounded_total:
+                    invoice.rounded_total = invoice.grand_total
+                    invoice.base_rounded_total = invoice.base_grand_total
+
+                needs_update = True
+
                 if needs_update:
                     original_ignore_permissions = (
                         frappe.flags.ignore_permissions
@@ -298,11 +313,9 @@ def initiate_little_champ_registration_payment(customer=None):
 
                     try:
                         frappe.flags.ignore_permissions = True
-
                         invoice.save(
                             ignore_permissions=True
                         )
-
                     finally:
                         frappe.flags.ignore_permissions = (
                             original_ignore_permissions
@@ -311,62 +324,110 @@ def initiate_little_champ_registration_payment(customer=None):
                 invoice_name = invoice.name
                 pay_amount = amount
 
-            # -----------------------------------------------------
-            # No Existing Invoice
-            # -----------------------------------------------------
             else:
-                invoice = frappe.new_doc(
-                    "Sales Invoice"
-                )
+                invoice = frappe.new_doc("Sales Invoice")
 
                 invoice.flags.ignore_permissions = True
                 invoice.flags.ignore_user_permissions = True
 
-                # -------------------------------------------------
-                # Basic Invoice Details
-                # -------------------------------------------------
                 invoice.customer = customer
                 invoice.company = company
-
-                # -------------------------------------------------
-                # IMPORTANT:
-                # Set Customer/Company Receivable Account
-                # -------------------------------------------------
                 invoice.debit_to = debit_to
+                invoice.selling_price_list = "Standard Selling"
 
-                # -------------------------------------------------
-                # Set Company Address
-                # -------------------------------------------------
                 if company_address:
                     invoice.company_address = company_address
 
-                # -------------------------------------------------
-                # Add Little Champ Registration Fee Item
-                # -------------------------------------------------
+                invoice.due_date = frappe.utils.today()
+                invoice.currency = frappe.db.get_value(
+                    "Customer",
+                    customer,
+                    "default_currency",
+                )
+
                 invoice.append(
                     "items",
                     {
                         "item_code": item,
-                        "item_name":frappe.db.get_value("Item", item, "item_name"),
-                        "uom":frappe.db.get_value("Item", item, "stock_uom"),
+                        "item_name": frappe.db.get_value(
+                            "Item",
+                            item,
+                            "item_name",
+                        ),
+                        "uom": frappe.db.get_value(
+                            "Item",
+                            item,
+                            "stock_uom",
+                        ),
                         "qty": 1,
                         "rate": amount,
+                        "income_account": frappe.db.get_value(
+                            "Company",
+                            company,
+                            "default_income_account",
+                        ),
+                        "expense_account": frappe.db.get_value(
+                            "Company",
+                            company,
+                            "default_expense_account",
+                        ),
+                        "cost_center": frappe.db.get_value(
+                            "Company",
+                            company,
+                            "cost_center",
+                        ),
+                        "price_list_rate": frappe.db.get_value(
+                            "Item Price",
+                            {
+                                "item_code": item,
+                                "price_list": "Standard Selling",
+                            },
+                            "price_list_rate",
+                        ),
+                        "base_price_list_rate": frappe.db.get_value(
+                            "Item Price",
+                            {
+                                "item_code": item,
+                                "price_list": "Standard Selling",
+                            },
+                            "price_list_rate",
+                        ),
                     },
                 )
 
-                # -------------------------------------------------
-                # Insert Sales Invoice
-                # -------------------------------------------------
+                frappe.share.add_docshare(
+                    "Item",
+                    item,
+                    user=frappe.session.user,
+                    read=1,
+                    write=1,
+                    flags={"ignore_share_permission": True},
+                )
+
+                invoice.set("taxes", [])
+                invoice.tax_category = None
+
+                invoice.calculate_taxes_and_totals()
+
+                invoice.total_taxes_and_charges = 0
+                invoice.base_total_taxes_and_charges = 0
+                invoice.grand_total = invoice.net_total
+                invoice.base_grand_total = invoice.base_net_total
+
+                if invoice.disable_rounded_total:
+                    invoice.rounded_total = invoice.grand_total
+                    invoice.base_rounded_total = invoice.base_grand_total
+
                 original_ignore_permissions = (
                     frappe.flags.ignore_permissions
                 )
 
                 try:
                     frappe.flags.ignore_permissions = True
-                    invoice.save(
+                    invoice.due_date = frappe.utils.today()
+                    invoice.insert(
                         ignore_permissions=True
                     )
-
                 finally:
                     frappe.flags.ignore_permissions = (
                         original_ignore_permissions
@@ -375,17 +436,11 @@ def initiate_little_champ_registration_payment(customer=None):
                 invoice_name = invoice.name
                 pay_amount = amount
 
-        # ---------------------------------------------------------
-        # Validate Payment Amount
-        # ---------------------------------------------------------
         if pay_amount <= 0:
             frappe.throw(
                 _("Invalid outstanding amount for payment.")
             )
 
-        # ---------------------------------------------------------
-        # Create Razorpay Payment
-        # ---------------------------------------------------------
         original_ignore_permissions = (
             frappe.flags.ignore_permissions
         )
@@ -398,23 +453,16 @@ def initiate_little_champ_registration_payment(customer=None):
                 amount=pay_amount,
                 page=PAGE,
             )
-
         finally:
             frappe.flags.ignore_permissions = (
                 original_ignore_permissions
             )
 
-        # ---------------------------------------------------------
-        # Validate Razorpay Checkout URL
-        # ---------------------------------------------------------
         if not result or not result.get("checkout_url"):
             frappe.throw(
                 _("Unable to create Razorpay checkout.")
             )
 
-        # ---------------------------------------------------------
-        # Extract Razorpay Checkout Token
-        # ---------------------------------------------------------
         token = parse_qs(
             urlparse(
                 result["checkout_url"]
@@ -426,11 +474,7 @@ def initiate_little_champ_registration_payment(customer=None):
                 _("Unable to start Razorpay checkout.")
             )
 
-        # ---------------------------------------------------------
-        # Get Checkout Context
-        # ---------------------------------------------------------
         checkout_context = get_checkout_context(token)
-
         checkout_context["sales_invoice"] = invoice_name
 
         return checkout_context
