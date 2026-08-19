@@ -555,17 +555,18 @@ def get_customer_from_session_user():
 		if not contact_mobile:
 			contact_mobile = contact.mobile_no or contact.phone or ""
 
-	# Coordinators
 	coordinators_data = {}
 	for row in customer.custom_school_teacher_details:
-		if row.subject == "Principal":
+		subject_key = frappe.scrub(row.subject or "")  # canonical snake_case key
+
+		if subject_key == "principal":
 			role_text = "👑 Head Master / Principal"
-		elif row.subject == "Overall Coordinator":
+		elif subject_key == "overall_coordinator":
 			role_text = "⭐ Overall Co-ordinator"
 		else:
-			role_text = f"{row.subject} In-charge"
+			role_text = f"{(row.subject or '').strip()} In-charge"
 
-		coordinators_data[row.subject] = {
+		coordinators_data[subject_key] = {
 			"role": role_text,
 			"name": row.name1,
 			"mobile": row.phone_number,

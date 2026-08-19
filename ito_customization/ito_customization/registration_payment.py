@@ -344,8 +344,8 @@ def initiate_registration_fee_payment(free_registrations=0):
                     "items",
                     {
                         "item_code": item,
-                        "qty": 1,
-                        "rate": amount,
+                        "qty": paid_students,
+                        "rate": RATE_PER_STUDENT_INR,
                     },
                 )
 
