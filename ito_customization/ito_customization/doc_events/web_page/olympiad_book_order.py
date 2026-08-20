@@ -141,88 +141,54 @@ def create_or_update_books_selection(
     books_name = frappe.db.get_value(
         "Books Selection",
         {
-            "customer": customer_name
+            "customer": customer_name,
+            "is_submitted": 0
         }
     )
 
     if books_name:
-        books_doc = frappe.get_doc(
-            "Books Selection",
-            books_name
-        )
+        books_doc = frappe.get_doc("Books Selection", books_name)
         books_doc.select_books = []
     else:
-        books_doc = frappe.new_doc(
-            "Books Selection"
-        )
-        books_doc.customer = (
-            customer_name
-        )
-
-    if not books_doc.order_date:
+        books_doc = frappe.new_doc("Books Selection")
+        books_doc.customer = customer_name
         books_doc.order_date = frappe.utils.nowdate()
 
     for row in books_selection:
         if not (
-            cint(
-                row.get(
-                    "practice_workbook_110"
-                )
-            )
-            or
-            cint(
-                row.get(
-                    "student_guide_220"
-                )
-            )
-            or
-            cint(
-                row.get(
-                    "prev_year_paper_160"
-                )
-            )
+            cint(row.get("practice_workbook_110"))
+            or cint(row.get("student_guide_220"))
+            or cint(row.get("prev_year_paper_160"))
         ):
             continue
 
         books_doc.append(
             "select_books",
             {
-                "subject":
-                    row.get("subject"),
-                "class_grade":
-                    row.get("class_grade"),
-                "practice_workbook_110":
-                    cint(
-                        row.get(
-                            "practice_workbook_110"
-                        )
-                    ),
-                "student_guide_220":
-                    cint(
-                        row.get(
-                            "student_guide_220"
-                        )
-                    ),
-                "prev_year_paper_160":
-                    cint(
-                        row.get(
-                            "prev_year_paper_160"
-                        )
-                    )
+                "subject": row.get("subject"),
+                "class_grade": row.get("class_grade"),
+                "practice_workbook_110": cint(row.get("practice_workbook_110")),
+                "student_guide_220": cint(row.get("student_guide_220")),
+                "prev_year_paper_160": cint(row.get("prev_year_paper_160")),
             }
         )
 
     if is_submitted:
         books_doc.is_submitted = 1
 
-    if books_doc.is_new():
-        books_doc.insert(
-            ignore_permissions=True
-        )
-    else:
-        books_doc.save(
-            ignore_permissions=True
-        )
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        try:
+            if books_doc.is_new():
+                books_doc.insert(ignore_permissions=True)
+            else:
+                books_doc.save(ignore_permissions=True)
+            break
+        except frappe.DuplicateEntryError:
+            if attempt == max_attempts - 1:
+                raise
+            books_doc.name = None
+            frappe.db.rollback()
 
     return books_doc.name
 

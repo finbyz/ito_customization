@@ -1,7 +1,8 @@
 {
  "actions": [],
+ "allow_bulk_edit": 1,
  "allow_rename": 1,
- "autoname": "field:customer",
+ "autoname": "{customer}-.####",
  "creation": "2026-06-10 16:46:40.340446",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -16,9 +17,10 @@
   {
    "fieldname": "customer",
    "fieldtype": "Link",
+   "in_list_view": 1,
    "label": "Customer",
    "options": "Customer",
-   "unique": 1
+   "reqd": 1
   },
   {
    "fieldname": "select_books",
@@ -47,11 +49,11 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-30 12:02:00.000000",
+ "modified": "2026-08-20 12:37:45.976572",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Books Selection",
- "naming_rule": "By fieldname",
+ "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {
