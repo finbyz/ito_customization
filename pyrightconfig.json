@@ -1,0 +1,17 @@
+{
+  "venvPath": "/home/frappe/benches/ito-bench",
+  "venv": "env",
+  "extraPaths": [
+    "../frappe",
+    "../erpnext",
+    "../multi_company_razorpay",
+    "../ito_customization",
+    "../customer_portal",
+    "../builder",
+    "../education",
+    "../hrms",
+    "../india_compliance",
+    "../insights",
+    "../payments"
+  ]
+}
