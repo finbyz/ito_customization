@@ -281,8 +281,8 @@ def initiate_registration_fee_payment(free_registrations=0):
                         "items",
                         {
                             "item_code": item,
-                            "qty": 1,
-                            "rate": amount,
+                            "qty": paid_students,
+                            "rate": RATE_PER_STUDENT_INR,
                         },
                     )
 
@@ -293,12 +293,12 @@ def initiate_registration_fee_payment(free_registrations=0):
 
                     if (
                         row.item_code != item
-                        or flt(row.qty) != 1
-                        or abs(flt(row.rate) - amount) > 0.01
+                        or flt(row.qty) != flt(paid_students)
+                        or abs(flt(row.rate) - RATE_PER_STUDENT_INR) > 0.01
                     ):
                         row.item_code = item
-                        row.qty = 1
-                        row.rate = amount
+                        row.qty = paid_students
+                        row.rate = RATE_PER_STUDENT_INR
 
                         needs_update = True
 

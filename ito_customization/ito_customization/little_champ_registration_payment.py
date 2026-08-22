@@ -220,8 +220,8 @@ def initiate_little_champ_registration_payment(customer=None):
                                 item,
                                 "stock_uom",
                             ),
-                            "qty": 1,
-                            "rate": amount,
+                            "qty": total_students,
+                            "rate": RATE_PER_STUDENT_INR,
                             "income_account": frappe.db.get_value(
                                 "Company",
                                 company,
@@ -256,12 +256,12 @@ def initiate_little_champ_registration_payment(customer=None):
 
                     if (
                         row.item_code != item
-                        or flt(row.qty) != 1
-                        or abs(flt(row.rate) - amount) > 0.01
+                        or flt(row.qty) != flt(total_students)
+                        or abs(flt(row.rate) - RATE_PER_STUDENT_INR) > 0.01
                     ):
                         row.item_code = item
-                        row.qty = 1
-                        row.rate = amount
+                        row.qty = total_students
+                        row.rate = RATE_PER_STUDENT_INR
                         row.income_account = frappe.db.get_value(
                             "Company",
                             company,
@@ -359,8 +359,8 @@ def initiate_little_champ_registration_payment(customer=None):
                             item,
                             "stock_uom",
                         ),
-                        "qty": 1,
-                        "rate": amount,
+                        "qty": total_students,
+                        "rate": RATE_PER_STUDENT_INR,
                         "income_account": frappe.db.get_value(
                             "Company",
                             company,

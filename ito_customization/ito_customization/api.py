@@ -431,7 +431,11 @@ def create_or_update_teachers(coordinators, customer_name):
 	for subject_name in subject_map.values():
 		ensure_subject_exists(subject_name)
 
-	customer.custom_school_teacher_details = []
+	# Clean existing child table rows in database for this customer
+	frappe.db.delete("Teachers Details", {"parent": customer.name})
+	customer.set("custom_school_teacher_details", [])
+
+	processed_teacher_names = set()
 
 	for role_key, coordinator in coordinators.items():
 		if not coordinator.get("name"):
@@ -455,8 +459,7 @@ def create_or_update_teachers(coordinators, customer_name):
 				subject = subject_map.get(role_key)
 
 		if not subject:
-			frappe.log_error("Unmatched Coordinator Role", f"Role Key: {role_key}, Role Text: {role_text}")
-			continue
+			subject = role_text or "Other"
 
 		ensure_subject_exists(subject)
 
@@ -483,6 +486,14 @@ def create_or_update_teachers(coordinators, customer_name):
 			teacher.insert(ignore_permissions=True)
 		else:
 			teacher.save(ignore_permissions=True)
+
+		if teacher.name in processed_teacher_names:
+			continue
+		processed_teacher_names.add(teacher.name)
+
+		# Ensure no orphaned Teachers Details record exists with this name before append
+		if frappe.db.exists("Teachers Details", teacher.name):
+			frappe.db.delete("Teachers Details", {"name": teacher.name})
 
 		customer.append("custom_school_teacher_details", {
 			"name1": teacher.name,
@@ -534,26 +545,56 @@ def get_customer_from_session_user():
 	contact_email = ""
 	contact_mobile = ""
 
-	if customer.customer_primary_contact:
-		contact = frappe.get_doc("Contact", customer.customer_primary_contact)
-		contact_name = contact.get_full_name() if hasattr(contact, "get_full_name") else contact.first_name
+	contact_doc = None
+	if customer.customer_primary_contact and frappe.db.exists("Contact", customer.customer_primary_contact):
+		contact_doc = frappe.get_doc("Contact", customer.customer_primary_contact)
+	else:
+		contact_names = frappe.get_all(
+			"Dynamic Link",
+			filters={"link_doctype": "Customer", "link_name": customer.name, "parenttype": "Contact"},
+			pluck="parent"
+		)
+		if contact_names:
+			contact_doc = frappe.get_doc("Contact", contact_names[0])
 
-		if contact.email_ids:
-			primary_email = next((row.email_id for row in contact.email_ids if row.is_primary), None)
-			if not primary_email and contact.email_ids:
-				primary_email = contact.email_ids[0].email_id
+	if contact_doc:
+		contact_name = contact_doc.get_full_name() if hasattr(contact_doc, "get_full_name") else getattr(contact_doc, "first_name", "")
+
+		if getattr(contact_doc, "email_ids", None):
+			primary_email = next((row.email_id for row in contact_doc.email_ids if getattr(row, "is_primary", False)), None)
+			if not primary_email and len(contact_doc.email_ids) > 0:
+				primary_email = contact_doc.email_ids[0].email_id
 			contact_email = primary_email or ""
 
-		if contact.phone_nos:
-			primary_mobile = next((row.phone for row in contact.phone_nos if row.is_primary_mobile_no), None)
-			if not primary_mobile and contact.phone_nos:
-				primary_mobile = contact.phone_nos[0].phone
+		if not contact_email:
+			contact_email = getattr(contact_doc, "email_id", "") or ""
+
+		if getattr(contact_doc, "phone_nos", None):
+			primary_mobile = next((row.phone for row in contact_doc.phone_nos if getattr(row, "is_primary_mobile_no", False)), None)
+			if not primary_mobile and len(contact_doc.phone_nos) > 0:
+				primary_mobile = contact_doc.phone_nos[0].phone
 			contact_mobile = primary_mobile or ""
 
-		if not contact_email:
-			contact_email = contact.email_id or ""
 		if not contact_mobile:
-			contact_mobile = contact.mobile_no or contact.phone or ""
+			contact_mobile = getattr(contact_doc, "mobile_no", "") or getattr(contact_doc, "phone", "") or ""
+
+	# Check Customer fields for email fallback
+	if not contact_email:
+		contact_email = (
+			customer.get("email_id")
+			or customer.get("custom_school_email")
+			or customer.get("custom_email")
+			or customer.get("custom_email_id")
+			or ""
+		)
+
+	# Check User session email fallback
+	if not contact_email and frappe.session.user and frappe.session.user != "Guest":
+		user_email = frappe.db.get_value("User", frappe.session.user, "email")
+		if user_email and "@" in user_email:
+			contact_email = user_email
+		elif "@" in frappe.session.user:
+			contact_email = frappe.session.user
 
 	coordinators_data = {}
 	for row in customer.custom_school_teacher_details:
@@ -631,6 +672,35 @@ def get_customer_from_session_user():
 
 		exam_summaries_data.extend(subject_map.values())
 
+	# If no specific Exams Summary assigned yet, fetch from active Yearly Exam Date
+	if not exam_summaries_data:
+		ay = customer.get("custom_current_academic_year")
+		yed_filters = {"docstatus": 1}
+		if ay:
+			normalized_ay = ay
+			if not normalized_ay.startswith("AY-"):
+				parts = normalized_ay.replace("-", "/").split("/")
+				if len(parts) == 2:
+					normalized_ay = f"AY-{parts[0]}/{parts[1]}"
+			yed_filters["academic_year"] = normalized_ay
+
+		yearly_exams = frappe.get_all("Yearly Exam Date", filters=yed_filters, fields=["name", "academic_year"], order_by="creation desc", limit=1)
+		if not yearly_exams:
+			# Fallback to any latest submitted Yearly Exam Date
+			yearly_exams = frappe.get_all("Yearly Exam Date", filters={"docstatus": 1}, fields=["name", "academic_year"], order_by="creation desc", limit=1)
+
+		if yearly_exams:
+			yearly_exam = frappe.get_doc("Yearly Exam Date", yearly_exams[0].name)
+			for row in yearly_exam.target_dates:
+				exam_summaries_data.append({
+					"exam_summary_name": "",
+					"yearly_exam_date": yearly_exam.name,
+					"academic_year": yearly_exam.academic_year,
+					"subject": row.subject,
+					"target_dates": [row.tg_date_1, row.tg_date_2, row.tg_date_3],
+					"rows": []
+				})
+
 	# Teachers
 	teachers_data = []
 	es_name = frappe.db.get_value("Exams Summary", {"customer": customer.name})
@@ -662,6 +732,42 @@ def get_customer_from_session_user():
 				"prev_year_paper_160": row.prev_year_paper_160
 			})
 
+	# Competition Entry Matrix: Fetch latest record for customer
+	latest_cem_name = frappe.db.get_value(
+		"Competition Entry Matrix",
+		{"customer": customer.name},
+		"name",
+		order_by="creation desc"
+	)
+	competition_entry_matrix_rows = []
+	entry_matrix = None
+	if latest_cem_name:
+		cem_doc = frappe.get_doc("Competition Entry Matrix", latest_cem_name)
+		entry_matrix = {
+			"group_a": {},
+			"group_b": {},
+			"group_c": {},
+			"group_d": {},
+			"group_e": {},
+		}
+		for row in cem_doc.entry_matrix:
+			competition_entry_matrix_rows.append({
+				"subject": row.subject,
+				"group_a": row.group_a or 0,
+				"group_b": row.group_b or 0,
+				"group_c": row.group_c or 0,
+				"group_d": row.group_d or 0,
+				"group_e": row.group_e or 0,
+			})
+			subj_key = frappe.scrub(row.subject)
+			entry_matrix["group_a"][subj_key] = row.group_a or 0
+			entry_matrix["group_b"][subj_key] = row.group_b or 0
+			entry_matrix["group_c"][subj_key] = row.group_c or 0
+			entry_matrix["group_d"][subj_key] = row.group_d or 0
+			entry_matrix["group_e"][subj_key] = row.group_e or 0
+	else:
+		entry_matrix = frappe.cache().get_value(f"wof_entry_matrix_{customer.name}")
+
 	return {
 		"customer": customer.as_dict(),
 		"address": address,
@@ -674,6 +780,9 @@ def get_customer_from_session_user():
 		"registration_date_2": customer.custom_last_date_of_reg_2,
 		"coordinators": coordinators_data,
 		"exam_summaries": exam_summaries_data,
+		"entry_matrix": entry_matrix,
+		"competition_entry_matrix_rows": competition_entry_matrix_rows,
+		"latest_competition_entry_matrix": latest_cem_name,
 		"session_user": frappe.session.user,
 		"teachers": teachers_data,
 		"books_selection": books_selection,
@@ -772,7 +881,12 @@ def save_little_champ_registration(registration_data):
 
 def create_or_update_little_champ_teachers(coordinators, customer_name):
 	customer = frappe.get_doc("Customer", customer_name)
-	customer.custom_school_teacher_details = []
+
+	# Clean existing child table rows in database for this customer
+	frappe.db.delete("Teachers Details", {"parent": customer.name})
+	customer.set("custom_school_teacher_details", [])
+
+	processed_teacher_names = set()
 
 	for role, coordinator in coordinators.items():
 		if not coordinator.get("name"):
@@ -809,6 +923,13 @@ def create_or_update_little_champ_teachers(coordinators, customer_name):
 			teacher.insert(ignore_permissions=True)
 		else:
 			teacher.save(ignore_permissions=True)
+
+		if teacher.name in processed_teacher_names:
+			continue
+		processed_teacher_names.add(teacher.name)
+
+		if frappe.db.exists("Teachers Details", teacher.name):
+			frappe.db.delete("Teachers Details", {"name": teacher.name})
 
 		customer.append("custom_school_teacher_details", {
 			"name1": teacher.name,
@@ -928,6 +1049,262 @@ def save_little_champ_step():
 		return {"success": False, "message": str(e)}
 
 
+@frappe.whitelist(allow_guest=True)
+def save_wof_registration(registration_data):
+	original_ignore_permissions = frappe.flags.ignore_permissions
+	try:
+		frappe.flags.ignore_permissions = True
+		data = json.loads(registration_data) if isinstance(registration_data, str) else registration_data
+
+		school_info = data.get("school_info", {})
+		gstin = school_info.get("gst_no", "").strip().upper()
+		if gstin and len(gstin) != 15:
+			gstin = ""
+		school_info["gst_no"] = gstin
+
+		if not school_info.get("school_code") and school_info.get("ito_school_code"):
+			school_info["school_code"] = school_info.get("ito_school_code")
+
+		customer = create_or_update_customer(school_info)
+		customer_doc = frappe.get_doc("Customer", customer)
+		if hasattr(customer_doc, "custom_is_wof"):
+			customer_doc.custom_is_wof = 1
+		if hasattr(customer_doc, "custom_registration_date"):
+			customer_doc.custom_registration_date = frappe.utils.nowdate()
+		customer_doc.save(ignore_permissions=True)
+
+		create_or_update_address(customer, school_info)
+
+		coordinators_data = data.get("coordinators", {})
+		principal = coordinators_data.get("principal") or coordinators_data.get("head_master_principal")
+		if principal:
+			create_or_update_principal(principal, customer)
+
+		create_or_update_teachers(coordinators_data, customer)
+
+		entry_matrix = data.get("entry_matrix")
+		if entry_matrix:
+			save_competition_entry_matrix_record(customer, entry_matrix)
+			sync_wof_entry_matrix_to_exams_summary(customer, entry_matrix)
+
+		payment = data.get("payment", {})
+		mode = payment.get("mode")
+		if mode and mode != "razorpay":
+			customer_doc.add_comment(
+				"Info",
+				f"WOF Registration fee reported as paid via {mode}: {frappe.as_json(payment.get('payment_details', {}))}",
+			)
+
+		return {"success": True, "customer": customer}
+
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "WOF Registration Error")
+		return {"success": False, "message": str(e)}
+	finally:
+		frappe.flags.ignore_permissions = original_ignore_permissions
+
+
+def save_competition_entry_matrix_record(customer, entry_matrix):
+	if not customer or not entry_matrix:
+		return None
+
+	frappe.cache().set_value(f"wof_entry_matrix_{customer}", entry_matrix)
+
+	# Fetch all school subjects for exact matching
+	all_school_subjects = frappe.get_all("School Subject", pluck="name")
+	subject_lookup = {frappe.scrub(s): s for s in all_school_subjects}
+	for s in all_school_subjects:
+		subject_lookup[s.lower()] = s
+		subject_lookup[s] = s
+
+	alias_map = {
+		"colouring": "Colouring Competition",
+		"colouring_competition": "Colouring Competition",
+		"handwriting": "Handwriting Competition",
+		"handwriting_competition": "Handwriting Competition",
+		"sketching": "Sketching Competition",
+		"sketching_competition": "Sketching Competition",
+		"cartoon": "Cartoon Making",
+		"cartoon_making": "Cartoon Making",
+		"caricature": "Caricature (Cartoon)",
+		"caricature_cartoon": "Caricature (Cartoon)",
+		"greeting": "Greeting Card Making",
+		"greeting_card_making": "Greeting Card Making",
+	}
+
+	# Collect all distinct subject keys from entry_matrix
+	subjects_keys = []
+	for g_data in entry_matrix.values():
+		if isinstance(g_data, dict):
+			for k in g_data.keys():
+				if k not in subjects_keys:
+					subjects_keys.append(k)
+
+	resolved_subjects = {}
+	for key in subjects_keys:
+		target_subject = alias_map.get(key) or subject_lookup.get(key) or subject_lookup.get(key.lower()) or subject_lookup.get(frappe.scrub(key)) or key
+
+		# Ensure School Subject exists in DB
+		if target_subject not in all_school_subjects and not frappe.db.exists("School Subject", target_subject):
+			try:
+				subj_doc = frappe.get_doc({"doctype": "School Subject", "subject_name": target_subject})
+				subj_doc.insert(ignore_permissions=True)
+				all_school_subjects.append(target_subject)
+			except Exception:
+				pass
+
+		ga = cint(entry_matrix.get("group_a", {}).get(key, 0))
+		gb = cint(entry_matrix.get("group_b", {}).get(key, 0))
+		gc = cint(entry_matrix.get("group_c", {}).get(key, 0))
+		gd = cint(entry_matrix.get("group_d", {}).get(key, 0))
+		ge = cint(entry_matrix.get("group_e", {}).get(key, 0))
+
+		if target_subject not in resolved_subjects:
+			resolved_subjects[target_subject] = {
+				"subject": target_subject,
+				"group_a": ga,
+				"group_b": gb,
+				"group_c": gc,
+				"group_d": gd,
+				"group_e": ge,
+			}
+		else:
+			resolved_subjects[target_subject]["group_a"] = max(resolved_subjects[target_subject]["group_a"], ga)
+			resolved_subjects[target_subject]["group_b"] = max(resolved_subjects[target_subject]["group_b"], gb)
+			resolved_subjects[target_subject]["group_c"] = max(resolved_subjects[target_subject]["group_c"], gc)
+			resolved_subjects[target_subject]["group_d"] = max(resolved_subjects[target_subject]["group_d"], gd)
+			resolved_subjects[target_subject]["group_e"] = max(resolved_subjects[target_subject]["group_e"], ge)
+
+	cem_doc = frappe.new_doc("Competition Entry Matrix")
+	cem_doc.customer = customer
+	for row_data in resolved_subjects.values():
+		cem_doc.append("entry_matrix", row_data)
+
+	cem_doc.insert(ignore_permissions=True)
+	return cem_doc.name
+
+
+def sync_wof_entry_matrix_to_exams_summary(customer, entry_matrix):
+	if not customer or not entry_matrix:
+		return
+
+	es_name = frappe.db.get_value("Exams Summary", {"customer": customer})
+	if not es_name:
+		yed_name = frappe.db.get_value("Yearly Exam Date", {"docstatus": 1}, "name", order_by="creation desc")
+		if yed_name:
+			es_doc = frappe.new_doc("Exams Summary")
+			es_doc.customer = customer
+			es_doc.exam_detail = yed_name
+			es_doc.insert(ignore_permissions=True)
+			es_name = es_doc.name
+
+	if es_name:
+		es_doc = frappe.get_doc("Exams Summary", es_name)
+		es_doc.exam_summary = []
+
+		group_labels = {
+			"group_a": "Group A",
+			"group_b": "Group B",
+			"group_c": "Group C",
+			"group_d": "Group D",
+			"group_e": "Group E",
+		}
+
+		for group_key, comp_dict in entry_matrix.items():
+			if not isinstance(comp_dict, dict):
+				continue
+			group_label = group_labels.get(group_key, group_key)
+			for comp_key, count in comp_dict.items():
+				if count and cint(count) > 0:
+					es_doc.append("exam_summary", {
+						"subject": comp_key,
+						"class": group_label,
+						"no_of_students": cint(count),
+						"form_type": "WOF Registration"
+					})
+		es_doc.save(ignore_permissions=True)
+
+
+@frappe.whitelist(allow_guest=True)
+def save_wof_step():
+	data = frappe.request.get_json() or {}
+	step = cint(data.get("step"))
+
+	try:
+		original_flag = frappe.flags.ignore_permissions
+		frappe.flags.ignore_permissions = True
+
+		try:
+			if step == 1:
+				school_info = data.get("school_info", {})
+				if not school_info.get("school_code") and school_info.get("ito_school_code"):
+					school_info["school_code"] = school_info.get("ito_school_code")
+
+				customer = create_or_update_customer(school_info)
+				customer_doc = frappe.get_doc("Customer", customer)
+				if hasattr(customer_doc, "custom_is_wof"):
+					customer_doc.custom_is_wof = 1
+				customer_doc.save(ignore_permissions=True)
+
+				create_or_update_address(customer_doc.name, school_info)
+				frappe.cache().set_value(f"wof_customer_{frappe.session.user}", customer_doc.name)
+				frappe.cache().set_value(f"ito_customer_{frappe.session.user}", customer_doc.name)
+				return {"success": True, "step": 1, "customer": customer_doc.name}
+
+			elif step == 2:
+				customer = frappe.cache().get_value(f"wof_customer_{frappe.session.user}") or frappe.cache().get_value(f"ito_customer_{frappe.session.user}")
+				if not customer:
+					customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+				if not customer:
+					frappe.throw("Please save School Information first.")
+
+				coordinators_data = data.get("coordinators", {})
+				principal = coordinators_data.get("principal") or coordinators_data.get("head_master_principal")
+				if principal:
+					create_or_update_principal(principal, customer)
+
+				create_or_update_teachers(coordinators_data, customer)
+				return {"success": True, "step": 2}
+
+			elif step == 3:
+				customer = frappe.cache().get_value(f"wof_customer_{frappe.session.user}") or frappe.cache().get_value(f"ito_customer_{frappe.session.user}")
+				if not customer:
+					customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+				if not customer:
+					frappe.throw("Please save School Information first.")
+
+				entry_matrix = data.get("entry_matrix")
+				if entry_matrix:
+					save_competition_entry_matrix_record(customer, entry_matrix)
+					sync_wof_entry_matrix_to_exams_summary(customer, entry_matrix)
+
+				return {"success": True, "step": 3}
+
+			elif step == 4 or step == 5:
+				customer = frappe.cache().get_value(f"wof_customer_{frappe.session.user}") or frappe.cache().get_value(f"ito_customer_{frappe.session.user}")
+				if not customer:
+					customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+				if not customer:
+					frappe.throw("Please save School Information first.")
+
+				payment = data.get("payment", {})
+				mode = payment.get("mode")
+				if mode and mode != "razorpay":
+					frappe.get_doc("Customer", customer).add_comment(
+						"Info",
+						f"WOF Registration fee reported as paid via {mode}: {frappe.as_json(payment.get('payment_details', {}))}",
+					)
+				return {"success": True, "step": step}
+
+			else:
+				frappe.throw(f"Invalid step {step}")
+
+		finally:
+			frappe.flags.ignore_permissions = original_flag
+
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "WOF Step Save Error")
+		return {"success": False, "message": str(e)}
 
 
 # ==================== DYNAMIC SUBJECT HELPER ====================
