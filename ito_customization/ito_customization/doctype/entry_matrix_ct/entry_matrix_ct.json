@@ -1,0 +1,76 @@
+{
+ "actions": [],
+ "allow_bulk_edit": 1,
+ "allow_rename": 1,
+ "creation": "2026-08-21 16:41:35.418205",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "subject",
+  "group_a",
+  "group_b",
+  "group_c",
+  "group_d",
+  "group_e"
+ ],
+ "fields": [
+  {
+   "fieldname": "subject",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Subject",
+   "options": "School Subject"
+  },
+  {
+   "description": "Nursery , LKG , UKG",
+   "fieldname": "group_a",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Group A"
+  },
+  {
+   "description": "Classes 1st - 2nd",
+   "fieldname": "group_b",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Group B"
+  },
+  {
+   "description": "Classes 3rd - 5th",
+   "fieldname": "group_c",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Group C"
+  },
+  {
+   "description": "Classes 6th - 8th",
+   "fieldname": "group_d",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Group D"
+  },
+  {
+   "description": "Classes 9th - 12th",
+   "fieldname": "group_e",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Group E"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-21 17:24:41.542683",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "Entry Matrix CT",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
