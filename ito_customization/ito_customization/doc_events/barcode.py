@@ -28,7 +28,6 @@ def get_barcode_base64(value: str) -> str:
 		buffer,
 		options={
 			"module_height": 8.0,
-			"write_text": False,
 			"quiet_zone": 0.0,
 		},
 	)

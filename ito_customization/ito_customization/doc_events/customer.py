@@ -111,14 +111,40 @@ def _target_field(doc):
     return "custom_school_code" if doc.custom_is_little_champ else "custom_ito_school_code"
 
 
+# def _get_next_number(prefix):
+#     """
+#     Look at existing Customer names for this prefix and return the next
+#     number in sequence (max + 1). This works regardless of whether the
+#     previous record was created via the form, autoname(), or Data Import
+#     with an explicit ID — because it reads the actual data, not a
+#     separate naming-series counter. `for update` locks matching rows so
+#     concurrent inserts for the same prefix don't generate the same number.
+#     """
+#     existing = frappe.db.sql(
+#         """
+#         select name from `tabCustomer`
+#         where name like %s
+#         for update
+#         """,
+#         (f"{prefix}-%",),
+#     )
+
+#     pattern = re.compile(rf"^{re.escape(prefix)}-(\d+)$")
+#     max_num = 0
+
+#     for (name,) in existing:
+#         m = pattern.match(name)
+#         if m:
+#             num = int(m.group(1))
+#             if num > max_num:
+#                 max_num = num
+
+#     return max_num + 1
+
 def _get_next_number(prefix):
     """
     Look at existing Customer names for this prefix and return the next
-    number in sequence (max + 1). This works regardless of whether the
-    previous record was created via the form, autoname(), or Data Import
-    with an explicit ID — because it reads the actual data, not a
-    separate naming-series counter. `for update` locks matching rows so
-    concurrent inserts for the same prefix don't generate the same number.
+    number in sequence (max + 1).
     """
     existing = frappe.db.sql(
         """
@@ -126,10 +152,10 @@ def _get_next_number(prefix):
         where name like %s
         for update
         """,
-        (f"{prefix}-%",),
+        (f"{prefix}%",),
     )
 
-    pattern = re.compile(rf"^{re.escape(prefix)}-(\d+)$")
+    pattern = re.compile(rf"^{re.escape(prefix)}(\d+)$")
     max_num = 0
 
     for (name,) in existing:
@@ -142,15 +168,23 @@ def _get_next_number(prefix):
     return max_num + 1
 
 
+# def _generate_code(prefix):
+#     # Numbering is derived live from the max existing Customer name for
+#     # this prefix (see _get_next_number) — not from a separate naming
+#     # series counter — so it stays correct regardless of whether records
+#     # were created via the form, autoname(), or Data Import.
+#     next_num = _get_next_number(prefix)
+#     # keeps the existing 5-digit zero-padded style: WB-01218, WB-01219...
+#     return f"{prefix}-{next_num:05d}"
+
 def _generate_code(prefix):
     # Numbering is derived live from the max existing Customer name for
     # this prefix (see _get_next_number) — not from a separate naming
     # series counter — so it stays correct regardless of whether records
     # were created via the form, autoname(), or Data Import.
     next_num = _get_next_number(prefix)
-    # keeps the existing 5-digit zero-padded style: WB-01218, WB-01219...
-    return f"{prefix}-{next_num:05d}"
-
+    # 4-digit zero-padded, no separator: AP0001, AP0002...
+    return f"{prefix}{next_num:04d}"
 
 def autoname(doc, method):
     """
@@ -180,10 +214,6 @@ def autoname(doc, method):
 
 
 def sync_school_code(doc, method):
-    """
-    Runs on_update. Only relevant for School Customers — Online Student
-    Customers don't have State/Country-driven IDs.
-    """
     if doc.custom_customer_category != "School Customer":
         return
 
@@ -194,10 +224,13 @@ def sync_school_code(doc, method):
     if not prefix:
         return
 
-    current_prefix = doc.name.split("-")[0] if "-" in doc.name else None
+    match = re.match(r"^([A-Za-z]+)\d+$", doc.name)
+    current_prefix = match.group(1) if match else None
 
     if current_prefix == prefix:
         return  # ID already matches current state/category — nothing to do
+
+    # ... rest unchanged
 
     relevant_change = (
         doc.has_value_changed("custom_state")
