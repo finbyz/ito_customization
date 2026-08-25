@@ -1,0 +1,98 @@
+{
+ "actions": [],
+ "allow_bulk_edit": 1,
+ "allow_rename": 1,
+ "creation": "2026-08-24 12:55:42.346963",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "student_name",
+  "parent_name",
+  "colouring",
+  "handwriting",
+  "sketching",
+  "cartoon",
+  "caricature",
+  "greeting_card"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "fieldname": "student_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Student Name"
+  },
+  {
+   "columns": 2,
+   "fieldname": "parent_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Parent Name"
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "fieldname": "colouring",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Colouring"
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "fieldname": "handwriting",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Handwriting"
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "fieldname": "sketching",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Sketching"
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "fieldname": "cartoon",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Cartoon"
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "fieldname": "caricature",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Caricature"
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "fieldname": "greeting_card",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Greeting Card"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-24 13:00:10.431908",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "WOF List",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

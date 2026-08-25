@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from urllib.parse import parse_qs, urlparse
-# from contextlib import contextmanager
-from frappe.desk.form import assign_to
-from frappe.desk.form import assign_to
 import frappe
+import frappe.share
 from frappe import _
 from frappe.utils import cint, flt
 
@@ -18,19 +16,16 @@ from multi_company_razorpay.api import (
 )
 
 PAGE = "ITO Registration"
-FEE_ITEM_NAME = "ITO Registration Fee"
-FEE_ITEM_GROUP = "Fee Component"
-RATE_PER_STUDENT_INR = 150
 
 
-def _get_session_customer():
-    if frappe.session.user == "Guest":
-        frappe.throw(_("Please login to continue."), frappe.PermissionError)
-
-    customer = frappe.cache().get_value(f"ito_customer_{frappe.session.user}")
-    if not customer:
-        customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
-    if not customer:
+def _get_customer(customer=None):
+    session_customer = frappe.cache().get_value(f"ito_customer_{frappe.session.user}")
+    if not session_customer:
+        session_customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+    customer = session_customer or customer
+    if session_customer and customer and session_customer != customer:
+        frappe.throw(_("You are not allowed to pay for this customer."), frappe.PermissionError)
+    if not customer or not frappe.db.exists("Customer", customer):
         frappe.throw(_("Please save School Information first."))
     return customer
 
@@ -48,41 +43,54 @@ def _get_total_students(customer):
     return cint(total)
 
 
-def _get_or_create_fee_item(company):
-    # Item.autoname (ito_customization's CustomItem) rewrites item_code/name to a
-    # company-prefixed code, so the real primary key is not FEE_ITEM_NAME itself -
-    # look it up (and dedupe) by item_name, which autoname leaves untouched.
-    existing = frappe.db.get_value("Item", {"item_name": FEE_ITEM_NAME}, "name")
-    if existing:
-        item = frappe.get_doc("Item", existing)
-        if not any(u.uom == "Nos" for u in item.uoms or []):
-            item.append("uoms", {"uom": "Nos", "conversion_factor": 1})
-            item.save(ignore_permissions=True)
-        return existing
-    item = frappe.get_doc(
-        {
-            "doctype": "Item",
-            "item_name": FEE_ITEM_NAME,
-            "item_group": FEE_ITEM_GROUP,
-            "stock_uom": "Nos",
-            "is_stock_item": 0,
-            # 999295: "services involving conduct of examination for admission to
-            # educational institutions" - required by india_compliance for all Items.
-            "gst_hsn_code": "999295",
-            "custom_company": company,
-            # ito_customization's CustomItem.validate() doesn't call super().validate(),
-            # so ERPNext never auto-populates the UOM Conversion Detail row for items
-            # created via API (only the Desk form's JS does that client-side) - without
-            # it, the first Item Price ever auto-inserted for this item fails with
-            # "UOM Nos not found in Item ...". Add it explicitly.
-            "uoms": [{"uom": "Nos", "conversion_factor": 1}],
-        }
-    ).insert(ignore_permissions=True)
-    return item.name
+def _get_registration_fee_item(company=None):
+    return frappe.db.get_value(
+        "Item",
+        {"custom_is_registration_item": 1, "custom_form_name": PAGE, "disabled": 0},
+        "name",
+    )
+
+
+def _get_registration_fee_rate(currency="INR"):
+    item_code = _get_registration_fee_item()
+    if not item_code:
+        return 0.0
+
+    prices = frappe.get_all(
+        "Item Price",
+        filters={"item_code": item_code, "selling": 1},
+        fields=["price_list_rate", "currency"],
+        order_by="modified desc",
+    )
+    for p in prices:
+        if p.currency == currency and flt(p.price_list_rate) > 0:
+            return flt(p.price_list_rate)
+
+    inr_price = frappe.db.get_value(
+        "Item Price",
+        {"item_code": item_code, "currency": currency},
+        "price_list_rate",
+        order_by="modified desc",
+    )
+    if not inr_price and currency == "INR":
+        inr_price = frappe.db.get_value(
+            "Item Price",
+            {"item_code": item_code},
+            "price_list_rate",
+            order_by="modified desc",
+        )
+    if not inr_price:
+        std_rate = frappe.db.get_value("Item", item_code, "standard_rate")
+        if std_rate and flt(std_rate) > 0:
+            inr_price = flt(std_rate)
+
+    return flt(inr_price) if inr_price and flt(inr_price) > 0 else 0.0
 
 
 def _find_registration_fee_invoice(customer, company):
-    fee_item = _get_or_create_fee_item(company)
+    fee_item = _get_registration_fee_item(company)
+    if not fee_item:
+        return None
     rows = frappe.get_all(
         "Sales Invoice",
         filters={
@@ -102,9 +110,9 @@ def _find_registration_fee_invoice(customer, company):
 
 
 @frappe.whitelist(allow_guest=True)
-def initiate_registration_fee_payment(free_registrations=0):
+def initiate_registration_fee_payment(customer=None, free_registrations=0):
     try:
-        customer = _get_session_customer()
+        customer = _get_customer(customer)
 
         # The admin's page routing (Multi Company Razorpay Settings
         # "Used For" tag) decides both Razorpay account and company.
@@ -118,8 +126,14 @@ def initiate_registration_fee_payment(free_registrations=0):
             min(cint(free_registrations), total_students),
         )
 
+        rate = _get_registration_fee_rate("INR")
+        if rate <= 0:
+            frappe.throw(
+                _("Registration fee rate is not configured for {0}.").format(PAGE)
+            )
+
         paid_students = total_students - free_registrations
-        amount = flt(paid_students * RATE_PER_STUDENT_INR)
+        amount = flt(paid_students * rate)
 
         if amount <= 0:
             frappe.throw(
@@ -170,16 +184,16 @@ def initiate_registration_fee_payment(free_registrations=0):
 
         else:
             # -----------------------------------------------------
-            # Get/Create Registration Fee Item
+            # Get Registration Fee Item
             # -----------------------------------------------------
-            item = _get_or_create_fee_item(company)
+            item = _get_registration_fee_item(company)
+            if not item:
+                frappe.throw(
+                    _("Registration fee item is not configured for {0}.").format(PAGE)
+                )
 
             # -----------------------------------------------------
             # Get Customer Receivable Account
-            #
-            # Priority:
-            # 1. Customer's Party Account for this Company
-            # 2. Company's default_receivable_account
             # -----------------------------------------------------
             debit_to = frappe.db.get_value(
                 "Party Account",
@@ -281,9 +295,43 @@ def initiate_registration_fee_payment(free_registrations=0):
                         "items",
                         {
                             "item_code": item,
+                            "item_name": frappe.db.get_value(
+                                "Item",
+                                item,
+                                "item_name",
+                            ),
+                            "uom": frappe.db.get_value(
+                                "Item",
+                                item,
+                                "stock_uom",
+                            ),
                             "qty": paid_students,
-                            "rate": RATE_PER_STUDENT_INR,
+                            "rate": rate,
+                            "income_account": frappe.db.get_value(
+                                "Company",
+                                company,
+                                "default_income_account",
+                            ),
+                            "expense_account": frappe.db.get_value(
+                                "Company",
+                                company,
+                                "default_expense_account",
+                            ),
+                            "cost_center": frappe.db.get_value(
+                                "Company",
+                                company,
+                                "cost_center",
+                            ),
                         },
+                    )
+
+                    frappe.share.add_docshare(
+                        "Item",
+                        item,
+                        user=frappe.session.user,
+                        read=1,
+                        write=1,
+                        flags={"ignore_share_permission": True},
                     )
 
                     needs_update = True
@@ -294,13 +342,54 @@ def initiate_registration_fee_payment(free_registrations=0):
                     if (
                         row.item_code != item
                         or flt(row.qty) != flt(paid_students)
-                        or abs(flt(row.rate) - RATE_PER_STUDENT_INR) > 0.01
+                        or abs(flt(row.rate) - rate) > 0.01
                     ):
                         row.item_code = item
                         row.qty = paid_students
-                        row.rate = RATE_PER_STUDENT_INR
-
+                        row.rate = rate
+                        row.income_account = frappe.db.get_value(
+                            "Company",
+                            company,
+                            "default_income_account",
+                        )
+                        row.expense_account = frappe.db.get_value(
+                            "Company",
+                            company,
+                            "default_expense_account",
+                        )
+                        row.cost_center = frappe.db.get_value(
+                            "Company",
+                            company,
+                            "cost_center",
+                        )
                         needs_update = True
+
+                        frappe.share.add_docshare(
+                            "Item",
+                            item,
+                            user=frappe.session.user,
+                            read=1,
+                            write=1,
+                            flags={"ignore_share_permission": True},
+                        )
+
+                invoice.set("taxes", [])
+                invoice.tax_category = None
+                invoice.total_taxes_and_charges = 0
+                invoice.base_total_taxes_and_charges = 0
+
+                invoice.calculate_taxes_and_totals()
+
+                invoice.total_taxes_and_charges = 0
+                invoice.base_total_taxes_and_charges = 0
+                invoice.grand_total = invoice.net_total
+                invoice.base_grand_total = invoice.base_net_total
+
+                if invoice.disable_rounded_total:
+                    invoice.rounded_total = invoice.grand_total
+                    invoice.base_rounded_total = invoice.base_grand_total
+
+                needs_update = True
 
                 # -------------------------------------------------
                 # Save only when something changed
@@ -330,12 +419,20 @@ def initiate_registration_fee_payment(free_registrations=0):
                 invoice.customer = customer
                 invoice.company = company
                 invoice.debit_to = debit_to
+                invoice.selling_price_list = "Standard Selling"
 
                 # -------------------------------------------------
                 # Set Company Address
                 # -------------------------------------------------
                 if company_address:
                     invoice.company_address = company_address
+
+                invoice.due_date = frappe.utils.today()
+                invoice.currency = frappe.db.get_value(
+                    "Customer",
+                    customer,
+                    "default_currency",
+                )
 
                 # -------------------------------------------------
                 # Add Registration Fee Item
@@ -344,10 +441,74 @@ def initiate_registration_fee_payment(free_registrations=0):
                     "items",
                     {
                         "item_code": item,
+                        "item_name": frappe.db.get_value(
+                            "Item",
+                            item,
+                            "item_name",
+                        ),
+                        "uom": frappe.db.get_value(
+                            "Item",
+                            item,
+                            "stock_uom",
+                        ),
                         "qty": paid_students,
-                        "rate": RATE_PER_STUDENT_INR,
+                        "rate": rate,
+                        "income_account": frappe.db.get_value(
+                            "Company",
+                            company,
+                            "default_income_account",
+                        ),
+                        "expense_account": frappe.db.get_value(
+                            "Company",
+                            company,
+                            "default_expense_account",
+                        ),
+                        "cost_center": frappe.db.get_value(
+                            "Company",
+                            company,
+                            "cost_center",
+                        ),
+                        "price_list_rate": frappe.db.get_value(
+                            "Item Price",
+                            {
+                                "item_code": item,
+                                "price_list": "Standard Selling",
+                            },
+                            "price_list_rate",
+                        ),
+                        "base_price_list_rate": frappe.db.get_value(
+                            "Item Price",
+                            {
+                                "item_code": item,
+                                "price_list": "Standard Selling",
+                            },
+                            "price_list_rate",
+                        ),
                     },
                 )
+
+                frappe.share.add_docshare(
+                    "Item",
+                    item,
+                    user=frappe.session.user,
+                    read=1,
+                    write=1,
+                    flags={"ignore_share_permission": True},
+                )
+
+                invoice.set("taxes", [])
+                invoice.tax_category = None
+
+                invoice.calculate_taxes_and_totals()
+
+                invoice.total_taxes_and_charges = 0
+                invoice.base_total_taxes_and_charges = 0
+                invoice.grand_total = invoice.net_total
+                invoice.base_grand_total = invoice.base_net_total
+
+                if invoice.disable_rounded_total:
+                    invoice.rounded_total = invoice.grand_total
+                    invoice.base_rounded_total = invoice.base_grand_total
 
                 # -------------------------------------------------
                 # Insert new Sales Invoice
@@ -355,6 +516,7 @@ def initiate_registration_fee_payment(free_registrations=0):
                 _original = frappe.flags.ignore_permissions
                 try:
                     frappe.flags.ignore_permissions = True
+                    invoice.due_date = frappe.utils.today()
                     invoice.insert(ignore_permissions=True)
                 finally:
                     frappe.flags.ignore_permissions = _original
@@ -449,8 +611,8 @@ def confirm_registration_fee_payment(
 
 
 @frappe.whitelist(allow_guest=True)
-def get_registration_fee_payment_status():
-    customer = _get_session_customer()
+def get_registration_fee_payment_status(customer=None):
+    customer = _get_customer(customer)
     company = get_settings_for_page(PAGE).company
     invoice = _find_registration_fee_invoice(customer, company)
     if not invoice or invoice.docstatus != 1:

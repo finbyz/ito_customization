@@ -16,9 +16,6 @@ from multi_company_razorpay.api import (
 )
 
 PAGE = "Little Champ Registration"
-FEE_ITEM_NAME = "Little Champ Registration Fee"
-FEE_ITEM_GROUP = "Fee Component"
-RATE_PER_STUDENT_INR = 150
 
 
 def _get_customer(customer=None):
@@ -44,30 +41,54 @@ def _get_total_students(customer):
     return cint(total)
 
 
-def _get_or_create_fee_item(company):
-    existing = frappe.db.get_value("Item", {"item_name": FEE_ITEM_NAME}, "name")
-    if existing:
-        item = frappe.get_doc("Item", existing)
-        if not any(row.uom == "Nos" for row in item.uoms or []):
-            item.append("uoms", {"uom": "Nos", "conversion_factor": 1})
-            item.save(ignore_permissions=True)
-        return item.name
+def _get_registration_fee_item(company=None):
+    return frappe.db.get_value(
+        "Item",
+        {"custom_is_registration_item": 1, "custom_form_name": PAGE, "disabled": 0},
+        "name",
+    )
 
-    item = frappe.get_doc({
-        "doctype": "Item",
-        "item_name": FEE_ITEM_NAME,
-        "item_group": FEE_ITEM_GROUP,
-        "stock_uom": "Nos",
-        "is_stock_item": 0,
-        "gst_hsn_code": "999295",
-        "custom_company": company,
-        "uoms": [{"uom": "Nos", "conversion_factor": 1}],
-    }).insert(ignore_permissions=True)
-    return item.name
+
+def _get_registration_fee_rate(currency="INR"):
+    item_code = _get_registration_fee_item()
+    if not item_code:
+        return 0.0
+
+    inr_prices = frappe.get_all(
+        "Item Price",
+        filters={"item_code": item_code, "selling": 1},
+        fields=["price_list_rate", "currency"],
+        order_by="modified desc",
+    )
+    for p in inr_prices:
+        if p.currency == currency and flt(p.price_list_rate) > 0:
+            return flt(p.price_list_rate)
+
+    inr_price = frappe.db.get_value(
+        "Item Price",
+        {"item_code": item_code, "currency": currency},
+        "price_list_rate",
+        order_by="modified desc",
+    )
+    if not inr_price and currency == "INR":
+        inr_price = frappe.db.get_value(
+            "Item Price",
+            {"item_code": item_code},
+            "price_list_rate",
+            order_by="modified desc",
+        )
+    if not inr_price:
+        std_rate = frappe.db.get_value("Item", item_code, "standard_rate")
+        if std_rate and flt(std_rate) > 0:
+            inr_price = flt(std_rate)
+
+    return flt(inr_price) if inr_price and flt(inr_price) > 0 else 0.0
 
 
 def _find_fee_invoice(customer, company):
-    fee_item = _get_or_create_fee_item(company)
+    fee_item = _get_registration_fee_item(company)
+    if not fee_item:
+        return None
     invoices = frappe.get_all(
         "Sales Invoice",
         filters={"customer": customer, "company": company, "docstatus": ["!=", 2]},
@@ -88,8 +109,9 @@ def initiate_little_champ_registration_payment(customer=None):
         settings = get_settings_for_page(PAGE)
         company = settings.company
 
+        rate = _get_registration_fee_rate("INR")
         total_students = _get_total_students(customer)
-        amount = flt(total_students * RATE_PER_STUDENT_INR)
+        amount = flt(total_students * rate)
 
         if amount <= 0:
             frappe.throw(
@@ -132,7 +154,11 @@ def initiate_little_champ_registration_payment(customer=None):
                 )
 
         else:
-            item = _get_or_create_fee_item(company)
+            item = _get_registration_fee_item(company)
+            if not item:
+                frappe.throw(
+                    _("Registration fee item is not configured in ERPNext for {0}.").format(PAGE)
+                )
 
             debit_to = frappe.db.get_value(
                 "Party Account",
@@ -221,7 +247,7 @@ def initiate_little_champ_registration_payment(customer=None):
                                 "stock_uom",
                             ),
                             "qty": total_students,
-                            "rate": RATE_PER_STUDENT_INR,
+                            "rate": rate,
                             "income_account": frappe.db.get_value(
                                 "Company",
                                 company,
@@ -257,11 +283,11 @@ def initiate_little_champ_registration_payment(customer=None):
                     if (
                         row.item_code != item
                         or flt(row.qty) != flt(total_students)
-                        or abs(flt(row.rate) - RATE_PER_STUDENT_INR) > 0.01
+                        or abs(flt(row.rate) - rate) > 0.01
                     ):
                         row.item_code = item
                         row.qty = total_students
-                        row.rate = RATE_PER_STUDENT_INR
+                        row.rate = rate
                         row.income_account = frappe.db.get_value(
                             "Company",
                             company,
@@ -360,7 +386,7 @@ def initiate_little_champ_registration_payment(customer=None):
                             "stock_uom",
                         ),
                         "qty": total_students,
-                        "rate": RATE_PER_STUDENT_INR,
+                        "rate": rate,
                         "income_account": frappe.db.get_value(
                             "Company",
                             company,
@@ -542,7 +568,7 @@ def get_little_champ_payment_status():
     )
 
     try:
-        fee_item = _get_or_create_fee_item(company or "")
+        fee_item = _get_registration_fee_item(company or "")
     except Exception:
         fee_item = None
 

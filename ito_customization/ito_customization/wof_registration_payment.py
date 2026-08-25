@@ -6,6 +6,7 @@ import json
 from urllib.parse import parse_qs, urlparse
 
 import frappe
+import frappe.share
 from frappe import _
 from frappe.utils import cint, flt, nowdate
 
@@ -21,13 +22,13 @@ PAGE = "ITO Registration"
 WOF_PAGE = "WOF Registration"
 FEE_ITEM_NAME = "WOF Registration Fee"
 FEE_ITEM_GROUP = "Fee Component"
-RATE_PER_STUDENT_INR = 50.0
-RATE_PER_STUDENT_INTL = 8.0
 RETENTION_PERCENT = 0.20  # 20% retention by school
 
 
 def _get_customer(customer=None):
-    session_customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+    session_customer = frappe.cache().get_value(f"ito_customer_{frappe.session.user}")
+    if not session_customer:
+        session_customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
     customer = session_customer or customer
     if session_customer and customer and session_customer != customer:
         frappe.throw(_("You are not allowed to pay for this customer."), frappe.PermissionError)
@@ -133,8 +134,92 @@ def _get_or_create_fee_item(company):
     return item.name
 
 
+def _get_registration_fee_item(company=None):
+    item = frappe.db.get_value(
+        "Item",
+        {"custom_is_registration_item": 1, "custom_form_name": WOF_PAGE, "disabled": 0},
+        "name",
+    )
+    if item:
+        return item
+    existing = frappe.db.get_value("Item", {"item_name": FEE_ITEM_NAME, "disabled": 0}, "name")
+    if existing:
+        return existing
+    if company:
+        return _get_or_create_fee_item(company)
+    return None
+
+
+def _get_registration_fee_rate(currency="INR"):
+    item_code = _get_registration_fee_item()
+    if not item_code:
+        return 0.0
+
+    prices = frappe.get_all(
+        "Item Price",
+        filters={"item_code": item_code, "selling": 1},
+        fields=["price_list_rate", "currency"],
+        order_by="modified desc",
+    )
+    for p in prices:
+        if p.currency == currency and flt(p.price_list_rate) > 0:
+            return flt(p.price_list_rate)
+
+    inr_price = frappe.db.get_value(
+        "Item Price",
+        {"item_code": item_code, "currency": currency},
+        "price_list_rate",
+        order_by="modified desc",
+    )
+    if not inr_price and currency == "INR":
+        inr_price = frappe.db.get_value(
+            "Item Price",
+            {"item_code": item_code},
+            "price_list_rate",
+            order_by="modified desc",
+        )
+    if not inr_price:
+        std_rate = frappe.db.get_value("Item", item_code, "standard_rate")
+        if std_rate and flt(std_rate) > 0:
+            inr_price = flt(std_rate)
+
+    return flt(inr_price) if inr_price and flt(inr_price) > 0 else 0.0
+
+
+def _get_retention_rate(customer=None, item_code=None):
+    retention_val = None
+
+    if not item_code:
+        item_code = _get_registration_fee_item()
+
+    if item_code:
+        try:
+            val = frappe.db.get_value("Item", item_code, "custom_retention")
+            if val is not None and val != "":
+                retention_val = flt(val)
+        except Exception:
+            pass
+
+    if (retention_val is None or retention_val == 0) and customer:
+        try:
+            val = frappe.db.get_value("Customer", customer, "custom_retention")
+            if val is not None and val != "":
+                retention_val = flt(val)
+        except Exception:
+            pass
+
+    if retention_val is not None and retention_val > 0:
+        if retention_val > 1.0:
+            return flt(retention_val / 100.0)
+        return flt(retention_val)
+
+    return 0.0
+
+
 def _find_fee_invoice(customer, company):
-    fee_item = _get_or_create_fee_item(company)
+    fee_item = _get_registration_fee_item(company)
+    if not fee_item:
+        return None
     invoices = frappe.get_all(
         "Sales Invoice",
         filters={"customer": customer, "company": company, "docstatus": ["!=", 2]},
@@ -159,9 +244,15 @@ def initiate_wof_registration_payment(customer=None, entry_matrix=None, currency
         if num_students <= 0:
             frappe.throw(_("Please enter at least one participating student in the Entry Matrix."))
 
-        rate_per_student = RATE_PER_STUDENT_INR if currency == "INR" else RATE_PER_STUDENT_INTL
+        rate_per_student = _get_registration_fee_rate(currency)
+        if rate_per_student <= 0:
+            frappe.throw(
+                _("Registration fee rate is not configured for {0}.").format(WOF_PAGE)
+            )
+
+        retention_rate = _get_retention_rate(customer, _get_registration_fee_item())
         gross_amount = flt(num_students * rate_per_student)
-        school_retention = flt(gross_amount * RETENTION_PERCENT)
+        school_retention = flt(gross_amount * retention_rate)
         net_payable_amount = flt(gross_amount - school_retention)
         effective_rate = flt(net_payable_amount / num_students) if num_students else rate_per_student
 
@@ -396,11 +487,10 @@ def confirm_wof_registration_fee_payment(
 
 
 @frappe.whitelist(allow_guest=True)
-def get_wof_registration_fee_payment_status():
-    session_customer = frappe.db.get_value(
-        "Portal User", {"user": frappe.session.user}, "parent"
-    )
-    if not session_customer:
+def get_wof_registration_fee_payment_status(customer=None):
+    try:
+        customer = _get_customer(customer)
+    except Exception:
         return {"paid": False}
 
     try:
@@ -410,7 +500,7 @@ def get_wof_registration_fee_payment_status():
         company = None
 
     filters = {
-        "customer": session_customer,
+        "customer": customer,
         "docstatus": 1,
     }
     if company:
@@ -424,7 +514,7 @@ def get_wof_registration_fee_payment_status():
     )
 
     try:
-        fee_item = _get_or_create_fee_item(company or "")
+        fee_item = _get_registration_fee_item(company or "")
     except Exception:
         fee_item = None
 

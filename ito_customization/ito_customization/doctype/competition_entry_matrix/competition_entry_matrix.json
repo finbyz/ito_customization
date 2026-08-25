@@ -9,6 +9,7 @@
  "field_order": [
   "customer",
   "customer_name",
+  "is_submitted",
   "entry_matrix"
  ],
  "fields": [
@@ -29,12 +30,18 @@
    "fieldname": "customer_name",
    "fieldtype": "Data",
    "label": "Customer Name"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_submitted",
+   "fieldtype": "Check",
+   "label": "Is Submitted"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-22 12:04:38.359787",
+ "modified": "2026-08-25 10:48:59.735693",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Competition Entry Matrix",

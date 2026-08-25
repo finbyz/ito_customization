@@ -768,6 +768,12 @@ def get_customer_from_session_user():
 	else:
 		entry_matrix = frappe.cache().get_value(f"wof_entry_matrix_{customer.name}")
 
+	lc_reg_fee = get_registration_fee("Little Champ Registration")
+	ito_reg_fee = get_registration_fee("ITO Registration")
+	wof_reg_fee = get_registration_fee("WOF Registration")
+	if customer.get("custom_retention") is not None and flt(customer.get("custom_retention")) > 0:
+		wof_reg_fee["custom_retention"] = flt(customer.get("custom_retention"))
+
 	return {
 		"customer": customer.as_dict(),
 		"address": address,
@@ -788,6 +794,10 @@ def get_customer_from_session_user():
 		"books_selection": books_selection,
 		"books_order_submitted": books_order_submitted,
 		"custom_is_little_champ": customer.get("custom_is_little_champ") or 0,
+		"registration_fee": lc_reg_fee if customer.get("custom_is_little_champ") else ito_reg_fee,
+		"little_champ_registration_fee": lc_reg_fee,
+		"ito_registration_fee": ito_reg_fee,
+		"wof_registration_fee": wof_reg_fee,
 	}
 
 
@@ -1084,7 +1094,7 @@ def save_wof_registration(registration_data):
 
 		entry_matrix = data.get("entry_matrix")
 		if entry_matrix:
-			save_competition_entry_matrix_record(customer, entry_matrix)
+			save_competition_entry_matrix_record(customer, entry_matrix, is_submitted=True)
 			sync_wof_entry_matrix_to_exams_summary(customer, entry_matrix)
 
 		payment = data.get("payment", {})
@@ -1104,7 +1114,7 @@ def save_wof_registration(registration_data):
 		frappe.flags.ignore_permissions = original_ignore_permissions
 
 
-def save_competition_entry_matrix_record(customer, entry_matrix):
+def save_competition_entry_matrix_record(customer, entry_matrix, is_submitted=False):
 	if not customer or not entry_matrix:
 		return None
 
@@ -1175,12 +1185,32 @@ def save_competition_entry_matrix_record(customer, entry_matrix):
 			resolved_subjects[target_subject]["group_d"] = max(resolved_subjects[target_subject]["group_d"], gd)
 			resolved_subjects[target_subject]["group_e"] = max(resolved_subjects[target_subject]["group_e"], ge)
 
-	cem_doc = frappe.new_doc("Competition Entry Matrix")
-	cem_doc.customer = customer
+	# Find existing unsubmitted record for this customer
+	existing_cem_name = frappe.db.get_value(
+		"Competition Entry Matrix",
+		{"customer": customer, "is_submitted": 0},
+		"name",
+		order_by="creation desc"
+	)
+
+	if existing_cem_name:
+		cem_doc = frappe.get_doc("Competition Entry Matrix", existing_cem_name)
+		cem_doc.set("entry_matrix", [])
+	else:
+		cem_doc = frappe.new_doc("Competition Entry Matrix")
+		cem_doc.customer = customer
+
+	if hasattr(cem_doc, "is_submitted"):
+		cem_doc.is_submitted = 1 if is_submitted else 0
+
 	for row_data in resolved_subjects.values():
 		cem_doc.append("entry_matrix", row_data)
 
-	cem_doc.insert(ignore_permissions=True)
+	if existing_cem_name:
+		cem_doc.save(ignore_permissions=True)
+	else:
+		cem_doc.insert(ignore_permissions=True)
+
 	return cem_doc.name
 
 
@@ -2119,3 +2149,501 @@ def save_parent_consent(data):
 	except Exception as e:
 		frappe.log_error(frappe.get_traceback(), "Save Parent Consent Error")
 		return {"success": False, "message": str(e)}
+
+
+# ==================== WOF STUDENT LIST APIS ====================
+
+@frappe.whitelist(allow_guest=True)
+def save_wof_student_list():
+	original_flag = frappe.flags.ignore_permissions
+	try:
+		frappe.flags.ignore_permissions = True
+		data = frappe.request.get_json() or {}
+		payload = json.loads(data.get("data", "{}")) if isinstance(data.get("data"), str) else data.get("data", {})
+
+		school_info = payload.get("school_info", {})
+		rosters = payload.get("rosters", {})
+		totals = payload.get("totals", {})
+
+		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+		if not customer_name:
+			school_code = school_info.get("school_code")
+			if school_code:
+				customer_name = frappe.db.get_value("Customer", {"custom_ito_school_code": school_code})
+		if not customer_name:
+			customer_name = frappe.db.get_value("Customer", {"custom_is_wof": 1}, "name")
+
+		if not customer_name:
+			return {"success": False, "message": "Customer not found"}
+
+		raw_year = school_info.get("academic_year", "")
+		if not raw_year:
+			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or "AY-2026/27"
+
+		if raw_year.startswith("AY-"):
+			academic_year = raw_year
+		else:
+			parts = raw_year.replace("-", "/").split("/")
+			if len(parts) == 2:
+				academic_year = f"AY-{parts[0]}/{parts[1]}"
+			else:
+				academic_year = f"AY-{raw_year}"
+
+		if not frappe.db.exists("School Academic Year", academic_year):
+			existing = frappe.db.get_value("School Academic Year", {}, "name", order_by="creation desc")
+			if existing:
+				academic_year = existing
+
+		# Find existing unsubmitted Bulk Student List for this customer or create new
+		bsl_name = frappe.db.get_value("Bulk Student List", {
+			"customer": customer_name,
+			"for_wof_list": 1,
+			"is_submitted": 0
+		}, "name", order_by="creation desc")
+
+		if bsl_name:
+			bsl = frappe.get_doc("Bulk Student List", bsl_name)
+			bsl.table_xxdu = []
+		else:
+			bsl = frappe.new_doc("Bulk Student List")
+			bsl.customer = customer_name
+
+		bsl.academic_year = academic_year
+		bsl.for_wof_list = 1
+		bsl.for_student = 0
+		bsl.for_little_champ = 0
+		bsl.is_submitted = 1
+
+		# Append students to table_xxdu (WOF List child table)
+		for batch_key, batch_data in rosters.items():
+			students = []
+			if isinstance(batch_data, dict):
+				students = batch_data.get("students", [])
+			elif isinstance(batch_data, list):
+				students = batch_data
+
+			for st in students:
+				student_name = (st.get("student_name") or st.get("name") or "").strip().upper()
+				parent_name = (st.get("parent_name") or st.get("parentName") or "").strip()
+				subs = st.get("subjects", {})
+
+				if not student_name and not parent_name and not any(subs.values()):
+					continue
+
+				row_data = {
+					"student_name": student_name,
+					"parent_name": parent_name,
+					"colouring": 1 if subs.get("colouring") else 0,
+					"handwriting": 1 if subs.get("handwriting") else 0,
+					"sketching": 1 if subs.get("sketching") else 0,
+					"cartoon": 1 if subs.get("cartoon") else 0,
+					"caricature": 1 if subs.get("caricature") else 0,
+					"greeting_card": 1 if (subs.get("greeting_card") or subs.get("greeting")) else 0,
+				}
+				bsl.append("table_xxdu", row_data)
+
+		if bsl.is_new():
+			bsl.insert(ignore_permissions=True)
+		else:
+			bsl.save(ignore_permissions=True)
+
+		# Clear draft cache on final submission
+		try:
+			frappe.cache().delete_value(f"wof_student_draft_{customer_name}_{academic_year}")
+			frappe.cache().delete_value(f"wof_student_draft_{customer_name}_{raw_year}")
+			frappe.cache().delete_value(f"wof_student_draft_{customer_name}_AY-2026/27")
+		except Exception:
+			pass
+
+		# Log comment on customer
+		try:
+			customer_doc = frappe.get_doc("Customer", customer_name)
+			total_students = totals.get("total_students", len(bsl.table_xxdu))
+			total_entries = totals.get("total_entries", 0)
+			total_batches = totals.get("total_batches", len(rosters))
+			customer_doc.add_comment(
+				"Info",
+				f"WOF Student List submitted: {total_students} students across {total_batches} batches with {total_entries} total competition entries ({academic_year})."
+			)
+		except Exception:
+			pass
+
+		return {
+			"success": True,
+			"name": bsl.name,
+			"message": "WOF Student list submitted and saved to Bulk Student List successfully",
+			"totals": totals
+		}
+
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Save WOF Student List Error")
+		return {"success": False, "message": str(e)}
+	finally:
+		frappe.flags.ignore_permissions = original_flag
+
+
+@frappe.whitelist(allow_guest=True)
+def save_wof_student_draft():
+	original_flag = frappe.flags.ignore_permissions
+	try:
+		frappe.flags.ignore_permissions = True
+		data = frappe.request.get_json() or {}
+		payload = json.loads(data.get("data", "{}")) if isinstance(data.get("data"), str) else data.get("data", {})
+
+		school_info = payload.get("school_info", {})
+		rosters = payload.get("rosters", {})
+		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+		if not customer_name:
+			school_code = school_info.get("school_code")
+			if school_code:
+				customer_name = frappe.db.get_value("Customer", {"custom_ito_school_code": school_code})
+		if not customer_name:
+			customer_name = frappe.db.get_value("Customer", {"custom_is_wof": 1}, "name")
+
+		if not customer_name:
+			return {"success": False, "message": "Customer not found"}
+
+		raw_year = school_info.get("academic_year", "")
+		if not raw_year:
+			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or "AY-2026/27"
+
+		if raw_year.startswith("AY-"):
+			academic_year = raw_year
+		else:
+			parts = raw_year.replace("-", "/").split("/")
+			if len(parts) == 2:
+				academic_year = f"AY-{parts[0]}/{parts[1]}"
+			else:
+				academic_year = f"AY-{raw_year}"
+
+		if not frappe.db.exists("School Academic Year", academic_year):
+			existing = frappe.db.get_value("School Academic Year", {}, "name", order_by="creation desc")
+			if existing:
+				academic_year = existing
+
+		# Save or update unsubmitted draft in Bulk Student List doctype
+		bsl_name = frappe.db.get_value("Bulk Student List", {
+			"customer": customer_name,
+			"for_wof_list": 1,
+			"is_submitted": 0
+		}, "name", order_by="creation desc")
+
+		if bsl_name:
+			bsl = frappe.get_doc("Bulk Student List", bsl_name)
+			bsl.table_xxdu = []
+		else:
+			bsl = frappe.new_doc("Bulk Student List")
+			bsl.customer = customer_name
+
+		bsl.academic_year = academic_year
+		bsl.for_wof_list = 1
+		bsl.for_student = 0
+		bsl.for_little_champ = 0
+		bsl.is_submitted = 0
+
+		# Append students to table_xxdu (WOF List child table)
+		for batch_key, batch_data in rosters.items():
+			students = []
+			if isinstance(batch_data, dict):
+				students = batch_data.get("students", [])
+			elif isinstance(batch_data, list):
+				students = batch_data
+
+			for st in students:
+				student_name = (st.get("student_name") or st.get("name") or "").strip().upper()
+				parent_name = (st.get("parent_name") or st.get("parentName") or "").strip()
+				subs = st.get("subjects", {})
+
+				if not student_name and not parent_name and not any(subs.values()):
+					continue
+
+				row_data = {
+					"student_name": student_name,
+					"parent_name": parent_name,
+					"colouring": 1 if subs.get("colouring") else 0,
+					"handwriting": 1 if subs.get("handwriting") else 0,
+					"sketching": 1 if subs.get("sketching") else 0,
+					"cartoon": 1 if subs.get("cartoon") else 0,
+					"caricature": 1 if subs.get("caricature") else 0,
+					"greeting_card": 1 if (subs.get("greeting_card") or subs.get("greeting")) else 0,
+				}
+				bsl.append("table_xxdu", row_data)
+
+		if bsl.is_new():
+			bsl.insert(ignore_permissions=True)
+		else:
+			bsl.save(ignore_permissions=True)
+
+		frappe.cache().set_value(f"wof_student_draft_{customer_name}_{academic_year}", payload)
+		frappe.cache().set_value(f"wof_student_draft_{customer_name}_{raw_year}", payload)
+
+		return {
+			"success": True,
+			"name": bsl.name,
+			"message": "Draft saved to Bulk Student List successfully"
+		}
+
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Save WOF Student Draft Error")
+		return {"success": False, "message": str(e)}
+	finally:
+		frappe.flags.ignore_permissions = original_flag
+
+
+@frappe.whitelist(allow_guest=True)
+def get_wof_student_draft(academic_year="AY-2026/27"):
+	try:
+		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+		if not customer_name:
+			return {"success": False, "message": "Customer not found", "data": None}
+
+		saved_data = frappe.cache().get_value(f"wof_student_draft_{customer_name}_{academic_year}")
+		return {
+			"success": True,
+			"data": saved_data or None
+		}
+
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Get WOF Student Draft Error")
+		return {"success": False, "message": str(e), "data": None}
+
+
+# ==================== WOF TEACHER ENTRY APIS ====================
+
+@frappe.whitelist(allow_guest=True)
+def save_wof_teacher_entry():
+	original_flag = frappe.flags.ignore_permissions
+	try:
+		frappe.flags.ignore_permissions = True
+		data = frappe.request.get_json() or {}
+		payload = json.loads(data.get("data", "{}")) if isinstance(data.get("data"), str) else data.get("data", {})
+
+		teacher_info = payload.get("teacher_info", {})
+		school_info = payload.get("school_info", {})
+		financial_ledger = payload.get("financial_ledger", {})
+		honorarium_slab = payload.get("honorarium_slab", {})
+		form_date = payload.get("form_date") or frappe.utils.today()
+
+		# Resolve Customer
+		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+		if not customer_name:
+			school_code = school_info.get("school_code")
+			if school_code:
+				customer_name = frappe.db.get_value("Customer", {"custom_ito_school_code": school_code})
+
+		if not customer_name:
+			return {"success": False, "message": "Customer/School account not found for current session."}
+
+		customer_doc = frappe.get_doc("Customer", customer_name)
+
+		# Ensure School Subject exists
+		ensure_subject_exists("Art Teacher / Coordinator")
+
+		teacher_name = (teacher_info.get("name") or "").strip().upper()
+		if not teacher_name:
+			return {"success": False, "message": "Art Teacher / Coordinator Name is required."}
+
+		# Check existing Teacher by name1 & customer_reference
+		existing_teacher_name = frappe.db.get_value("Teacher", {
+			"name1": teacher_name,
+			"customer_reference": customer_doc.name
+		})
+
+		if existing_teacher_name:
+			teacher_doc = frappe.get_doc("Teacher", existing_teacher_name)
+		else:
+			teacher_doc = frappe.new_doc("Teacher")
+
+		full_address = ", ".join(filter(None, [
+			(teacher_info.get("address") or "").strip(),
+			(teacher_info.get("city") or "").strip(),
+			(teacher_info.get("taluka") or "").strip(),
+			(teacher_info.get("district") or "").strip(),
+			(teacher_info.get("state") or "").strip(),
+			(teacher_info.get("pincode") or "").strip()
+		]))
+
+		teacher_doc.name1 = teacher_name
+		teacher_doc.date_of_birth = teacher_info.get("dob") or "1990-01-01"
+		teacher_doc.phone_number = (teacher_info.get("mobile") or "").strip()
+		teacher_doc.email_id = (teacher_info.get("email") or "").strip()
+		teacher_doc.school_name = customer_doc.name
+		teacher_doc.customer_reference = customer_doc.name
+		teacher_doc.status = "Active"
+		teacher_doc.experience = "Experienced"
+		teacher_doc.subject = "Art Teacher / Coordinator"
+		teacher_doc.address = full_address
+
+		if teacher_doc.is_new():
+			teacher_doc.insert(ignore_permissions=True)
+		else:
+			teacher_doc.save(ignore_permissions=True)
+
+		# Sync with Customer custom_school_teacher_details table if not present
+		existing_row = None
+		for row in customer_doc.custom_school_teacher_details:
+			if row.name1 == teacher_doc.name:
+				existing_row = row
+				break
+
+		if not existing_row:
+			customer_doc.append("custom_school_teacher_details", {
+				"name1": teacher_doc.name,
+				"date_of_birth": teacher_doc.date_of_birth,
+				"phone_number": teacher_doc.phone_number,
+				"status": teacher_doc.status,
+				"email_id": teacher_doc.email_id,
+				"subject": teacher_doc.subject,
+				"experience": teacher_doc.experience
+			})
+			customer_doc.save(ignore_permissions=True)
+
+		# Clear teacher draft cache
+		raw_year = school_info.get("academic_year", "AY-2026/27")
+		frappe.cache().delete_value(f"wof_teacher_draft_{customer_name}_{raw_year}")
+
+		return {
+			"success": True,
+			"message": "Art Teacher & Coordinator Entry Form submitted successfully!",
+			"teacher_name": teacher_doc.name
+		}
+
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Save WOF Teacher Entry Error")
+		return {"success": False, "message": str(e)}
+	finally:
+		frappe.flags.ignore_permissions = original_flag
+
+
+@frappe.whitelist(allow_guest=True)
+def save_wof_teacher_draft():
+	try:
+		data = frappe.request.get_json() or {}
+		payload = json.loads(data.get("data", "{}")) if isinstance(data.get("data"), str) else data.get("data", {})
+
+		school_info = payload.get("school_info", {})
+		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+		if not customer_name:
+			school_code = school_info.get("school_code")
+			if school_code:
+				customer_name = frappe.db.get_value("Customer", {"custom_ito_school_code": school_code})
+
+		raw_year = school_info.get("academic_year", "AY-2026/27")
+		if customer_name:
+			frappe.cache().set_value(f"wof_teacher_draft_{customer_name}_{raw_year}", payload)
+
+		return {"success": True, "message": "Teacher entry draft saved successfully"}
+
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Save WOF Teacher Draft Error")
+		return {"success": False, "message": str(e)}
+
+
+@frappe.whitelist(allow_guest=True)
+def get_wof_teacher_draft(academic_year="AY-2026/27"):
+	try:
+		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+		if not customer_name:
+			return {"success": False, "message": "Customer not found", "data": None}
+
+		saved_data = frappe.cache().get_value(f"wof_teacher_draft_{customer_name}_{academic_year}")
+		return {
+			"success": True,
+			"data": saved_data or None
+		}
+
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Get WOF Teacher Draft Error")
+		return {"success": False, "message": str(e), "data": None}
+
+
+# ==================== DYNAMIC REGISTRATION FEE API ====================
+
+@frappe.whitelist(allow_guest=True)
+def get_registration_fee(form_name="Little Champ Registration"):
+	"""
+	Fetch dynamic registration fee strictly from Item where custom_is_registration_item=1 and custom_form_name=form_name.
+	Returns rate_inr and rate_usd from the corresponding Item Price or Item standard_rate.
+	"""
+	try:
+		item = frappe.db.get_value(
+			"Item",
+			{"custom_is_registration_item": 1, "custom_form_name": form_name, "disabled": 0},
+			["name", "item_code", "item_name", "standard_rate"],
+			as_dict=True
+		)
+
+		if not item and form_name == "WOF Registration":
+			item = frappe.db.get_value(
+				"Item",
+				{"item_name": "WOF Registration Fee", "disabled": 0},
+				["name", "item_code", "item_name", "standard_rate"],
+				as_dict=True
+			)
+
+		rate_inr = None
+		rate_usd = None
+		custom_retention = 0.0
+		item_code = ""
+		item_name = ""
+
+		if item:
+			item_code = item.get("name") or item.get("item_code")
+			item_name = item.get("item_name") or item_code
+
+			try:
+				ret_val = frappe.db.get_value("Item", item_code, "custom_retention")
+				if ret_val is not None and ret_val != "":
+					custom_retention = flt(ret_val)
+			except Exception:
+				pass
+
+			# Fetch active Item Price for INR and USD
+			prices = frappe.get_all(
+				"Item Price",
+				filters={"item_code": item_code, "selling": 1},
+				fields=["price_list_rate", "currency"],
+				order_by="modified desc"
+			)
+			for p in prices:
+				if p.currency == "INR" and rate_inr is None:
+					rate_inr = flt(p.price_list_rate)
+				elif p.currency == "USD" and rate_usd is None:
+					rate_usd = flt(p.price_list_rate)
+
+			if rate_inr is None:
+				any_inr = frappe.db.get_value("Item Price", {"item_code": item_code, "currency": "INR"}, "price_list_rate", order_by="modified desc")
+				if any_inr is not None:
+					rate_inr = flt(any_inr)
+
+			if rate_inr is None:
+				any_price = frappe.db.get_value("Item Price", {"item_code": item_code}, "price_list_rate", order_by="modified desc")
+				if any_price is not None:
+					rate_inr = flt(any_price)
+
+			if rate_usd is None:
+				any_usd = frappe.db.get_value("Item Price", {"item_code": item_code, "currency": "USD"}, "price_list_rate", order_by="modified desc")
+				if any_usd is not None:
+					rate_usd = flt(any_usd)
+
+			if rate_inr is None and item.get("standard_rate") and flt(item.get("standard_rate")) > 0:
+				rate_inr = flt(item.get("standard_rate"))
+
+		return {
+			"success": True,
+			"item_code": item_code,
+			"item_name": item_name,
+			"rate_inr": flt(rate_inr) if rate_inr is not None else 0.0,
+			"rate_usd": flt(rate_usd) if rate_usd is not None else 0.0,
+			"custom_retention": flt(custom_retention),
+		}
+
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Get Registration Fee Error")
+		return {
+			"success": False,
+			"message": str(e),
+			"rate_inr": 0.0,
+			"rate_usd": 0.0,
+			"custom_retention": 0.0
+		}

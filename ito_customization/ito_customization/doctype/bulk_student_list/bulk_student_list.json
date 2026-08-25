@@ -1,27 +1,31 @@
 {
  "actions": [],
+ "allow_bulk_edit": 1,
  "allow_rename": 1,
- "autoname": "field:customer",
+ "autoname": "{customer}.-.####.",
  "creation": "2026-06-23 17:27:49.038428",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "customer",
   "academic_year",
+  "is_submitted",
   "section_break_jjer",
   "for_student",
   "student_list",
   "section_break_joxq",
   "for_little_champ",
-  "little_champ_list"
+  "little_champ_list",
+  "section_break_vznu",
+  "for_wof_list",
+  "table_xxdu"
  ],
  "fields": [
   {
    "fieldname": "customer",
    "fieldtype": "Link",
    "label": "Customer",
-   "options": "Customer",
-   "unique": 1
+   "options": "Customer"
   },
   {
    "fieldname": "academic_year",
@@ -36,7 +40,7 @@
    "options": "Student List CT"
   },
   {
-   "depends_on": "eval:doc.for_student == 0",
+   "depends_on": "eval:doc.for_student == 0 && doc.for_wof_list == 0",
    "fieldname": "section_break_joxq",
    "fieldtype": "Section Break"
   },
@@ -53,7 +57,7 @@
    "options": "Little champ List CT"
   },
   {
-   "depends_on": "eval:doc.for_little_champ == 0",
+   "depends_on": "eval:doc.for_little_champ == 0 && doc.for_wof_list == 0",
    "fieldname": "section_break_jjer",
    "fieldtype": "Section Break"
   },
@@ -62,16 +66,38 @@
    "fieldname": "for_student",
    "fieldtype": "Check",
    "label": "For Student"
+  },
+  {
+   "default": "0",
+   "fieldname": "for_wof_list",
+   "fieldtype": "Check",
+   "label": "For WOF List"
+  },
+  {
+   "depends_on": "eval:doc.for_student == 0 && doc.for_little_champ == 0",
+   "fieldname": "section_break_vznu",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "table_xxdu",
+   "fieldtype": "Table",
+   "options": "WOF List"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_submitted",
+   "fieldtype": "Check",
+   "label": "Is Submitted"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-25 09:54:32.581887",
+ "modified": "2026-08-25 11:09:31.351044",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Bulk Student List",
- "naming_rule": "By fieldname",
+ "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {
