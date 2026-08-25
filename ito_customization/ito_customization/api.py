@@ -2410,6 +2410,98 @@ def get_wof_student_draft(academic_year="AY-2026/27"):
 
 # ==================== WOF TEACHER ENTRY APIS ====================
 
+HONORARIUM_SLABS_LIST = [
+	{"label": "0 - 100", "amount": 0, "recognition": "Certificate of Appreciation"},
+	{"label": "101 - 249", "amount": 1000, "recognition": "₹1,000 + Certificate"},
+	{"label": "250 - 499", "amount": 2000, "recognition": "₹2,000 + Certificate"},
+	{"label": "500 - 749", "amount": 3500, "recognition": "₹3,500 + Certificate"},
+	{"label": "750 - 999", "amount": 5000, "recognition": "₹5,000 + Certificate"},
+	{"label": "1,000 - 1,249", "amount": 7500, "recognition": "₹7,500 + Certificate"},
+	{"label": "1,250 - 1,499", "amount": 10000, "recognition": "₹10,000 + Certificate"},
+	{"label": "1,500 - 1,749", "amount": 13000, "recognition": "₹13,000 + Certificate"},
+	{"label": "1,750 - 1,999", "amount": 15000, "recognition": "₹15,000 + Certificate"},
+	{"label": "2,000 - 2,499", "amount": 20000, "recognition": "₹20,000 + Certificate"},
+	{"label": "2,500 - 4,999", "amount": 25000, "recognition": "₹25,000 + Certificate"},
+	{"label": "5,000 & Above", "amount": 30000, "recognition": "₹30,000 + Certificate"},
+]
+
+
+def ensure_state_exists(state_name):
+	if not state_name:
+		return None
+	state_name = state_name.strip()
+	if not frappe.db.exists("State", state_name):
+		matched = frappe.db.get_value("State", {"name": ["like", state_name]})
+		if matched:
+			return matched
+		try:
+			s_doc = frappe.get_doc({"doctype": "State", "name": state_name})
+			s_doc.insert(ignore_permissions=True)
+			return s_doc.name
+		except Exception:
+			pass
+	return state_name
+
+
+def create_or_update_teacher_address(teacher_doc, teacher_info, customer_name):
+	if not teacher_info:
+		return None
+
+	address_title = f"{teacher_doc.name1} - {customer_name}"
+	address_name = frappe.db.get_value("Address", {"address_title": address_title})
+	if not address_name:
+		existing = frappe.db.sql("""
+			SELECT parent FROM `tabDynamic Link`
+			WHERE link_doctype = 'Teacher' AND link_name = %s
+			LIMIT 1
+		""", (teacher_doc.name,), as_dict=True)
+		if existing:
+			address_name = existing[0].parent
+
+	if address_name:
+		address = frappe.get_doc("Address", address_name)
+	else:
+		address = frappe.new_doc("Address")
+		address.address_title = address_title
+		address.address_type = "Personal"
+		address.append("links", {
+			"link_doctype": "Teacher",
+			"link_name": teacher_doc.name
+		})
+		address.append("links", {
+			"link_doctype": "Customer",
+			"link_name": customer_name
+		})
+
+	address_line = (teacher_info.get("address") or "").strip()
+	address.address_line1 = address_line if address_line else (teacher_info.get("city") or "Address")
+	address.city = (teacher_info.get("city") or "").strip()
+
+	state_val = (teacher_info.get("state") or "").strip()
+	if state_val:
+		state_val = ensure_state_exists(state_val)
+		address.state = state_val
+
+	address.pincode = (teacher_info.get("pincode") or "").strip()
+	address.country = "India"
+	address.phone = (teacher_info.get("mobile") or "").strip()
+	address.email_id = (teacher_info.get("email") or "").strip()
+
+	if hasattr(address, "custom_district") and teacher_info.get("district"):
+		address.custom_district = (teacher_info.get("district") or "").strip()
+	if hasattr(address, "custom_taluka") and teacher_info.get("taluka"):
+		address.custom_taluka = (teacher_info.get("taluka") or "").strip()
+
+	if address.is_new():
+		address.insert(ignore_permissions=True)
+	else:
+		address.save(ignore_permissions=True)
+
+	teacher_doc.new_address = address.name
+	teacher_doc.save(ignore_permissions=True)
+	return address.name
+
+
 @frappe.whitelist(allow_guest=True)
 def save_wof_teacher_entry():
 	original_flag = frappe.flags.ignore_permissions
@@ -2443,11 +2535,13 @@ def save_wof_teacher_entry():
 		if not teacher_name:
 			return {"success": False, "message": "Art Teacher / Coordinator Name is required."}
 
-		# Check existing Teacher by name1 & customer_reference
+		# Check existing Teacher by name1 & customer_reference or name1
 		existing_teacher_name = frappe.db.get_value("Teacher", {
 			"name1": teacher_name,
 			"customer_reference": customer_doc.name
 		})
+		if not existing_teacher_name:
+			existing_teacher_name = frappe.db.get_value("Teacher", {"name1": teacher_name})
 
 		if existing_teacher_name:
 			teacher_doc = frappe.get_doc("Teacher", existing_teacher_name)
@@ -2479,14 +2573,24 @@ def save_wof_teacher_entry():
 		else:
 			teacher_doc.save(ignore_permissions=True)
 
-		# Sync with Customer custom_school_teacher_details table if not present
+		# Create / update Address document for teacher and link
+		create_or_update_teacher_address(teacher_doc, teacher_info, customer_doc.name)
+
+		# Sync with Customer custom_school_teacher_details table
 		existing_row = None
 		for row in customer_doc.custom_school_teacher_details:
 			if row.name1 == teacher_doc.name:
 				existing_row = row
 				break
 
-		if not existing_row:
+		if existing_row:
+			existing_row.date_of_birth = teacher_doc.date_of_birth
+			existing_row.phone_number = teacher_doc.phone_number
+			existing_row.status = teacher_doc.status
+			existing_row.email_id = teacher_doc.email_id
+			existing_row.subject = teacher_doc.subject
+			existing_row.experience = teacher_doc.experience
+		else:
 			customer_doc.append("custom_school_teacher_details", {
 				"name1": teacher_doc.name,
 				"date_of_birth": teacher_doc.date_of_birth,
@@ -2496,16 +2600,80 @@ def save_wof_teacher_entry():
 				"subject": teacher_doc.subject,
 				"experience": teacher_doc.experience
 			})
-			customer_doc.save(ignore_permissions=True)
+		customer_doc.save(ignore_permissions=True)
+
+		# Find existing unsubmitted Teacher Entry for this customer or create new
+		existing_entry_name = frappe.db.get_value("Teacher Entry", {
+			"customer": customer_doc.name,
+			"is_submitted": 0
+		}, "name", order_by="creation desc")
+
+		if existing_entry_name:
+			entry_doc = frappe.get_doc("Teacher Entry", existing_entry_name)
+			entry_doc.entries = []
+		else:
+			entry_doc = frappe.new_doc("Teacher Entry")
+			entry_doc.customer = customer_doc.name
+
+		entry_doc.customer_name = customer_doc.customer_name
+		entry_doc.coordinator_name = teacher_doc.name
+		entry_doc.city = (teacher_info.get("city") or "").strip()
+		entry_doc.pin_code = (teacher_info.get("pincode") or "").strip()
+		entry_doc.dob = teacher_doc.date_of_birth
+		entry_doc.email_id = teacher_doc.email_id
+		entry_doc.address = (teacher_info.get("address") or "").strip()
+
+		state_val = (teacher_info.get("state") or "").strip()
+		if state_val:
+			state_val = ensure_state_exists(state_val)
+			entry_doc.state = state_val
+
+		entry_doc.district = (teacher_info.get("district") or "").strip()
+		entry_doc.mobile = teacher_doc.phone_number
+		entry_doc.no_of_students = cint(financial_ledger.get("studentCount") or 0)
+		entry_doc.registration_amount = flt(financial_ledger.get("totalRegistrationAmount") or 0)
+		entry_doc.amount_payable = flt(financial_ledger.get("totalPayableAmountToWof") or financial_ledger.get("amountPayableToWof") or 0)
+		entry_doc.is_submitted = 1
+
+		# Populate entries child table (Teacher Entry CT)
+		selected_amount = honorarium_slab.get("amount")
+		selected_label = honorarium_slab.get("label") or ""
+
+		for slab in HONORARIUM_SLABS_LIST:
+			is_selected = (slab["amount"] == selected_amount) or (slab["label"] == selected_label)
+			entry_doc.append("entries", {
+				"total_participants": slab["label"],
+				"recognition_and_honorarium": slab["recognition"],
+				"select": 1 if is_selected else 0
+			})
+
+		if entry_doc.is_new():
+			entry_doc.insert(ignore_permissions=True)
+		else:
+			entry_doc.save(ignore_permissions=True)
 
 		# Clear teacher draft cache
 		raw_year = school_info.get("academic_year", "AY-2026/27")
-		frappe.cache().delete_value(f"wof_teacher_draft_{customer_name}_{raw_year}")
+		try:
+			frappe.cache().delete_value(f"wof_teacher_draft_{customer_name}_{raw_year}")
+			frappe.cache().delete_value(f"wof_teacher_draft_{customer_name}_AY-2026/27")
+		except Exception:
+			pass
+
+		# Log comment on customer
+		try:
+			customer_doc.add_comment(
+				"Info",
+				f"Teacher Entry submitted ({entry_doc.name}): Coordinator {teacher_doc.name1} ({teacher_doc.phone_number}), Students: {entry_doc.no_of_students}, Amount Payable: ₹{entry_doc.amount_payable}."
+			)
+		except Exception:
+			pass
 
 		return {
 			"success": True,
 			"message": "Art Teacher & Coordinator Entry Form submitted successfully!",
-			"teacher_name": teacher_doc.name
+			"teacher_name": teacher_doc.name,
+			"entry_name": entry_doc.name
 		}
 
 	except Exception as e:
@@ -2517,26 +2685,164 @@ def save_wof_teacher_entry():
 
 @frappe.whitelist(allow_guest=True)
 def save_wof_teacher_draft():
+	original_flag = frappe.flags.ignore_permissions
 	try:
+		frappe.flags.ignore_permissions = True
 		data = frappe.request.get_json() or {}
 		payload = json.loads(data.get("data", "{}")) if isinstance(data.get("data"), str) else data.get("data", {})
 
+		teacher_info = payload.get("teacher_info", {})
 		school_info = payload.get("school_info", {})
+		financial_ledger = payload.get("financial_ledger", {})
+		honorarium_slab = payload.get("honorarium_slab", {})
+		form_date = payload.get("form_date") or frappe.utils.today()
+
 		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
 		if not customer_name:
 			school_code = school_info.get("school_code")
 			if school_code:
 				customer_name = frappe.db.get_value("Customer", {"custom_ito_school_code": school_code})
 
-		raw_year = school_info.get("academic_year", "AY-2026/27")
-		if customer_name:
-			frappe.cache().set_value(f"wof_teacher_draft_{customer_name}_{raw_year}", payload)
+		if not customer_name:
+			return {"success": False, "message": "Customer not found"}
 
-		return {"success": True, "message": "Teacher entry draft saved successfully"}
+		customer_doc = frappe.get_doc("Customer", customer_name)
+		raw_year = school_info.get("academic_year", "AY-2026/27")
+
+		teacher_name = (teacher_info.get("name") or "").strip().upper()
+		teacher_doc = None
+		if teacher_name:
+			ensure_subject_exists("Art Teacher / Coordinator")
+			existing_teacher_name = frappe.db.get_value("Teacher", {
+				"name1": teacher_name,
+				"customer_reference": customer_doc.name
+			})
+			if not existing_teacher_name:
+				existing_teacher_name = frappe.db.get_value("Teacher", {"name1": teacher_name})
+
+			if existing_teacher_name:
+				teacher_doc = frappe.get_doc("Teacher", existing_teacher_name)
+			else:
+				teacher_doc = frappe.new_doc("Teacher")
+
+			full_address = ", ".join(filter(None, [
+				(teacher_info.get("address") or "").strip(),
+				(teacher_info.get("city") or "").strip(),
+				(teacher_info.get("taluka") or "").strip(),
+				(teacher_info.get("district") or "").strip(),
+				(teacher_info.get("state") or "").strip(),
+				(teacher_info.get("pincode") or "").strip()
+			]))
+
+			teacher_doc.name1 = teacher_name
+			teacher_doc.date_of_birth = teacher_info.get("dob") or "1990-01-01"
+			teacher_doc.phone_number = (teacher_info.get("mobile") or "").strip()
+			teacher_doc.email_id = (teacher_info.get("email") or "").strip()
+			teacher_doc.school_name = customer_doc.name
+			teacher_doc.customer_reference = customer_doc.name
+			teacher_doc.status = "Active"
+			teacher_doc.experience = "Experienced"
+			teacher_doc.subject = "Art Teacher / Coordinator"
+			teacher_doc.address = full_address
+
+			if teacher_doc.is_new():
+				teacher_doc.insert(ignore_permissions=True)
+			else:
+				teacher_doc.save(ignore_permissions=True)
+
+			# Create / update Address document for teacher and link
+			create_or_update_teacher_address(teacher_doc, teacher_info, customer_doc.name)
+
+			# Sync with Customer custom_school_teacher_details table
+			existing_row = None
+			for row in customer_doc.custom_school_teacher_details:
+				if row.name1 == teacher_doc.name:
+					existing_row = row
+					break
+
+			if existing_row:
+				existing_row.date_of_birth = teacher_doc.date_of_birth
+				existing_row.phone_number = teacher_doc.phone_number
+				existing_row.status = teacher_doc.status
+				existing_row.email_id = teacher_doc.email_id
+				existing_row.subject = teacher_doc.subject
+				existing_row.experience = teacher_doc.experience
+			else:
+				customer_doc.append("custom_school_teacher_details", {
+					"name1": teacher_doc.name,
+					"date_of_birth": teacher_doc.date_of_birth,
+					"phone_number": teacher_doc.phone_number,
+					"status": teacher_doc.status,
+					"email_id": teacher_doc.email_id,
+					"subject": teacher_doc.subject,
+					"experience": teacher_doc.experience
+				})
+			customer_doc.save(ignore_permissions=True)
+
+		# Save or update unsubmitted draft in Teacher Entry doctype
+		existing_entry_name = frappe.db.get_value("Teacher Entry", {
+			"customer": customer_doc.name,
+			"is_submitted": 0
+		}, "name", order_by="creation desc")
+
+		if existing_entry_name:
+			entry_doc = frappe.get_doc("Teacher Entry", existing_entry_name)
+			entry_doc.entries = []
+		else:
+			entry_doc = frappe.new_doc("Teacher Entry")
+			entry_doc.customer = customer_doc.name
+
+		entry_doc.customer_name = customer_doc.customer_name
+		if teacher_doc:
+			entry_doc.coordinator_name = teacher_doc.name
+		entry_doc.city = (teacher_info.get("city") or "").strip()
+		entry_doc.pin_code = (teacher_info.get("pincode") or "").strip()
+		entry_doc.dob = teacher_info.get("dob") or (teacher_doc.date_of_birth if teacher_doc else None)
+		entry_doc.email_id = (teacher_info.get("email") or "").strip() or (teacher_doc.email_id if teacher_doc else None)
+		entry_doc.address = (teacher_info.get("address") or "").strip()
+
+		state_val = (teacher_info.get("state") or "").strip()
+		if state_val:
+			state_val = ensure_state_exists(state_val)
+			entry_doc.state = state_val
+
+		entry_doc.district = (teacher_info.get("district") or "").strip()
+		entry_doc.mobile = (teacher_info.get("mobile") or "").strip() or (teacher_doc.phone_number if teacher_doc else None)
+		entry_doc.no_of_students = cint(financial_ledger.get("studentCount") or 0)
+		entry_doc.registration_amount = flt(financial_ledger.get("totalRegistrationAmount") or 0)
+		entry_doc.amount_payable = flt(financial_ledger.get("totalPayableAmountToWof") or financial_ledger.get("amountPayableToWof") or 0)
+		entry_doc.is_submitted = 0
+
+		# Populate entries child table (Teacher Entry CT)
+		selected_amount = honorarium_slab.get("amount")
+		selected_label = honorarium_slab.get("label") or ""
+
+		for slab in HONORARIUM_SLABS_LIST:
+			is_selected = (slab["amount"] == selected_amount) or (slab["label"] == selected_label)
+			entry_doc.append("entries", {
+				"total_participants": slab["label"],
+				"recognition_and_honorarium": slab["recognition"],
+				"select": 1 if is_selected else 0
+			})
+
+		if entry_doc.is_new():
+			entry_doc.insert(ignore_permissions=True)
+		else:
+			entry_doc.save(ignore_permissions=True)
+
+		frappe.cache().set_value(f"wof_teacher_draft_{customer_name}_{raw_year}", payload)
+
+		return {
+			"success": True,
+			"name": entry_doc.name,
+			"message": "Teacher entry draft saved successfully"
+		}
 
 	except Exception as e:
 		frappe.log_error(frappe.get_traceback(), "Save WOF Teacher Draft Error")
 		return {"success": False, "message": str(e)}
+	finally:
+		frappe.flags.ignore_permissions = original_flag
 
 
 @frappe.whitelist(allow_guest=True)
@@ -2546,10 +2852,105 @@ def get_wof_teacher_draft(academic_year="AY-2026/27"):
 		if not customer_name:
 			return {"success": False, "message": "Customer not found", "data": None}
 
-		saved_data = frappe.cache().get_value(f"wof_teacher_draft_{customer_name}_{academic_year}")
+		# Check Teacher Entry doctype for unsubmitted draft record
+		draft_entry_name = frappe.db.get_value("Teacher Entry", {
+			"customer": customer_name,
+			"is_submitted": 0
+		}, "name", order_by="creation desc")
+
+		if not draft_entry_name:
+			# If no unsubmitted draft in DB, clear any stale cache and return None
+			try:
+				frappe.cache().delete_value(f"wof_teacher_draft_{customer_name}_{academic_year}")
+				frappe.cache().delete_value(f"wof_teacher_draft_{customer_name}_AY-2026/27")
+			except Exception:
+				pass
+			return {
+				"success": True,
+				"data": None
+			}
+
+		te = frappe.get_doc("Teacher Entry", draft_entry_name)
+
+		# Resolve coordinator name and address safely
+		teacher_name = te.get("coordinator_name") or ""
+		teacher_address = te.get("address") or ""
+		teacher_mobile = te.get("mobile") or ""
+		teacher_email = te.get("email_id") or ""
+		teacher_dob = str(te.get("dob")) if te.get("dob") else ""
+
+		if teacher_name and frappe.db.exists("Teacher", teacher_name):
+			t_doc = frappe.get_doc("Teacher", teacher_name)
+			if t_doc.get("name1"):
+				teacher_name = t_doc.get("name1")
+			if t_doc.get("phone_number"):
+				teacher_mobile = t_doc.get("phone_number")
+			if t_doc.get("email_id"):
+				teacher_email = t_doc.get("email_id")
+			if t_doc.get("date_of_birth"):
+				teacher_dob = str(t_doc.get("date_of_birth"))
+			if t_doc.get("address"):
+				teacher_address = t_doc.get("address")
+			elif t_doc.get("new_address") and frappe.db.exists("Address", t_doc.get("new_address")):
+				addr_line = frappe.db.get_value("Address", t_doc.get("new_address"), "address_line1")
+				if addr_line:
+					teacher_address = addr_line
+
+		# If teacher_address is an Address DocName, extract address_line1
+		if teacher_address and frappe.db.exists("Address", teacher_address):
+			addr_line = frappe.db.get_value("Address", teacher_address, "address_line1")
+			if addr_line:
+				teacher_address = addr_line
+
+		selected_slab_amount = 0
+		selected_slab_label = ""
+		selected_slab_rec = ""
+
+		for e in te.entries:
+			if e.select:
+				selected_slab_label = e.total_participants or ""
+				selected_slab_rec = e.recognition_and_honorarium or ""
+				# Find matching amount from HONORARIUM_SLABS_LIST
+				for slab in HONORARIUM_SLABS_LIST:
+					if slab["label"] == selected_slab_label:
+						selected_slab_amount = slab["amount"]
+						break
+				break
+
+		reconstructed = {
+			"entry_name": te.name,
+			"teacher_info": {
+				"name": teacher_name,
+				"address": teacher_address,
+				"city": te.city or "",
+				"state": te.state or "",
+				"taluka": "",
+				"district": te.district or "",
+				"pincode": te.pin_code or "",
+				"mobile": teacher_mobile,
+				"dob": teacher_dob,
+				"email": teacher_email,
+			},
+			"school_info": {
+				"academic_year": academic_year,
+			},
+			"honorarium_slab": {
+				"amount": selected_slab_amount,
+				"label": selected_slab_label,
+				"recognition": selected_slab_rec,
+			},
+			"financial_ledger": {
+				"studentCount": te.no_of_students or 0,
+				"totalRegistrationAmount": te.registration_amount or 0,
+				"amountPayableToWof": te.amount_payable or 0,
+				"honorariumAmount": selected_slab_amount,
+				"totalPayableAmountToWof": te.amount_payable or 0,
+			}
+		}
+
 		return {
 			"success": True,
-			"data": saved_data or None
+			"data": reconstructed
 		}
 
 	except Exception as e:

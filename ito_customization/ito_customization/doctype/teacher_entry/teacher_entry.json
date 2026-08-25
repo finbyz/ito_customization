@@ -1,0 +1,171 @@
+{
+ "actions": [],
+ "allow_bulk_edit": 1,
+ "allow_rename": 1,
+ "autoname": "{customer_name}.-.####.",
+ "creation": "2026-08-25 16:07:20.022942",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "customer",
+  "customer_name",
+  "is_submitted",
+  "section_break_wgwv",
+  "coordinator_name",
+  "city",
+  "pin_code",
+  "dob",
+  "email_id",
+  "column_break_xspl",
+  "address",
+  "state",
+  "district",
+  "mobile",
+  "section_break_zpno",
+  "entries",
+  "section_break_aals",
+  "no_of_students",
+  "amount_payable",
+  "column_break_dwic",
+  "registration_amount"
+ ],
+ "fields": [
+  {
+   "fieldname": "coordinator_name",
+   "fieldtype": "Link",
+   "label": "Coordinator Name",
+   "options": "Teacher"
+  },
+  {
+   "fieldname": "city",
+   "fieldtype": "Data",
+   "label": "City"
+  },
+  {
+   "fieldname": "pin_code",
+   "fieldtype": "Data",
+   "label": "Pin Code"
+  },
+  {
+   "fetch_from": "coordinator_name.date_of_birth",
+   "fieldname": "dob",
+   "fieldtype": "Date",
+   "label": "DOB"
+  },
+  {
+   "fieldname": "column_break_xspl",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "address",
+   "fieldtype": "Data",
+   "label": "Address"
+  },
+  {
+   "fieldname": "state",
+   "fieldtype": "Link",
+   "label": "State",
+   "options": "State"
+  },
+  {
+   "fieldname": "district",
+   "fieldtype": "Data",
+   "label": "District"
+  },
+  {
+   "fieldname": "mobile",
+   "fieldtype": "Phone",
+   "label": "Mobile"
+  },
+  {
+   "fetch_from": "coordinator_name.email_id",
+   "fieldname": "email_id",
+   "fieldtype": "Data",
+   "label": "Email ID"
+  },
+  {
+   "fieldname": "section_break_zpno",
+   "fieldtype": "Section Break",
+   "label": "RECOGNITION & HONORARIUM FOR ART TEACHERS AND COORDINATORS"
+  },
+  {
+   "fieldname": "entries",
+   "fieldtype": "Table",
+   "options": "Teacher Entry CT"
+  },
+  {
+   "fieldname": "section_break_aals",
+   "fieldtype": "Section Break",
+   "label": "Financial Ledger"
+  },
+  {
+   "fieldname": "no_of_students",
+   "fieldtype": "Int",
+   "label": "No of Students"
+  },
+  {
+   "fieldname": "registration_amount",
+   "fieldtype": "Currency",
+   "label": "Registration Amount"
+  },
+  {
+   "fieldname": "amount_payable",
+   "fieldtype": "Currency",
+   "label": "Amount Payable"
+  },
+  {
+   "fieldname": "column_break_dwic",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer ",
+   "options": "Customer"
+  },
+  {
+   "fieldname": "section_break_wgwv",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fetch_from": "customer.customer_name",
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Customer Name"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_submitted",
+   "fieldtype": "Check",
+   "label": "Is submitted"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-25 16:42:51.623595",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "Teacher Entry",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
