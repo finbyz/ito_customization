@@ -770,7 +770,11 @@ def get_customer_from_session_user():
 
 	lc_reg_fee = get_registration_fee("Little Champ Registration")
 	ito_reg_fee = get_registration_fee("ITO Registration")
-	wof_reg_fee = get_registration_fee("WOF Registration")
+	wof_reg_fee = get_registration_fee("WOF Olympiad")
+	if not wof_reg_fee or not wof_reg_fee.get("rate_inr"):
+		wof_fallback = get_registration_fee("WOF Registration")
+		if wof_fallback and wof_fallback.get("rate_inr"):
+			wof_reg_fee = wof_fallback
 	if customer.get("custom_retention") is not None and flt(customer.get("custom_retention")) > 0:
 		wof_reg_fee["custom_retention"] = flt(customer.get("custom_retention"))
 
@@ -794,6 +798,7 @@ def get_customer_from_session_user():
 		"books_selection": books_selection,
 		"books_order_submitted": books_order_submitted,
 		"custom_is_little_champ": customer.get("custom_is_little_champ") or 0,
+		"custom_registration_date": customer.get("custom_registration_date"),
 		"registration_fee": lc_reg_fee if customer.get("custom_is_little_champ") else ito_reg_fee,
 		"little_champ_registration_fee": lc_reg_fee,
 		"ito_registration_fee": ito_reg_fee,
@@ -1339,51 +1344,70 @@ def save_wof_step():
 
 # ==================== DYNAMIC SUBJECT HELPER ====================
 
-def get_subjects_for_year(academic_year, is_little_champ=0):
+def get_subjects_for_year(academic_year=None, is_little_champ=0, customer_name=None):
 	"""
-	Fetch subjects from Yearly Exam Date for given academic year.
-	Filters by is_little_champ flag on parent Yearly Exam Date document.
-	Only fetches SUBMITTED documents (docstatus=1).
+	Fetch subjects from Yearly Exam Date.
+	Primary source: If customer has a linked Exams Summary -> exam_detail (Yearly Exam Date).
+	Fallback: Query Yearly Exam Date by academic year and is_little_champ flag.
 	"""
-	if not academic_year:
-		return []
+	yed_name = None
 
-	# Normalize academic year format
-	if not academic_year.startswith("AY-"):
-		parts = academic_year.replace("-", "/").split("/")
-		if len(parts) == 2:
-			academic_year = f"AY-{parts[0]}/{parts[1]}"
+	# 1. Try fetching from linked Exams Summary -> exam_detail for current customer
+	if not customer_name and frappe.session and frappe.session.user != "Guest":
+		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
 
-	# CRITICAL: Convert to integer
-	is_little_champ = int(is_little_champ or 0)
+	if customer_name:
+		es_list = frappe.get_all("Exams Summary",
+			filters={"customer": customer_name},
+			fields=["name", "exam_detail"],
+			order_by="creation desc")
 
-	# Check if parent doctype has is_little_champ field
-	has_parent_lc_field = frappe.db.has_column("Yearly Exam Date", "is_little_champ")
+		for es in es_list:
+			if es.exam_detail and frappe.db.exists("Yearly Exam Date", es.exam_detail):
+				yed_name = es.exam_detail
+				break
 
-	# Build filters for parent document
-	filters = {
-		"academic_year": academic_year,
-		"docstatus": 1  # ← ONLY fetch SUBMITTED documents
-	}
-	if has_parent_lc_field:
-		filters["is_little_champ"] = is_little_champ
+	# 2. Fallback to academic year query if no customer exam_detail found
+	if not yed_name:
+		if not academic_year:
+			return []
 
-	# Find Yearly Exam Date for this academic year AND type
-	# Order by creation date to get latest if multiple exist
-	yed = frappe.get_all("Yearly Exam Date",
-		filters=filters,
-		fields=["name", "creation"],
-		order_by="creation desc",  # ← Get latest first
-		limit=1)
+		# Normalize academic year format
+		if not academic_year.startswith("AY-"):
+			parts = academic_year.replace("-", "/").split("/")
+			if len(parts) == 2:
+				academic_year = f"AY-{parts[0]}/{parts[1]}"
 
-	if not yed:
+		# CRITICAL: Convert to integer
+		is_little_champ = int(is_little_champ or 0)
+
+		# Check if parent doctype has is_little_champ field
+		has_parent_lc_field = frappe.db.has_column("Yearly Exam Date", "is_little_champ")
+
+		# Build filters for parent document
+		filters = {
+			"academic_year": academic_year,
+			"docstatus": 1  # ← ONLY fetch SUBMITTED documents
+		}
+		if has_parent_lc_field:
+			filters["is_little_champ"] = is_little_champ
+
+		# Find Yearly Exam Date for this academic year AND type
+		yed = frappe.get_all("Yearly Exam Date",
+			filters=filters,
+			fields=["name", "creation"],
+			order_by="creation desc",
+			limit=1)
+
+		if yed:
+			yed_name = yed[0].name
+
+	if not yed_name:
 		frappe.log_error(
-			f"No Yearly Exam Date found for {academic_year} (is_little_champ={is_little_champ})", 
+			f"No Yearly Exam Date found for customer={customer_name}, academic_year={academic_year} (is_little_champ={is_little_champ})", 
 			"Subject Fetch"
 		)
 		return []
-
-	yed_name = yed[0].name
 
 	# Fetch ALL subjects from this document's child table
 	target_dates = frappe.get_all("Yearly Exam Date CT",
@@ -1391,20 +1415,36 @@ def get_subjects_for_year(academic_year, is_little_champ=0):
 		fields=["subject", "school_subject", "idx"],
 		order_by="idx asc")
 
+	# Batch fetch 'abbr' from School Subject doctype for all target subjects
+	subject_names = list(set(r.subject for r in target_dates if r.subject))
+	abbr_map = {}
+	if subject_names:
+		try:
+			subjects_db = frappe.get_all("School Subject",
+				filters={"name": ["in", subject_names]},
+				fields=["name", "abbr"])
+			for s in subjects_db:
+				if s.name and s.abbr:
+					abbr_map[s.name] = s.abbr.strip()
+		except Exception:
+			pass
+
 	subjects = []
 	for row in target_dates:
 		if not row.subject:
 			continue
 
-		short_name = row.school_subject or derive_short_name(row.subject)
-		safe_code = (short_name or row.subject).lower().replace(" ", "_").replace("(", "").replace(")", "")[:20]
+		abbr = abbr_map.get(row.subject) or row.school_subject or derive_short_name(row.subject)
+		short_name = (abbr or row.school_subject or derive_short_name(row.subject)).strip()
+		safe_code = short_name.lower().replace(" ", "_").replace("-", "_").replace("(", "").replace(")", "")[:20]
 
 		subjects.append({
 			"code": safe_code,
+			"abbr": short_name.upper(),
 			"name": row.subject,
-			"shortName": short_name or safe_code[:10].upper(),
+			"shortName": short_name.upper(),
 			"title": row.subject,
-			"isDefaultFree": "Logical Reasoning" in row.subject or "NLRO" in (short_name or "")
+			"isDefaultFree": "Logical Reasoning" in row.subject or "NLRO" in short_name.upper()
 		})
 
 	return subjects
@@ -1436,16 +1476,17 @@ def derive_short_name(subject_name):
 @frappe.whitelist(allow_guest=True)
 def get_bulk_subjects_for_year(academic_year=None, is_little_champ=0):
 	try:
+		customer_name = frappe.db.get_value("Portal User",
+			{"user": frappe.session.user}, "parent")
+
 		if not academic_year:
-			customer_name = frappe.db.get_value("Portal User",
-				{"user": frappe.session.user}, "parent")
 			if customer_name:
 				academic_year = frappe.db.get_value("Customer", customer_name,
 					"custom_current_academic_year") or "AY-2026/27"
 			else:
 				academic_year = "AY-2026/27"
 
-		subjects = get_subjects_for_year(academic_year, is_little_champ)
+		subjects = get_subjects_for_year(academic_year, is_little_champ, customer_name=customer_name)
 
 		return {
 			"success": True,
@@ -1463,16 +1504,17 @@ def get_bulk_subjects_for_year(academic_year=None, is_little_champ=0):
 @frappe.whitelist(allow_guest=True)
 def get_little_champ_subjects_for_year(academic_year=None):
 	try:
+		customer_name = frappe.db.get_value("Portal User",
+			{"user": frappe.session.user}, "parent")
+
 		if not academic_year:
-			customer_name = frappe.db.get_value("Portal User",
-				{"user": frappe.session.user}, "parent")
 			if customer_name:
 				academic_year = frappe.db.get_value("Customer", customer_name,
 					"custom_current_academic_year") or "AY-2026/27"
 			else:
 				academic_year = "AY-2026/27"
 
-		subjects = get_subjects_for_year(academic_year, is_little_champ=1)
+		subjects = get_subjects_for_year(academic_year, is_little_champ=1, customer_name=customer_name)
 
 		return {
 			"success": True,
@@ -2151,6 +2193,71 @@ def save_parent_consent(data):
 		return {"success": False, "message": str(e)}
 
 
+def map_abbr_to_wof_list_field(abbr):
+	"""
+	Maps subject abbr or code to exact column in 'WOF List' doctype.
+	"""
+	if not abbr:
+		return None
+
+	key = str(abbr).strip().upper().replace(" ", "_").replace("-", "_")
+	key_lower = key.lower()
+
+	# Standard WOF List fields
+	abbr_mapping = {
+		# Chitrakala subjects
+		"COLOURING": "colouring",
+		"COLORING": "colouring",
+		"DRAWING": "colouring",
+		"HANDWRITING": "handwriting",
+		"SKETCHING": "sketching",
+		"CARTOON": "cartoon",
+		"CARICATURE": "caricature",
+		"GREETING": "greeting_card",
+		"GREETING_CARD": "greeting_card",
+		"CARD": "greeting_card",
+		# Olympiad subjects
+		"ISO": "iso",
+		"IMO": "imo",
+		"IEO": "ieo",
+		"IABO": "iabo",
+		"ISBO": "isbo",
+		"WGKO": "wgko",
+		"WAIO": "waio",
+		"WFLO": "wflo",
+		"WIHO": "wiho",
+	}
+
+	if key in abbr_mapping:
+		return abbr_mapping[key]
+	
+	if key_lower in abbr_mapping.values():
+		return key_lower
+
+	# Keyword checks if abbr format varies slightly
+	if "COLOUR" in key or "COLOR" in key or "DRAW" in key:
+		return "colouring"
+	if "HANDWRIT" in key or "WRITE" in key or "WRITING" in key:
+		return "handwriting"
+	if "SKETCH" in key:
+		return "sketching"
+	if "CARICATURE" in key:
+		return "caricature"
+	if "CARTOON" in key:
+		return "cartoon"
+	if "GREETING" in key or "CARD" in key:
+		return "greeting_card"
+
+	if frappe.db.has_column("WOF List", key_lower):
+		return key_lower
+
+	return None
+
+
+def map_subject_to_wof_list_field(sub_code):
+	return map_abbr_to_wof_list_field(sub_code)
+
+
 # ==================== WOF STUDENT LIST APIS ====================
 
 @frappe.whitelist(allow_guest=True)
@@ -2214,6 +2321,23 @@ def save_wof_student_list():
 		bsl.for_little_champ = 0
 		bsl.is_submitted = 1
 
+		# Fetch dynamic subjects configured for this customer
+		dynamic_subjects = get_subjects_for_year(academic_year, 0, customer_name=customer_name)
+
+		# Build lookup map of subject abbr/code -> WOF List column field
+		subject_field_map = {}
+		for sub in dynamic_subjects:
+			s_abbr = (sub.get("abbr") or sub.get("shortName") or sub.get("code") or "").strip().upper()
+			s_code = (sub.get("code") or "").strip().lower()
+			s_name = (sub.get("name") or "").strip()
+
+			field_name = map_abbr_to_wof_list_field(s_abbr) or map_abbr_to_wof_list_field(s_code)
+			if field_name:
+				subject_field_map[s_abbr] = field_name
+				subject_field_map[s_code] = field_name
+				subject_field_map[s_name.lower()] = field_name
+				subject_field_map[s_name.upper()] = field_name
+
 		# Append students to table_xxdu (WOF List child table)
 		for batch_key, batch_data in rosters.items():
 			students = []
@@ -2222,24 +2346,64 @@ def save_wof_student_list():
 			elif isinstance(batch_data, list):
 				students = batch_data
 
+			class_grade = batch_data.get("class_grade") or batch_data.get("classGrade") or (batch_key.split("_")[0] if "_" in batch_key else "") if isinstance(batch_data, dict) else ""
+			section = batch_data.get("section") or (batch_key.split("_")[1] if "_" in batch_key else "") if isinstance(batch_data, dict) else ""
+			offline_exam = 1 if (isinstance(batch_data, dict) and (batch_data.get("offline_exam") or batch_data.get("offlineExam"))) else 0
+			online_exam = 1 if (isinstance(batch_data, dict) and (batch_data.get("online_exam") or batch_data.get("onlineExam"))) else 0
+
 			for st in students:
 				student_name = (st.get("student_name") or st.get("name") or "").strip().upper()
 				parent_name = (st.get("parent_name") or st.get("parentName") or "").strip()
 				subs = st.get("subjects", {})
+				if isinstance(subs, str):
+					try:
+						subs = json.loads(subs)
+					except Exception:
+						subs = {}
 
-				if not student_name and not parent_name and not any(subs.values()):
+				if not student_name and not parent_name:
 					continue
 
 				row_data = {
 					"student_name": student_name,
 					"parent_name": parent_name,
-					"colouring": 1 if subs.get("colouring") else 0,
-					"handwriting": 1 if subs.get("handwriting") else 0,
-					"sketching": 1 if subs.get("sketching") else 0,
-					"cartoon": 1 if subs.get("cartoon") else 0,
-					"caricature": 1 if subs.get("caricature") else 0,
-					"greeting_card": 1 if (subs.get("greeting_card") or subs.get("greeting")) else 0,
+					"class_grade": class_grade,
+					"section": section,
+					"offline_exam": offline_exam,
+					"online_exam": online_exam,
+					"colouring": 0,
+					"handwriting": 0,
+					"sketching": 0,
+					"cartoon": 0,
+					"caricature": 0,
+					"greeting_card": 0,
+					"iso": 0,
+					"imo": 0,
+					"ieo": 0,
+					"iabo": 0,
+					"isbo": 0,
+					"wgko": 0,
+					"waio": 0,
+					"wflo": 0,
+					"wiho": 0,
 				}
+
+				if isinstance(subs, dict):
+					for sub_key, sub_val in subs.items():
+						is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
+						if not is_checked:
+							continue
+						
+						k_str = str(sub_key).strip()
+						field_name = (
+							subject_field_map.get(k_str) or
+							subject_field_map.get(k_str.upper()) or
+							subject_field_map.get(k_str.lower()) or
+							map_abbr_to_wof_list_field(k_str)
+						)
+						if field_name:
+							row_data[field_name] = 1
+
 				bsl.append("table_xxdu", row_data)
 
 		if bsl.is_new():
@@ -2341,6 +2505,23 @@ def save_wof_student_draft():
 		bsl.for_little_champ = 0
 		bsl.is_submitted = 0
 
+		# Fetch dynamic subjects configured for this customer
+		dynamic_subjects = get_subjects_for_year(academic_year, 0, customer_name=customer_name)
+
+		# Build lookup map of subject abbr/code -> WOF List column field
+		subject_field_map = {}
+		for sub in dynamic_subjects:
+			s_abbr = (sub.get("abbr") or sub.get("shortName") or sub.get("code") or "").strip().upper()
+			s_code = (sub.get("code") or "").strip().lower()
+			s_name = (sub.get("name") or "").strip()
+
+			field_name = map_abbr_to_wof_list_field(s_abbr) or map_abbr_to_wof_list_field(s_code)
+			if field_name:
+				subject_field_map[s_abbr] = field_name
+				subject_field_map[s_code] = field_name
+				subject_field_map[s_name.lower()] = field_name
+				subject_field_map[s_name.upper()] = field_name
+
 		# Append students to table_xxdu (WOF List child table)
 		for batch_key, batch_data in rosters.items():
 			students = []
@@ -2349,24 +2530,64 @@ def save_wof_student_draft():
 			elif isinstance(batch_data, list):
 				students = batch_data
 
+			class_grade = batch_data.get("class_grade") or batch_data.get("classGrade") or (batch_key.split("_")[0] if "_" in batch_key else "") if isinstance(batch_data, dict) else ""
+			section = batch_data.get("section") or (batch_key.split("_")[1] if "_" in batch_key else "") if isinstance(batch_data, dict) else ""
+			offline_exam = 1 if (isinstance(batch_data, dict) and (batch_data.get("offline_exam") or batch_data.get("offlineExam"))) else 0
+			online_exam = 1 if (isinstance(batch_data, dict) and (batch_data.get("online_exam") or batch_data.get("onlineExam"))) else 0
+
 			for st in students:
 				student_name = (st.get("student_name") or st.get("name") or "").strip().upper()
 				parent_name = (st.get("parent_name") or st.get("parentName") or "").strip()
 				subs = st.get("subjects", {})
+				if isinstance(subs, str):
+					try:
+						subs = json.loads(subs)
+					except Exception:
+						subs = {}
 
-				if not student_name and not parent_name and not any(subs.values()):
+				if not student_name and not parent_name:
 					continue
 
 				row_data = {
 					"student_name": student_name,
 					"parent_name": parent_name,
-					"colouring": 1 if subs.get("colouring") else 0,
-					"handwriting": 1 if subs.get("handwriting") else 0,
-					"sketching": 1 if subs.get("sketching") else 0,
-					"cartoon": 1 if subs.get("cartoon") else 0,
-					"caricature": 1 if subs.get("caricature") else 0,
-					"greeting_card": 1 if (subs.get("greeting_card") or subs.get("greeting")) else 0,
+					"class_grade": class_grade,
+					"section": section,
+					"offline_exam": offline_exam,
+					"online_exam": online_exam,
+					"colouring": 0,
+					"handwriting": 0,
+					"sketching": 0,
+					"cartoon": 0,
+					"caricature": 0,
+					"greeting_card": 0,
+					"iso": 0,
+					"imo": 0,
+					"ieo": 0,
+					"iabo": 0,
+					"isbo": 0,
+					"wgko": 0,
+					"waio": 0,
+					"wflo": 0,
+					"wiho": 0,
 				}
+
+				if isinstance(subs, dict):
+					for sub_key, sub_val in subs.items():
+						is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
+						if not is_checked:
+							continue
+						
+						k_str = str(sub_key).strip()
+						field_name = (
+							subject_field_map.get(k_str) or
+							subject_field_map.get(k_str.upper()) or
+							subject_field_map.get(k_str.lower()) or
+							map_abbr_to_wof_list_field(k_str)
+						)
+						if field_name:
+							row_data[field_name] = 1
+
 				bsl.append("table_xxdu", row_data)
 
 		if bsl.is_new():
@@ -2398,6 +2619,54 @@ def get_wof_student_draft(academic_year="AY-2026/27"):
 			return {"success": False, "message": "Customer not found", "data": None}
 
 		saved_data = frappe.cache().get_value(f"wof_student_draft_{customer_name}_{academic_year}")
+		if not saved_data:
+			# Fallback to DB query if Redis cache is empty
+			bsl_name = frappe.db.get_value("Bulk Student List", {
+				"customer": customer_name,
+				"for_wof_list": 1
+			}, "name", order_by="creation desc")
+
+			if bsl_name:
+				bsl = frappe.get_doc("Bulk Student List", bsl_name)
+				rosters = {}
+				for row in bsl.table_xxdu:
+					key = f"{row.class_grade}_{row.section}"
+					if key not in rosters:
+						rosters[key] = {
+							"class_grade": row.class_grade,
+							"section": row.section,
+							"students": []
+						}
+					rosters[key]["students"].append({
+						"student_name": row.student_name,
+						"parent_name": row.parent_name,
+						"subjects": {
+							"colouring": bool(row.colouring),
+							"handwriting": bool(row.handwriting),
+							"sketching": bool(row.sketching),
+							"cartoon": bool(row.cartoon),
+							"caricature": bool(row.caricature),
+							"greeting_card": bool(row.greeting_card),
+							"greeting": bool(row.greeting_card),
+							"iso": bool(row.iso),
+							"imo": bool(row.imo),
+							"ieo": bool(row.ieo),
+							"iabo": bool(row.iabo),
+							"isbo": bool(row.isbo),
+							"wgko": bool(row.wgko),
+							"waio": bool(row.waio),
+							"wflo": bool(row.wflo),
+							"wiho": bool(row.wiho),
+						}
+					})
+				saved_data = {
+					"school_info": {
+						"school_name": customer_name,
+						"academic_year": bsl.academic_year
+					},
+					"rosters": rosters
+				}
+
 		return {
 			"success": True,
 			"data": saved_data or None
@@ -2532,16 +2801,14 @@ def save_wof_teacher_entry():
 		ensure_subject_exists("Art Teacher / Coordinator")
 
 		teacher_name = (teacher_info.get("name") or "").strip().upper()
+		teacher_email = (teacher_info.get("email") or "").strip()
 		if not teacher_name:
 			return {"success": False, "message": "Art Teacher / Coordinator Name is required."}
 
-		# Check existing Teacher by name1 & customer_reference or name1
-		existing_teacher_name = frappe.db.get_value("Teacher", {
-			"name1": teacher_name,
-			"customer_reference": customer_doc.name
-		})
-		if not existing_teacher_name:
-			existing_teacher_name = frappe.db.get_value("Teacher", {"name1": teacher_name})
+		# Check existing Teacher by email_id ONLY (different email always creates a new teacher)
+		existing_teacher_name = None
+		if teacher_email:
+			existing_teacher_name = frappe.db.get_value("Teacher", {"email_id": teacher_email})
 
 		if existing_teacher_name:
 			teacher_doc = frappe.get_doc("Teacher", existing_teacher_name)
@@ -2560,13 +2827,14 @@ def save_wof_teacher_entry():
 		teacher_doc.name1 = teacher_name
 		teacher_doc.date_of_birth = teacher_info.get("dob") or "1990-01-01"
 		teacher_doc.phone_number = (teacher_info.get("mobile") or "").strip()
-		teacher_doc.email_id = (teacher_info.get("email") or "").strip()
+		teacher_doc.email_id = teacher_email
 		teacher_doc.school_name = customer_doc.name
 		teacher_doc.customer_reference = customer_doc.name
 		teacher_doc.status = "Active"
 		teacher_doc.experience = "Experienced"
 		teacher_doc.subject = "Art Teacher / Coordinator"
 		teacher_doc.address = full_address
+		teacher_doc.wof_teacher = 1
 
 		if teacher_doc.is_new():
 			teacher_doc.insert(ignore_permissions=True)
@@ -2579,11 +2847,12 @@ def save_wof_teacher_entry():
 		# Sync with Customer custom_school_teacher_details table
 		existing_row = None
 		for row in customer_doc.custom_school_teacher_details:
-			if row.name1 == teacher_doc.name:
+			if row.name1 == teacher_doc.name or (teacher_email and getattr(row, "email_id", "") == teacher_email):
 				existing_row = row
 				break
 
 		if existing_row:
+			existing_row.name1 = teacher_doc.name
 			existing_row.date_of_birth = teacher_doc.date_of_birth
 			existing_row.phone_number = teacher_doc.phone_number
 			existing_row.status = teacher_doc.status
@@ -2602,18 +2871,27 @@ def save_wof_teacher_entry():
 			})
 		customer_doc.save(ignore_permissions=True)
 
-		# Find existing unsubmitted Teacher Entry for this customer or create new
-		existing_entry_name = frappe.db.get_value("Teacher Entry", {
-			"customer": customer_doc.name,
-			"is_submitted": 0
-		}, "name", order_by="creation desc")
+		# Check if an unsubmitted Teacher Entry exists (is_submitted == 0) to update, otherwise create new
+		entry_doc = None
+		entry_name_from_payload = payload.get("entry_name")
+		if entry_name_from_payload and frappe.db.exists("Teacher Entry", entry_name_from_payload):
+			cand = frappe.get_doc("Teacher Entry", entry_name_from_payload)
+			if cand.is_submitted == 0:
+				entry_doc = cand
+				entry_doc.entries = []
 
-		if existing_entry_name:
-			entry_doc = frappe.get_doc("Teacher Entry", existing_entry_name)
-			entry_doc.entries = []
-		else:
-			entry_doc = frappe.new_doc("Teacher Entry")
-			entry_doc.customer = customer_doc.name
+		if not entry_doc:
+			existing_entry_name = frappe.db.get_value("Teacher Entry", {
+				"customer": customer_doc.name,
+				"is_submitted": 0
+			}, "name", order_by="creation desc")
+
+			if existing_entry_name:
+				entry_doc = frappe.get_doc("Teacher Entry", existing_entry_name)
+				entry_doc.entries = []
+			else:
+				entry_doc = frappe.new_doc("Teacher Entry")
+				entry_doc.customer = customer_doc.name
 
 		entry_doc.customer_name = customer_doc.customer_name
 		entry_doc.coordinator_name = teacher_doc.name
@@ -2710,15 +2988,14 @@ def save_wof_teacher_draft():
 		raw_year = school_info.get("academic_year", "AY-2026/27")
 
 		teacher_name = (teacher_info.get("name") or "").strip().upper()
+		teacher_email = (teacher_info.get("email") or "").strip()
 		teacher_doc = None
 		if teacher_name:
 			ensure_subject_exists("Art Teacher / Coordinator")
-			existing_teacher_name = frappe.db.get_value("Teacher", {
-				"name1": teacher_name,
-				"customer_reference": customer_doc.name
-			})
-			if not existing_teacher_name:
-				existing_teacher_name = frappe.db.get_value("Teacher", {"name1": teacher_name})
+			# Check existing Teacher by email_id ONLY
+			existing_teacher_name = None
+			if teacher_email:
+				existing_teacher_name = frappe.db.get_value("Teacher", {"email_id": teacher_email})
 
 			if existing_teacher_name:
 				teacher_doc = frappe.get_doc("Teacher", existing_teacher_name)
@@ -2737,13 +3014,14 @@ def save_wof_teacher_draft():
 			teacher_doc.name1 = teacher_name
 			teacher_doc.date_of_birth = teacher_info.get("dob") or "1990-01-01"
 			teacher_doc.phone_number = (teacher_info.get("mobile") or "").strip()
-			teacher_doc.email_id = (teacher_info.get("email") or "").strip()
+			teacher_doc.email_id = teacher_email
 			teacher_doc.school_name = customer_doc.name
 			teacher_doc.customer_reference = customer_doc.name
 			teacher_doc.status = "Active"
 			teacher_doc.experience = "Experienced"
 			teacher_doc.subject = "Art Teacher / Coordinator"
 			teacher_doc.address = full_address
+			teacher_doc.wof_teacher = 1
 
 			if teacher_doc.is_new():
 				teacher_doc.insert(ignore_permissions=True)
@@ -2831,6 +3109,7 @@ def save_wof_teacher_draft():
 			entry_doc.save(ignore_permissions=True)
 
 		frappe.cache().set_value(f"wof_teacher_draft_{customer_name}_{raw_year}", payload)
+		frappe.cache().set_value(f"wof_teacher_draft_{customer_name}_AY-2026/27", payload)
 
 		return {
 			"success": True,
@@ -2852,19 +3131,23 @@ def get_wof_teacher_draft(academic_year="AY-2026/27"):
 		if not customer_name:
 			return {"success": False, "message": "Customer not found", "data": None}
 
-		# Check Teacher Entry doctype for unsubmitted draft record
+		# 1. Check Redis cache first
+		cached_draft = frappe.cache().get_value(f"wof_teacher_draft_{customer_name}_{academic_year}")
+		if not cached_draft:
+			cached_draft = frappe.cache().get_value(f"wof_teacher_draft_{customer_name}_AY-2026/27")
+		if cached_draft:
+			return {
+				"success": True,
+				"data": cached_draft
+			}
+
+		# 2. Check Teacher Entry doctype for unsubmitted draft record
 		draft_entry_name = frappe.db.get_value("Teacher Entry", {
 			"customer": customer_name,
 			"is_submitted": 0
 		}, "name", order_by="creation desc")
 
 		if not draft_entry_name:
-			# If no unsubmitted draft in DB, clear any stale cache and return None
-			try:
-				frappe.cache().delete_value(f"wof_teacher_draft_{customer_name}_{academic_year}")
-				frappe.cache().delete_value(f"wof_teacher_draft_{customer_name}_AY-2026/27")
-			except Exception:
-				pass
 			return {
 				"success": True,
 				"data": None
@@ -2974,10 +3257,18 @@ def get_registration_fee(form_name="Little Champ Registration"):
 			as_dict=True
 		)
 
-		if not item and form_name == "WOF Registration":
+		if not item and ("WOF" in form_name or "Olympiad" in form_name):
 			item = frappe.db.get_value(
 				"Item",
-				{"item_name": "WOF Registration Fee", "disabled": 0},
+				{"custom_is_registration_item": 1, "custom_form_name": ["in", ["WOF Olympiad", "WOF Registration", "WOF Olympiad Registration"]], "disabled": 0},
+				["name", "item_code", "item_name", "standard_rate"],
+				as_dict=True
+			)
+
+		if not item and ("WOF" in form_name or "Olympiad" in form_name):
+			item = frappe.db.get_value(
+				"Item",
+				{"item_name": ["like", "%WOF%"], "disabled": 0},
 				["name", "item_code", "item_name", "standard_rate"],
 				as_dict=True
 			)
@@ -3048,3 +3339,344 @@ def get_registration_fee(form_name="Little Champ Registration"):
 			"rate_usd": 0.0,
 			"custom_retention": 0.0
 		}
+
+
+@frappe.whitelist(allow_guest=True)
+def save_wof_school_registration(registration_data=None):
+	original_ignore_permissions = frappe.flags.ignore_permissions
+	try:
+		frappe.flags.ignore_permissions = True
+		if not registration_data:
+			json_data = frappe.request.get_json() or {}
+			registration_data = json_data.get("data") or json_data
+
+		data = json.loads(registration_data) if isinstance(registration_data, str) else registration_data
+
+		school_info = data.get("school_info", {})
+		gstin = (school_info.get("gst_no") or "").strip().upper()
+		if gstin and len(gstin) != 15:
+			gstin = ""
+		school_info["gst_no"] = gstin
+
+		if not school_info.get("school_code") and school_info.get("ito_school_code"):
+			school_info["school_code"] = school_info.get("ito_school_code")
+
+		customer = create_or_update_customer(school_info)
+		customer_doc = frappe.get_doc("Customer", customer)
+		if hasattr(customer_doc, "custom_is_wof"):
+			customer_doc.custom_is_wof = 1
+		if hasattr(customer_doc, "custom_registration_date"):
+			customer_doc.custom_registration_date = frappe.utils.nowdate()
+		customer_doc.save(ignore_permissions=True)
+		frappe.db.set_value("Customer", customer, {
+			"custom_is_wof": 1,
+			"custom_registration_date": frappe.utils.nowdate()
+		}, update_modified=False)
+
+		create_or_update_address(customer, school_info)
+
+		coordinators_data = data.get("coordinators", {})
+		principal = coordinators_data.get("principal") or coordinators_data.get("head_master_principal")
+		if principal:
+			create_or_update_principal(principal, customer)
+
+		# Create/update teachers with WOF flag
+		create_or_update_wof_coordinators(coordinators_data, customer)
+
+		# Save WOF Exam summary rows
+		exams_data = data.get("exams", {})
+		if exams_data:
+			save_wof_exams_summary(customer, exams_data)
+
+		# Payment comment
+		payment = data.get("payment", {})
+		mode = payment.get("mode")
+		if mode and mode != "razorpay":
+			customer_doc.add_comment(
+				"Info",
+				f"WOF School Registration fee reported via {mode}: Total Students: {payment.get('total_students')}, Workbooks: {payment.get('total_workbooks')}, Grand Total: ₹{payment.get('grand_total_payable')}."
+			)
+
+		# Clear cache
+		raw_year = data.get("academic_year", "AY-2026/27")
+		try:
+			frappe.cache().delete_value(f"wof_school_reg_draft_{customer}_{raw_year}")
+			frappe.cache().delete_value(f"wof_school_reg_draft_{customer}_AY-2026/27")
+		except Exception:
+			pass
+
+		return {"success": True, "customer": customer}
+
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "WOF School Registration Error")
+		return {"success": False, "message": str(e)}
+	finally:
+		frappe.flags.ignore_permissions = original_ignore_permissions
+
+
+def create_or_update_wof_coordinators(coordinators, customer_name):
+	customer = frappe.get_doc("Customer", customer_name)
+
+	ensure_subject_exists("Principal")
+	ensure_subject_exists("Overall Coordinator")
+
+	# Clean existing child table rows in database for this customer
+	frappe.db.delete("Teachers Details", {"parent": customer.name})
+	customer.set("custom_school_teacher_details", [])
+
+	processed_teacher_names = set()
+
+	for role_key, coordinator in coordinators.items():
+		if not coordinator.get("name"):
+			continue
+
+		role_text = (coordinator.get("role") or "").strip()
+		subject = None
+
+		if "principal" in role_text.lower() or "principal" in role_key.lower():
+			subject = "Principal"
+		elif "overall" in role_text.lower() or "overall" in role_key.lower():
+			subject = "Overall Coordinator"
+		elif coordinator.get("subject"):
+			subject = coordinator.get("subject")
+		elif role_text.endswith(" In-charge"):
+			subject = role_text[:-10].strip()
+		elif role_text.endswith(" Coordinator"):
+			subject = role_text[:-12].strip()
+		else:
+			subject = role_text
+
+		if subject and not frappe.db.exists("School Subject", subject):
+			ensure_subject_exists(subject)
+
+		teacher_name = frappe.db.get_value("Teacher", {
+			"name1": coordinator.get("name"),
+			"customer_reference": customer.name
+		})
+		if not teacher_name and coordinator.get("email"):
+			teacher_name = frappe.db.get_value("Teacher", {
+				"email_id": coordinator.get("email").strip().lower()
+			})
+
+		if teacher_name:
+			teacher = frappe.get_doc("Teacher", teacher_name)
+		else:
+			teacher = frappe.new_doc("Teacher")
+
+		teacher.name1 = (coordinator.get("name") or "").strip()
+		teacher.phone_number = (coordinator.get("mobile") or "").strip()
+		teacher.email_id = (coordinator.get("email") or "").strip().lower()
+		teacher.date_of_birth = coordinator.get("dob") or "1990-01-01"
+		teacher.subject = subject or "Other"
+		teacher.status = "Active"
+		teacher.experience = "Experienced"
+		teacher.customer_reference = customer.name
+		teacher.school_name = customer.name
+		teacher.wof_teacher = 1
+
+		if teacher.is_new():
+			teacher.insert(ignore_permissions=True)
+		else:
+			teacher.save(ignore_permissions=True)
+
+		if teacher.name in processed_teacher_names:
+			continue
+		processed_teacher_names.add(teacher.name)
+
+		# Ensure no orphaned Teachers Details record exists with this name before append
+		if frappe.db.exists("Teachers Details", teacher.name):
+			frappe.db.delete("Teachers Details", {"name": teacher.name})
+
+		customer.append("custom_school_teacher_details", {
+			"name1": teacher.name,
+			"date_of_birth": teacher.date_of_birth,
+			"phone_number": teacher.phone_number,
+			"status": teacher.status,
+			"email_id": teacher.email_id,
+			"subject": teacher.subject,
+			"experience": teacher.experience
+		})
+
+	customer.save(ignore_permissions=True)
+
+
+def save_wof_exams_summary(customer, exams_data):
+	es_name = frappe.db.get_value("Exams Summary", {"customer": customer})
+	if not es_name:
+		yed_name = frappe.db.get_value("Yearly Exam Date", {"docstatus": 1}, "name", order_by="creation desc")
+		es_doc = frappe.new_doc("Exams Summary")
+		es_doc.customer = customer
+		if yed_name:
+			es_doc.exam_detail = yed_name
+		es_doc.insert(ignore_permissions=True)
+		es_name = es_doc.name
+
+	if es_name:
+		es_doc = frappe.get_doc("Exams Summary", es_name)
+		es_doc.exam_summary = []
+
+		for subj_key, subj_val in exams_data.items():
+			if isinstance(subj_val, list):
+				for row in subj_val:
+					num_students = cint(row.get("students") or 0)
+					if num_students > 0 or row.get("teacher_name") or row.get("class"):
+						es_doc.append("exam_summary", {
+							"subject": subj_key,
+							"class": str(row.get("class") or ""),
+							"teacher_name": row.get("teacher_name") or "",
+							"whatsapp_no": row.get("whatsapp") or "",
+							"no_of_students": num_students,
+							"slot_date": row.get("slot_date") or ""
+						})
+			elif isinstance(subj_val, dict):
+				subj_name = subj_val.get("name") or subj_key
+				rows_dict = subj_val.get("rows") or {}
+				slot_date = subj_val.get("selected_date") or ""
+				for cls_key, row in rows_dict.items():
+					num_students = cint(row.get("students") or 0)
+					if num_students > 0 or row.get("teacher_name"):
+						es_doc.append("exam_summary", {
+							"subject": subj_name,
+							"class": cls_key,
+							"teacher_name": row.get("teacher_name") or "",
+							"whatsapp_no": row.get("whatsapp") or "",
+							"no_of_students": num_students,
+							"slot_date": slot_date
+						})
+
+		es_doc.save(ignore_permissions=True)
+
+
+@frappe.whitelist(allow_guest=True)
+def save_wof_school_registration_step(step=None, data=None):
+	original_flag = frappe.flags.ignore_permissions
+	try:
+		frappe.flags.ignore_permissions = True
+		if not data:
+			json_data = frappe.request.get_json() or {}
+			step = step or json_data.get("step")
+			data = json_data.get("data") or json_data
+
+		payload = json.loads(data) if isinstance(data, str) else data
+		step = cint(step or payload.get("step", 1))
+
+		school_info = payload.get("school_info", {})
+		gstin = (school_info.get("gst_no") or "").strip().upper()
+		if gstin and len(gstin) != 15:
+			gstin = ""
+		school_info["gst_no"] = gstin
+
+		customer = frappe.cache().get_value(f"wof_customer_{frappe.session.user}")
+		if not customer and frappe.session.user != "Guest":
+			customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+
+		if not customer and school_info.get("school_name"):
+			customer = create_or_update_customer(school_info)
+
+		if step == 1:
+			if customer:
+				customer_doc = frappe.get_doc("Customer", customer)
+				customer_doc.customer_name = school_info.get("school_name", customer_doc.customer_name)
+				customer_doc.custom_ito_school_code = school_info.get("school_code", customer_doc.custom_ito_school_code)
+				customer_doc.custom_board = school_info.get("board", customer_doc.custom_board)
+				customer_doc.custom_student_strength = school_info.get("student_strength", customer_doc.custom_student_strength)
+				customer_doc.mobile_no = school_info.get("school_phone1", customer_doc.mobile_no)
+				customer_doc.email_id = school_info.get("school_email", customer_doc.email_id)
+				customer_doc.gstin = school_info.get("gst_no", customer_doc.gstin)
+				if hasattr(customer_doc, "custom_is_wof"):
+					customer_doc.custom_is_wof = 1
+				customer_doc.save(ignore_permissions=True)
+				create_or_update_address(customer, school_info)
+				frappe.cache().set_value(f"wof_customer_{frappe.session.user}", customer)
+
+		elif step == 2:
+			if not customer:
+				customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+			if customer:
+				coordinators = payload.get("coordinators", {})
+				principal = coordinators.get("principal") or coordinators.get("head_master_principal")
+				if principal:
+					create_or_update_principal(principal, customer)
+				create_or_update_wof_coordinators(coordinators, customer)
+
+		elif step == 3:
+			if not customer:
+				customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+			if customer:
+				exams_data = payload.get("exams", {})
+				if exams_data:
+					save_wof_exams_summary(customer, exams_data)
+
+		elif step == 4:
+			if not customer:
+				customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+			if customer:
+				payment = payload.get("payment", {})
+				mode = payment.get("mode")
+				if mode and mode != "razorpay":
+					customer_doc = frappe.get_doc("Customer", customer)
+					customer_doc.add_comment(
+						"Info",
+						f"WOF School Registration fee reported via {mode}: Total Students: {payment.get('total_students')}, Workbooks: {payment.get('total_workbooks')}, Grand Total: ₹{payment.get('grand_total_payable')}."
+					)
+
+		# Also update the draft cache in background
+		if customer:
+			raw_year = payload.get("academic_year", "AY-2026/27")
+			frappe.cache().set_value(f"wof_school_reg_draft_{customer}_{raw_year}", payload)
+			frappe.cache().set_value(f"wof_school_reg_draft_{customer}_AY-2026/27", payload)
+
+		return {"success": True, "step": step, "customer": customer}
+
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Save WOF School Registration Step Error")
+		return {"success": False, "message": str(e)}
+	finally:
+		frappe.flags.ignore_permissions = original_flag
+
+
+@frappe.whitelist(allow_guest=True)
+def save_wof_school_registration_draft():
+	original_flag = frappe.flags.ignore_permissions
+	try:
+		frappe.flags.ignore_permissions = True
+		data = frappe.request.get_json() or {}
+		payload = json.loads(data.get("data", "{}")) if isinstance(data.get("data"), str) else data.get("data", {})
+
+		school_info = payload.get("school_info", {})
+		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+		if not customer_name:
+			school_code = school_info.get("school_code")
+			if school_code:
+				customer_name = frappe.db.get_value("Customer", {"custom_ito_school_code": school_code})
+
+		if not customer_name:
+			return {"success": False, "message": "Customer not found"}
+
+		raw_year = payload.get("academic_year", "AY-2026/27")
+		frappe.cache().set_value(f"wof_school_reg_draft_{customer_name}_{raw_year}", payload)
+		frappe.cache().set_value(f"wof_school_reg_draft_{customer_name}_AY-2026/27", payload)
+
+		return {"success": True, "message": "Draft saved successfully"}
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Save WOF School Reg Draft Error")
+		return {"success": False, "message": str(e)}
+	finally:
+		frappe.flags.ignore_permissions = original_flag
+
+
+@frappe.whitelist(allow_guest=True)
+def get_wof_school_registration_draft(academic_year="AY-2026/27"):
+	try:
+		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+		if not customer_name:
+			return {"success": False, "message": "Customer not found", "data": None}
+
+		cached_draft = frappe.cache().get_value(f"wof_school_reg_draft_{customer_name}_{academic_year}")
+		if not cached_draft:
+			cached_draft = frappe.cache().get_value(f"wof_school_reg_draft_{customer_name}_AY-2026/27")
+
+		return {"success": True, "data": cached_draft}
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Get WOF School Reg Draft Error")
+		return {"success": False, "message": str(e), "data": None}

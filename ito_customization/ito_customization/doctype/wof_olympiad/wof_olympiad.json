@@ -1,0 +1,106 @@
+{
+ "actions": [],
+ "allow_bulk_edit": 1,
+ "allow_rename": 1,
+ "creation": "2026-08-26 17:03:35.659284",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "name_of_student",
+  "iso",
+  "imo",
+  "ieo",
+  "iabo",
+  "isbo",
+  "wgko",
+  "waio",
+  "wflo",
+  "wiho"
+ ],
+ "fields": [
+  {
+   "fieldname": "name_of_student",
+   "fieldtype": "Data",
+   "label": "Name of Student"
+  },
+  {
+   "default": "0",
+   "fieldname": "iso",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "ISO"
+  },
+  {
+   "default": "0",
+   "fieldname": "imo",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "IMO"
+  },
+  {
+   "default": "0",
+   "fieldname": "ieo",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "IEO"
+  },
+  {
+   "default": "0",
+   "fieldname": "iabo",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "IABO"
+  },
+  {
+   "default": "0",
+   "fieldname": "isbo",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "ISBO"
+  },
+  {
+   "default": "0",
+   "fieldname": "wgko",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "WGKO"
+  },
+  {
+   "default": "0",
+   "fieldname": "waio",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "WAIO"
+  },
+  {
+   "default": "0",
+   "fieldname": "wflo",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "WFLO"
+  },
+  {
+   "default": "0",
+   "fieldname": "wiho",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "WIHO"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-26 17:09:05.438928",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "WOF Olympiad",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

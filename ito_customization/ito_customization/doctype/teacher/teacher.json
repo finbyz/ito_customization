@@ -1,7 +1,7 @@
 {
  "actions": [],
+ "allow_bulk_edit": 1,
  "allow_rename": 1,
- "autoname": "field:name1",
  "creation": "2026-05-22 16:26:26.078564",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -11,6 +11,7 @@
   "date_of_birth",
   "phone_number",
   "school_name",
+  "wof_teacher",
   "column_break_eqxw",
   "status",
   "email_id",
@@ -41,8 +42,7 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Name",
-   "reqd": 1,
-   "unique": 1
+   "reqd": 1
   },
   {
    "fieldname": "date_of_birth",
@@ -161,6 +161,12 @@
    "fieldtype": "Link",
    "label": "Address",
    "options": "Address"
+  },
+  {
+   "default": "0",
+   "fieldname": "wof_teacher",
+   "fieldtype": "Check",
+   "label": "WOF Teacher"
   }
  ],
  "grid_page_length": 50,
@@ -172,11 +178,10 @@
    "link_fieldname": "custom_teacher_ref"
   }
  ],
- "modified": "2026-06-12 18:25:44.027276",
+ "modified": "2026-08-26 12:15:00.000000",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Teacher",
- "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {

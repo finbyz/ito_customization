@@ -43,16 +43,60 @@ def _get_total_students(customer):
     return cint(total)
 
 
-def _get_registration_fee_item(company=None):
-    return frappe.db.get_value(
+def _get_registration_fee_item(company=None, form_name=None, customer=None):
+    if not form_name and customer:
+        if frappe.db.get_value("Customer", customer, "custom_is_wof"):
+            form_name = "WOF Olympiad"
+    if not form_name:
+        form_name = PAGE
+
+    from ito_customization.ito_customization import api
+    fee_info = api.get_registration_fee(form_name=form_name)
+    if fee_info and fee_info.get("success") and fee_info.get("item_code"):
+        return fee_info.get("item_code")
+
+    item = frappe.db.get_value(
         "Item",
-        {"custom_is_registration_item": 1, "custom_form_name": PAGE, "disabled": 0},
+        {"custom_is_registration_item": 1, "custom_form_name": form_name, "disabled": 0},
         "name",
     )
+    if not item and ("WOF" in str(form_name) or "Olympiad" in str(form_name)):
+        item = frappe.db.get_value(
+            "Item",
+            {"custom_is_registration_item": 1, "custom_form_name": ["in", ["WOF Olympiad", "WOF Registration", "WOF Olympiad Registration"]], "disabled": 0},
+            "name",
+        )
+    if not item and ("WOF" in str(form_name) or "Olympiad" in str(form_name)):
+        item = frappe.db.get_value(
+            "Item",
+            {"item_name": ["like", "%WOF%"], "disabled": 0},
+            "name",
+        )
+    if not item:
+        item = frappe.db.get_value(
+            "Item",
+            {"custom_is_registration_item": 1, "custom_form_name": PAGE, "disabled": 0},
+            "name",
+        )
+    return item
 
 
-def _get_registration_fee_rate(currency="INR"):
-    item_code = _get_registration_fee_item()
+def _get_registration_fee_rate(currency="INR", form_name=None, customer=None):
+    from ito_customization.ito_customization import api
+    target_form = form_name
+    if not target_form and customer:
+        if frappe.db.get_value("Customer", customer, "custom_is_wof"):
+            target_form = "WOF Olympiad"
+    if not target_form:
+        target_form = PAGE
+
+    fee_info = api.get_registration_fee(form_name=target_form)
+    if fee_info and fee_info.get("success"):
+        rate = fee_info.get("rate_usd") if currency == "USD" else fee_info.get("rate_inr")
+        if rate and flt(rate) > 0:
+            return flt(rate)
+
+    item_code = _get_registration_fee_item(form_name=target_form, customer=customer)
     if not item_code:
         return 0.0
 
@@ -87,8 +131,47 @@ def _get_registration_fee_rate(currency="INR"):
     return flt(inr_price) if inr_price and flt(inr_price) > 0 else 0.0
 
 
-def _find_registration_fee_invoice(customer, company):
-    fee_item = _get_registration_fee_item(company)
+def _get_razorpay_settings(form_name=None, customer=None):
+    if form_name:
+        try:
+            return get_settings_for_page(form_name), form_name
+        except Exception:
+            pass
+
+    for candidate in ["WOF Registration", "WOF Olympiad", "WOF Olympiad Registration"]:
+        try:
+            return get_settings_for_page(candidate), candidate
+        except Exception:
+            pass
+
+    try:
+        settings = get_settings_for_page(PAGE)
+        return settings, PAGE
+    except Exception:
+        pass
+
+    enabled_settings = frappe.get_all(
+        "Multi Company Razorpay Settings",
+        filters={"enabled": 1},
+        fields=["name"],
+        order_by="name",
+    )
+    if enabled_settings:
+        s = frappe.get_doc("Multi Company Razorpay Settings", enabled_settings[0].name)
+        pages = frappe.get_all(
+            "Multi Company Razorpay Settings Page",
+            filters={"parent": s.name},
+            fields=["page"],
+        )
+        matched_page = pages[0].page if pages else None
+        return s, matched_page
+
+    frappe.throw(_("No enabled Razorpay settings configured in the system."))
+
+
+def _find_registration_fee_invoice(customer, company, fee_item=None):
+    if not fee_item:
+        fee_item = _get_registration_fee_item(company, customer=customer)
     if not fee_item:
         return None
     rows = frappe.get_all(
@@ -110,34 +193,46 @@ def _find_registration_fee_invoice(customer, company):
 
 
 @frappe.whitelist(allow_guest=True)
-def initiate_registration_fee_payment(customer=None, free_registrations=0):
+def initiate_registration_fee_payment(customer=None, free_registrations=0, form_name=None, total_students=None):
     try:
         customer = _get_customer(customer)
+        if not form_name:
+            if frappe.db.get_value("Customer", customer, "custom_is_wof"):
+                form_name = "WOF Olympiad"
+            else:
+                form_name = PAGE
 
-        # The admin's page routing (Multi Company Razorpay Settings
-        # "Used For" tag) decides both Razorpay account and company.
-        settings = get_settings_for_page(PAGE)
+        settings, resolved_page = _get_razorpay_settings(form_name=form_name, customer=customer)
         company = settings.company
 
-        total_students = _get_total_students(customer)
+        if total_students is not None and cint(total_students) > 0:
+            total_students_val = cint(total_students)
+        else:
+            total_students_val = _get_total_students(customer)
 
         free_registrations = max(
             0,
-            min(cint(free_registrations), total_students),
+            min(cint(free_registrations), total_students_val),
         )
 
-        rate = _get_registration_fee_rate("INR")
+        rate = _get_registration_fee_rate("INR", form_name=form_name, customer=customer)
         if rate <= 0:
             frappe.throw(
-                _("Registration fee rate is not configured for {0}.").format(PAGE)
+                _("Registration fee rate is not configured for {0}.").format(form_name)
             )
 
-        paid_students = total_students - free_registrations
+        paid_students = total_students_val - free_registrations
         amount = flt(paid_students * rate)
 
         if amount <= 0:
             frappe.throw(
                 _("No outstanding registration fee to pay.")
+            )
+
+        fee_item = _get_registration_fee_item(company=company, form_name=form_name, customer=customer)
+        if not fee_item:
+            frappe.throw(
+                _("Registration fee item is not configured for {0}.").format(form_name or PAGE)
             )
 
         # ---------------------------------------------------------
@@ -146,6 +241,7 @@ def initiate_registration_fee_payment(customer=None, free_registrations=0):
         existing = _find_registration_fee_invoice(
             customer,
             company,
+            fee_item=fee_item,
         )
 
         # ---------------------------------------------------------
@@ -186,11 +282,7 @@ def initiate_registration_fee_payment(customer=None, free_registrations=0):
             # -----------------------------------------------------
             # Get Registration Fee Item
             # -----------------------------------------------------
-            item = _get_registration_fee_item(company)
-            if not item:
-                frappe.throw(
-                    _("Registration fee item is not configured for {0}.").format(PAGE)
-                )
+            item = fee_item
 
             # -----------------------------------------------------
             # Get Customer Receivable Account
@@ -537,7 +629,7 @@ def initiate_registration_fee_payment(customer=None, free_registrations=0):
             result = create_payment_for_sales_invoice(
                 sales_invoice=invoice_name,
                 amount=pay_amount,
-                page=PAGE,
+                page=resolved_page,
             )
 
         finally:
@@ -611,10 +703,26 @@ def confirm_registration_fee_payment(
 
 
 @frappe.whitelist(allow_guest=True)
-def get_registration_fee_payment_status(customer=None):
+def get_registration_fee_payment_status(customer=None, form_name=None):
     customer = _get_customer(customer)
-    company = get_settings_for_page(PAGE).company
-    invoice = _find_registration_fee_invoice(customer, company)
+    if not form_name and customer:
+        if frappe.db.get_value("Customer", customer, "custom_is_wof"):
+            form_name = "WOF Olympiad"
+    if not form_name:
+        form_name = PAGE
+
+    page_name = form_name if form_name in ["WOF Olympiad", "WOF Registration"] else PAGE
+    try:
+        settings = get_settings_for_page(page_name)
+    except Exception:
+        try:
+            settings = get_settings_for_page("WOF Registration")
+        except Exception:
+            settings = get_settings_for_page(PAGE)
+
+    company = settings.company
+    fee_item = _get_registration_fee_item(company, form_name=form_name, customer=customer)
+    invoice = _find_registration_fee_invoice(customer, company, fee_item=fee_item)
     if not invoice or invoice.docstatus != 1:
         return {"paid": False}
 

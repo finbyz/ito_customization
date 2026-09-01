@@ -9,8 +9,21 @@ from dateutil.relativedelta import relativedelta
 
 
 class Teacher(Document):
+	def autoname(self):
+		if self.name1:
+			raw_name = self.name1.strip()
+			if not frappe.db.exists("Teacher", raw_name):
+				self.name = raw_name
+			else:
+				from frappe.model.naming import make_autoname
+				self.name = make_autoname(f"{raw_name}-.#####")
+		else:
+			from frappe.model.naming import make_autoname
+			self.name = make_autoname("TCHR-.#####")
+
 	def validate(self):
 		self.validate_date_of_birth()
+		self.validate_email()
 	
 	def validate_date_of_birth(self):
 		"""Validate that teacher's age is at least 15 years from current date"""
@@ -32,6 +45,17 @@ class Teacher(Document):
 				frappe.throw(
 					_("Date of Birth cannot be in the future."),
 					title=_("Invalid Date of Birth")
+				)
+
+	def validate_email(self):
+		"""Validate that email ID is unique across teachers"""
+		if self.email_id:
+			email = self.email_id.strip().lower()
+			existing = frappe.db.get_value("Teacher", {"email_id": email, "name": ["!=", self.name or ""]})
+			if existing:
+				frappe.throw(
+					_("A Teacher with Email ID '{0}' already exists ({1}).").format(self.email_id, existing),
+					title=_("Duplicate Email ID")
 				)
 
 
@@ -180,4 +204,3 @@ def get_addresses(teacher_id):
 		})
 	
 	return address_list
-

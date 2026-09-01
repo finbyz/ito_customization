@@ -2,12 +2,13 @@
  "actions": [],
  "allow_bulk_edit": 1,
  "allow_rename": 1,
- "autoname": "{customer}.-.####.",
- "creation": "2026-06-23 17:27:49.038428",
+ "autoname": "{name1}.-.####.",
+ "creation": "2026-08-25 14:03:54.632579",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "customer",
+  "name1",
   "academic_year",
   "is_submitted",
   "section_break_jjer",
@@ -18,7 +19,10 @@
   "little_champ_list",
   "section_break_vznu",
   "for_wof_list",
-  "table_xxdu"
+  "table_xxdu",
+  "section_break_xswz",
+  "for_wof_olympiad",
+  "table_cbbz"
  ],
  "fields": [
   {
@@ -71,7 +75,7 @@
    "default": "0",
    "fieldname": "for_wof_list",
    "fieldtype": "Check",
-   "label": "For WOF List"
+   "label": "For Chitrakala Student List"
   },
   {
    "depends_on": "eval:doc.for_student == 0 && doc.for_little_champ == 0",
@@ -88,12 +92,34 @@
    "fieldname": "is_submitted",
    "fieldtype": "Check",
    "label": "Is Submitted"
+  },
+  {
+   "fetch_from": "customer.customer_name",
+   "fieldname": "name1",
+   "fieldtype": "Data",
+   "label": "Name"
+  },
+  {
+   "fieldname": "section_break_xswz",
+   "fieldtype": "Section Break",
+   "hidden": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "for_wof_olympiad",
+   "fieldtype": "Check",
+   "label": "For WOF Olympiad"
+  },
+  {
+   "fieldname": "table_cbbz",
+   "fieldtype": "Table",
+   "options": "WOF Olympiad"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-25 11:09:31.351044",
+ "modified": "2026-09-01 12:05:21.097637",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Bulk Student List",
