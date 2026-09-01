@@ -3,7 +3,7 @@
  "allow_bulk_edit": 1,
  "allow_rename": 1,
  "autoname": "{customer_name}.-.####.",
- "creation": "2026-08-25 16:07:20.022942",
+ "creation": "2026-08-25 16:45:13.042049",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -25,9 +25,7 @@
   "entries",
   "section_break_aals",
   "no_of_students",
-  "amount_payable",
-  "column_break_dwic",
-  "registration_amount"
+  "column_break_dwic"
  ],
  "fields": [
   {
@@ -57,6 +55,7 @@
    "fieldtype": "Column Break"
   },
   {
+   "fetch_from": "coordinator_name.new_address",
    "fieldname": "address",
    "fieldtype": "Data",
    "label": "Address"
@@ -104,16 +103,6 @@
    "label": "No of Students"
   },
   {
-   "fieldname": "registration_amount",
-   "fieldtype": "Currency",
-   "label": "Registration Amount"
-  },
-  {
-   "fieldname": "amount_payable",
-   "fieldtype": "Currency",
-   "label": "Amount Payable"
-  },
-  {
    "fieldname": "column_break_dwic",
    "fieldtype": "Column Break"
   },
@@ -143,7 +132,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-25 16:42:51.623595",
+ "modified": "2026-09-01 13:40:30.451014",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Teacher Entry",
