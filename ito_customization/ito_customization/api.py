@@ -2434,8 +2434,8 @@ def save_wof_student_list():
 			frappe.cache().delete_value(f"wof_student_draft_{customer_name}_{academic_year}")
 			frappe.cache().delete_value(f"wof_student_draft_{customer_name}_{raw_year}")
 			frappe.cache().delete_value(f"wof_student_draft_{customer_name}_AY-2026/27")
-		except Exception:
-			pass
+		except Exception as e:
+			frappe.log_error(frappe.get_traceback(), "WOF Student List Cache Clear Error")
 
 		# Log comment on customer
 		try:
@@ -2447,8 +2447,8 @@ def save_wof_student_list():
 				"Info",
 				f"WOF Student List submitted: {total_students} students across {total_batches} batches with {total_entries} total competition entries ({academic_year})."
 			)
-		except Exception:
-			pass
+		except Exception as e:
+			frappe.log_error(frappe.get_traceback(), "WOF Student List Add Comment Error")
 
 		return {
 			"success": True,
@@ -2693,6 +2693,402 @@ def get_wof_student_draft(academic_year="AY-2026/27"):
 	except Exception as e:
 		frappe.log_error(frappe.get_traceback(), "Get WOF Student Draft Error")
 		return {"success": False, "message": str(e), "data": None}
+
+
+# ==================== WOF OLYMPIAD STUDENT LIST APIS ====================
+
+@frappe.whitelist(allow_guest=True)
+def save_wof_olympiad_student_list():
+	original_flag = frappe.flags.ignore_permissions
+	try:
+		frappe.flags.ignore_permissions = True
+		data = frappe.request.get_json() or {}
+		payload = json.loads(data.get("data", "{}")) if isinstance(data.get("data"), str) else data.get("data", {})
+
+		school_info = payload.get("school_info", {})
+		rosters = payload.get("rosters", {})
+		totals = payload.get("totals", {})
+
+		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+		if not customer_name:
+			school_code = school_info.get("school_code")
+			if school_code:
+				customer_name = frappe.db.get_value("Customer", {"custom_ito_school_code": school_code})
+		if not customer_name:
+			customer_name = frappe.db.get_value("Customer", {"custom_is_wof": 1}, "name")
+
+		if not customer_name:
+			return {"success": False, "message": "Customer not found"}
+
+		raw_year = school_info.get("academic_year", "")
+		if not raw_year:
+			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or "AY-2026/27"
+
+		if raw_year.startswith("AY-"):
+			academic_year = raw_year
+		else:
+			parts = raw_year.replace("-", "/").split("/")
+			if len(parts) == 2:
+				academic_year = f"AY-{parts[0]}/{parts[1]}"
+			else:
+				academic_year = f"AY-{raw_year}"
+
+		if not frappe.db.exists("School Academic Year", academic_year):
+			existing = frappe.db.get_value("School Academic Year", {}, "name", order_by="creation desc")
+			if existing:
+				academic_year = existing
+
+		# Find existing unsubmitted Bulk Student List for this customer or create new for WOF Olympiad
+		bsl_name = frappe.db.get_value("Bulk Student List", {
+			"customer": customer_name,
+			"for_wof_olympiad": 1,
+			"is_submitted": 0
+		}, "name", order_by="creation desc")
+
+		if bsl_name:
+			bsl = frappe.get_doc("Bulk Student List", bsl_name)
+			bsl.table_cbbz = []
+		else:
+			bsl = frappe.new_doc("Bulk Student List")
+			bsl.customer = customer_name
+
+		bsl.academic_year = academic_year
+		bsl.for_wof_olympiad = 1
+		bsl.for_wof_list = 0
+		bsl.for_student = 0
+		bsl.for_little_champ = 0
+		bsl.is_submitted = 1
+
+		# Fetch dynamic subjects configured for this customer
+		dynamic_subjects = get_subjects_for_year(academic_year, 0, customer_name=customer_name)
+
+		# Build lookup map of subject abbr/code -> WOF Olympiad column field
+		subject_field_map = {}
+		for sub in dynamic_subjects:
+			s_abbr = (sub.get("abbr") or sub.get("shortName") or sub.get("code") or "").strip().upper()
+			s_code = (sub.get("code") or "").strip().lower()
+			s_name = (sub.get("name") or "").strip()
+
+			field_name = map_abbr_to_wof_list_field(s_abbr) or map_abbr_to_wof_list_field(s_code)
+			if field_name:
+				subject_field_map[s_abbr] = field_name
+				subject_field_map[s_code] = field_name
+				subject_field_map[s_name.lower()] = field_name
+				subject_field_map[s_name.upper()] = field_name
+
+		# Append students to table_cbbz (WOF Olympiad child table)
+		for batch_key, batch_data in rosters.items():
+			students = []
+			if isinstance(batch_data, dict):
+				students = batch_data.get("students", [])
+			elif isinstance(batch_data, list):
+				students = batch_data
+
+			for st in students:
+				student_name = (st.get("student_name") or st.get("name") or "").strip().upper()
+				subs = st.get("subjects", {})
+				if isinstance(subs, str):
+					try:
+						subs = json.loads(subs)
+					except Exception:
+						subs = {}
+
+				if not student_name:
+					continue
+
+				row_data = {
+					"name_of_student": student_name,
+					"iso": 0,
+					"imo": 0,
+					"ieo": 0,
+					"iabo": 0,
+					"isbo": 0,
+					"wgko": 0,
+					"waio": 0,
+					"wflo": 0,
+					"wiho": 0,
+				}
+
+				if isinstance(subs, dict):
+					for sub_key, sub_val in subs.items():
+						is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
+						if not is_checked:
+							continue
+						
+						k_str = str(sub_key).strip()
+						field_name = (
+							subject_field_map.get(k_str) or
+							subject_field_map.get(k_str.upper()) or
+							subject_field_map.get(k_str.lower()) or
+							map_abbr_to_wof_list_field(k_str)
+						)
+						if field_name and field_name in row_data:
+							row_data[field_name] = 1
+
+				bsl.append("table_cbbz", row_data)
+
+		if bsl.is_new():
+			bsl.insert(ignore_permissions=True)
+		else:
+			bsl.save(ignore_permissions=True)
+
+		# Clear draft cache on final submission
+		try:
+			frappe.cache().delete_value(f"wof_olympiad_student_draft_{customer_name}_{academic_year}")
+			frappe.cache().delete_value(f"wof_olympiad_student_draft_{customer_name}_{raw_year}")
+		except Exception as e:
+			frappe.log_error(frappe.get_traceback(), "WOF Olympiad Cache Clear Error")
+
+		# Log comment on customer
+		try:
+			customer_doc = frappe.get_doc("Customer", customer_name)
+			total_students = totals.get("total_students", len(bsl.table_cbbz))
+			total_entries = totals.get("total_entries", 0)
+			total_batches = totals.get("total_batches", len(rosters))
+			customer_doc.add_comment(
+				"Info",
+				f"WOF Olympiad Student List submitted: {total_students} students across {total_batches} batches with {total_entries} total competition entries ({academic_year})."
+			)
+		except Exception as e:
+			frappe.log_error(frappe.get_traceback(), "WOF Olympiad Add Comment Error")
+
+		return {
+			"success": True,
+			"name": bsl.name,
+			"message": "WOF Olympiad Student list submitted and saved to Bulk Student List successfully",
+			"totals": totals
+		}
+
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Save WOF Olympiad Student List Error")
+		return {"success": False, "message": str(e)}
+	finally:
+		frappe.flags.ignore_permissions = original_flag
+
+
+@frappe.whitelist(allow_guest=True)
+def save_wof_olympiad_student_draft():
+	original_flag = frappe.flags.ignore_permissions
+	try:
+		frappe.flags.ignore_permissions = True
+		data = frappe.request.get_json() or {}
+		payload = json.loads(data.get("data", "{}")) if isinstance(data.get("data"), str) else data.get("data", {})
+
+		school_info = payload.get("school_info", {})
+		rosters = payload.get("rosters", {})
+		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+		if not customer_name:
+			school_code = school_info.get("school_code")
+			if school_code:
+				customer_name = frappe.db.get_value("Customer", {"custom_ito_school_code": school_code})
+		if not customer_name:
+			customer_name = frappe.db.get_value("Customer", {"custom_is_wof": 1}, "name")
+
+		if not customer_name:
+			return {"success": False, "message": "Customer not found"}
+
+		raw_year = school_info.get("academic_year", "")
+		if not raw_year:
+			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or "AY-2026/27"
+
+		if raw_year.startswith("AY-"):
+			academic_year = raw_year
+		else:
+			parts = raw_year.replace("-", "/").split("/")
+			if len(parts) == 2:
+				academic_year = f"AY-{parts[0]}/{parts[1]}"
+			else:
+				academic_year = f"AY-{raw_year}"
+
+		if not frappe.db.exists("School Academic Year", academic_year):
+			existing = frappe.db.get_value("School Academic Year", {}, "name", order_by="creation desc")
+			if existing:
+				academic_year = existing
+
+		# Save or update unsubmitted draft in Bulk Student List doctype for WOF Olympiad
+		bsl_name = frappe.db.get_value("Bulk Student List", {
+			"customer": customer_name,
+			"for_wof_olympiad": 1,
+			"is_submitted": 0
+		}, "name", order_by="creation desc")
+
+		if bsl_name:
+			bsl = frappe.get_doc("Bulk Student List", bsl_name)
+			bsl.table_cbbz = []
+		else:
+			bsl = frappe.new_doc("Bulk Student List")
+			bsl.customer = customer_name
+
+		bsl.academic_year = academic_year
+		bsl.for_wof_olympiad = 1
+		bsl.for_wof_list = 0
+		bsl.for_student = 0
+		bsl.for_little_champ = 0
+		bsl.is_submitted = 0
+
+		# Fetch dynamic subjects configured for this customer
+		dynamic_subjects = get_subjects_for_year(academic_year, 0, customer_name=customer_name)
+
+		# Build lookup map of subject abbr/code -> WOF Olympiad column field
+		subject_field_map = {}
+		for sub in dynamic_subjects:
+			s_abbr = (sub.get("abbr") or sub.get("shortName") or sub.get("code") or "").strip().upper()
+			s_code = (sub.get("code") or "").strip().lower()
+			s_name = (sub.get("name") or "").strip()
+
+			field_name = map_abbr_to_wof_list_field(s_abbr) or map_abbr_to_wof_list_field(s_code)
+			if field_name:
+				subject_field_map[s_abbr] = field_name
+				subject_field_map[s_code] = field_name
+				subject_field_map[s_name.lower()] = field_name
+				subject_field_map[s_name.upper()] = field_name
+
+		# Append students to table_cbbz (WOF Olympiad child table)
+		for batch_key, batch_data in rosters.items():
+			students = []
+			if isinstance(batch_data, dict):
+				students = batch_data.get("students", [])
+			elif isinstance(batch_data, list):
+				students = batch_data
+
+			for st in students:
+				student_name = (st.get("student_name") or st.get("name") or "").strip().upper()
+				subs = st.get("subjects", {})
+				if isinstance(subs, str):
+					try:
+						subs = json.loads(subs)
+					except Exception:
+						subs = {}
+
+				if not student_name:
+					continue
+
+				row_data = {
+					"name_of_student": student_name,
+					"iso": 0,
+					"imo": 0,
+					"ieo": 0,
+					"iabo": 0,
+					"isbo": 0,
+					"wgko": 0,
+					"waio": 0,
+					"wflo": 0,
+					"wiho": 0,
+				}
+
+				if isinstance(subs, dict):
+					for sub_key, sub_val in subs.items():
+						is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
+						if not is_checked:
+							continue
+						
+						k_str = str(sub_key).strip()
+						field_name = (
+							subject_field_map.get(k_str) or
+							subject_field_map.get(k_str.upper()) or
+							subject_field_map.get(k_str.lower()) or
+							map_abbr_to_wof_list_field(k_str)
+						)
+						if field_name and field_name in row_data:
+							row_data[field_name] = 1
+
+				bsl.append("table_cbbz", row_data)
+
+		if bsl.is_new():
+			bsl.insert(ignore_permissions=True)
+		else:
+			bsl.save(ignore_permissions=True)
+
+		# Cache draft in Redis
+		try:
+			cache_key = f"wof_olympiad_student_draft_{customer_name}_{academic_year}"
+			frappe.cache().set_value(cache_key, json.dumps(payload))
+		except Exception as e:
+			frappe.log_error(frappe.get_traceback(), "Save WOF Olympiad Draft Cache Error")
+
+		return {
+			"success": True,
+			"name": bsl.name,
+			"message": "WOF Olympiad Student list draft saved to Bulk Student List successfully"
+		}
+
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Save WOF Olympiad Student Draft Error")
+		return {"success": False, "message": str(e)}
+	finally:
+		frappe.flags.ignore_permissions = original_flag
+
+
+@frappe.whitelist(allow_guest=True)
+def get_wof_olympiad_student_draft(academic_year="AY-2026/27"):
+	try:
+		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+		if not customer_name:
+			customer_name = frappe.db.get_value("Customer", {"custom_is_wof": 1}, "name")
+
+		if not customer_name:
+			return {"success": False, "message": "Customer not found", "data": None}
+
+		saved_data = frappe.cache().get_value(f"wof_olympiad_student_draft_{customer_name}_{academic_year}")
+		if not saved_data:
+			saved_data = frappe.cache().get_value(f"wof_olympiad_student_draft_{customer_name}_AY-2026/27")
+
+		if saved_data:
+			if isinstance(saved_data, str):
+				try:
+					saved_data = json.loads(saved_data)
+				except Exception:
+					pass
+			return {"success": True, "data": saved_data}
+
+		# Fallback to database query for saved Bulk Student List with for_wof_olympiad=1
+		bsl_name = frappe.db.get_value("Bulk Student List", {
+			"customer": customer_name,
+			"for_wof_olympiad": 1,
+			"is_submitted": 0
+		}, "name", order_by="creation desc")
+
+		if bsl_name:
+			bsl = frappe.get_doc("Bulk Student List", bsl_name)
+			rosters = {}
+			students_list = []
+			for row in bsl.table_cbbz:
+				students_list.append({
+					"name": row.name_of_student,
+					"subjects": {
+						"iso": row.iso,
+						"imo": row.imo,
+						"ieo": row.ieo,
+						"iabo": row.iabo,
+						"isbo": row.isbo,
+						"wgko": row.wgko,
+						"waio": row.waio,
+						"wflo": row.wflo,
+						"wiho": row.wiho,
+					}
+				})
+			rosters["1st_A"] = {
+				"class_grade": "1st",
+				"section": "A",
+				"offline_exam": 1,
+				"online_exam": 0,
+				"students": students_list
+			}
+			return {
+				"success": True,
+				"data": {
+					"school_info": {
+						"academic_year": bsl.academic_year
+					},
+					"rosters": rosters
+				}
+			}
+
+		return {"success": True, "data": None}
+
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Get WOF Olympiad Student Draft Error")
+		return {"success": False, "message": str(e)}
 
 
 # ==================== WOF TEACHER ENTRY APIS ====================

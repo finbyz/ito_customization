@@ -101,8 +101,7 @@
   },
   {
    "fieldname": "section_break_xswz",
-   "fieldtype": "Section Break",
-   "hidden": 1
+   "fieldtype": "Section Break"
   },
   {
    "default": "0",
@@ -119,7 +118,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-01 12:05:21.097637",
+ "modified": "2026-09-01 15:20:30.006691",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Bulk Student List",
