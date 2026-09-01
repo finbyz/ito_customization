@@ -10,6 +10,10 @@ import base64
 from frappe.utils import cint, flt
 import io
 
+# ==============================================================================
+# SECTION 1: COMMON UTILITIES & HELPERS
+# ==============================================================================
+
 def ensure_subject_exists(subject_name):
 	"""Create a School Subject if it doesn't exist"""
 	if not frappe.db.exists("School Subject", subject_name):
@@ -20,6 +24,10 @@ def ensure_subject_exists(subject_name):
 		except frappe.DuplicateEntryError:
 			pass
 
+
+# ==============================================================================
+# SECTION 2: ITO REGISTRATION FORM APIS
+# ==============================================================================
 
 @frappe.whitelist(allow_guest=True)
 def save_ito_registration(registration_data):
@@ -806,7 +814,9 @@ def get_customer_from_session_user():
 	}
 
 
-# ==================== LITTLE CHAMP ====================
+# ==============================================================================
+# SECTION 3: LITTLE CHAMP REGISTRATION FORM APIS
+# ==============================================================================
 
 @frappe.whitelist(allow_guest=True)
 def save_little_champ_registration(registration_data):
@@ -1063,6 +1073,10 @@ def save_little_champ_step():
 		frappe.log_error(frappe.get_traceback(), "Little Champ Step Save Error")
 		return {"success": False, "message": str(e)}
 
+
+# ==============================================================================
+# SECTION 4: WOF REGISTRATION & ENTRY MATRIX FORM APIS
+# ==============================================================================
 
 @frappe.whitelist(allow_guest=True)
 def save_wof_registration(registration_data):
@@ -1342,7 +1356,9 @@ def save_wof_step():
 		return {"success": False, "message": str(e)}
 
 
-# ==================== DYNAMIC SUBJECT HELPER ====================
+# ==============================================================================
+# SECTION 5: DYNAMIC SUBJECT RESOLUTION & TEMPLATE APIS
+# ==============================================================================
 
 def get_subjects_for_year(academic_year=None, is_little_champ=0, customer_name=None):
 	"""
@@ -2082,6 +2098,10 @@ def debug_subjects():
 	}
 
 
+# ==============================================================================
+# SECTION 6: PARENT CONSENT FORM APIS
+# ==============================================================================
+
 @frappe.whitelist(allow_guest=True)
 def save_parent_consent(data):
 	try:
@@ -2257,8 +2277,6 @@ def map_abbr_to_wof_list_field(abbr):
 def map_subject_to_wof_list_field(sub_code):
 	return map_abbr_to_wof_list_field(sub_code)
 
-
-# ==================== WOF STUDENT LIST APIS ====================
 
 @frappe.whitelist(allow_guest=True)
 def save_wof_student_list():
@@ -2694,6 +2712,10 @@ HONORARIUM_SLABS_LIST = [
 	{"label": "5,000 & Above", "amount": 30000, "recognition": "₹30,000 + Certificate"},
 ]
 
+
+# ==============================================================================
+# SECTION 8: WOF ART TEACHER & COORDINATOR ENTRY FORM APIS
+# ==============================================================================
 
 def ensure_state_exists(state_name):
 	if not state_name:
@@ -3340,6 +3362,10 @@ def get_registration_fee(form_name="Little Champ Registration"):
 			"custom_retention": 0.0
 		}
 
+
+# ==============================================================================
+# SECTION 9: WOF SCHOOL REGISTRATION FORM APIS
+# ==============================================================================
 
 @frappe.whitelist(allow_guest=True)
 def save_wof_school_registration(registration_data=None):
