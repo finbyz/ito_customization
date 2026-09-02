@@ -662,6 +662,7 @@ def get_customer_from_session_user():
 				"yearly_exam_date": yearly_exam.name,
 				"academic_year": yearly_exam.academic_year,
 				"subject": row.subject,
+				"for_chitrakala": getattr(row, "for_chitrakala", 0),
 				"target_dates": [row.tg_date_1, row.tg_date_2, row.tg_date_3],
 				"rows": []
 			}
@@ -705,6 +706,7 @@ def get_customer_from_session_user():
 					"yearly_exam_date": yearly_exam.name,
 					"academic_year": yearly_exam.academic_year,
 					"subject": row.subject,
+					"for_chitrakala": getattr(row, "for_chitrakala", 0),
 					"target_dates": [row.tg_date_1, row.tg_date_2, row.tg_date_3],
 					"rows": []
 				})
@@ -1360,11 +1362,13 @@ def save_wof_step():
 # SECTION 5: DYNAMIC SUBJECT RESOLUTION & TEMPLATE APIS
 # ==============================================================================
 
-def get_subjects_for_year(academic_year=None, is_little_champ=0, customer_name=None):
+def get_subjects_for_year(academic_year=None, is_little_champ=0, customer_name=None, for_chitrakala=0):
 	"""
 	Fetch subjects from Yearly Exam Date.
 	Primary source: If customer has a linked Exams Summary -> exam_detail (Yearly Exam Date).
 	Fallback: Query Yearly Exam Date by academic year and is_little_champ flag.
+	Filter by for_chitrakala flag: if for_chitrakala=1, returns only subjects marked for Chitrakala;
+	if for_chitrakala=0, excludes subjects marked for Chitrakala.
 	"""
 	yed_name = None
 
@@ -1425,11 +1429,26 @@ def get_subjects_for_year(academic_year=None, is_little_champ=0, customer_name=N
 		)
 		return []
 
-	# Fetch ALL subjects from this document's child table
+	# Check if child doctype has for_chitrakala field
+	has_chitrakala_col = frappe.db.has_column("Yearly Exam Date CT", "for_chitrakala")
+
+	target_fields = ["subject", "school_subject", "idx"]
+	if has_chitrakala_col:
+		target_fields.append("for_chitrakala")
+
+	# Fetch subjects from this document's child table
 	target_dates = frappe.get_all("Yearly Exam Date CT",
 		filters={"parent": yed_name},
-		fields=["subject", "school_subject", "idx"],
+		fields=target_fields,
 		order_by="idx asc")
+
+	# Filter by for_chitrakala flag if column exists
+	for_chitrakala = int(for_chitrakala or 0)
+	if has_chitrakala_col:
+		if for_chitrakala == 1:
+			target_dates = [r for r in target_dates if getattr(r, "for_chitrakala", 0) == 1]
+		else:
+			target_dates = [r for r in target_dates if getattr(r, "for_chitrakala", 0) != 1]
 
 	# Batch fetch 'abbr' from School Subject doctype for all target subjects
 	subject_names = list(set(r.subject for r in target_dates if r.subject))
@@ -1460,7 +1479,8 @@ def get_subjects_for_year(academic_year=None, is_little_champ=0, customer_name=N
 			"name": row.subject,
 			"shortName": short_name.upper(),
 			"title": row.subject,
-			"isDefaultFree": "Logical Reasoning" in row.subject or "NLRO" in short_name.upper()
+			"isDefaultFree": "Logical Reasoning" in row.subject or "NLRO" in short_name.upper(),
+			"for_chitrakala": getattr(row, "for_chitrakala", 0)
 		})
 
 	return subjects
@@ -1490,7 +1510,7 @@ def derive_short_name(subject_name):
 # ==================== 1. FETCH SUBJECTS API (Regular) ====================
 
 @frappe.whitelist(allow_guest=True)
-def get_bulk_subjects_for_year(academic_year=None, is_little_champ=0):
+def get_bulk_subjects_for_year(academic_year=None, is_little_champ=0, for_chitrakala=0):
 	try:
 		customer_name = frappe.db.get_value("Portal User",
 			{"user": frappe.session.user}, "parent")
@@ -1502,7 +1522,12 @@ def get_bulk_subjects_for_year(academic_year=None, is_little_champ=0):
 			else:
 				academic_year = "AY-2026/27"
 
-		subjects = get_subjects_for_year(academic_year, is_little_champ, customer_name=customer_name)
+		subjects = get_subjects_for_year(
+			academic_year,
+			is_little_champ=is_little_champ,
+			customer_name=customer_name,
+			for_chitrakala=for_chitrakala
+		)
 
 		return {
 			"success": True,
@@ -1515,7 +1540,40 @@ def get_bulk_subjects_for_year(academic_year=None, is_little_champ=0):
 		return {"success": False, "message": str(e), "subjects": []}
 
 
-# ==================== 2. FETCH SUBJECTS API (Little Champ) ====================
+# ==================== 2. FETCH SUBJECTS API (Chitrakala) ====================
+
+@frappe.whitelist(allow_guest=True)
+def get_chitrakala_subjects_for_year(academic_year=None):
+	try:
+		customer_name = frappe.db.get_value("Portal User",
+			{"user": frappe.session.user}, "parent")
+
+		if not academic_year:
+			if customer_name:
+				academic_year = frappe.db.get_value("Customer", customer_name,
+					"custom_current_academic_year") or "AY-2026/27"
+			else:
+				academic_year = "AY-2026/27"
+
+		subjects = get_subjects_for_year(
+			academic_year,
+			is_little_champ=0,
+			customer_name=customer_name,
+			for_chitrakala=1
+		)
+
+		return {
+			"success": True,
+			"subjects": subjects,
+			"academic_year": academic_year
+		}
+
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Get Chitrakala Subjects Error")
+		return {"success": False, "message": str(e), "subjects": []}
+
+
+# ==================== 3. FETCH SUBJECTS API (Little Champ) ====================
 
 @frappe.whitelist(allow_guest=True)
 def get_little_champ_subjects_for_year(academic_year=None):
@@ -1530,7 +1588,7 @@ def get_little_champ_subjects_for_year(academic_year=None):
 			else:
 				academic_year = "AY-2026/27"
 
-		subjects = get_subjects_for_year(academic_year, is_little_champ=1, customer_name=customer_name)
+		subjects = get_subjects_for_year(academic_year, is_little_champ=1, customer_name=customer_name, for_chitrakala=0)
 
 		return {
 			"success": True,
@@ -2340,7 +2398,7 @@ def save_wof_student_list():
 		bsl.is_submitted = 1
 
 		# Fetch dynamic subjects configured for this customer
-		dynamic_subjects = get_subjects_for_year(academic_year, 0, customer_name=customer_name)
+		dynamic_subjects = get_subjects_for_year(academic_year, 0, customer_name=customer_name, for_chitrakala=1)
 
 		# Build lookup map of subject abbr/code -> WOF List column field
 		subject_field_map = {}
@@ -2524,7 +2582,7 @@ def save_wof_student_draft():
 		bsl.is_submitted = 0
 
 		# Fetch dynamic subjects configured for this customer
-		dynamic_subjects = get_subjects_for_year(academic_year, 0, customer_name=customer_name)
+		dynamic_subjects = get_subjects_for_year(academic_year, 0, customer_name=customer_name, for_chitrakala=1)
 
 		# Build lookup map of subject abbr/code -> WOF List column field
 		subject_field_map = {}
