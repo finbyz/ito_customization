@@ -2283,7 +2283,7 @@ def map_abbr_to_wof_list_field(abbr):
 
 	# Standard WOF List fields
 	abbr_mapping = {
-		# Chitrakala subjects
+		# Chitrakala subjects (full names & UI labels)
 		"COLOURING": "colouring",
 		"COLORING": "colouring",
 		"DRAWING": "colouring",
@@ -2294,6 +2294,27 @@ def map_abbr_to_wof_list_field(abbr):
 		"GREETING": "greeting_card",
 		"GREETING_CARD": "greeting_card",
 		"CARD": "greeting_card",
+		"COLOURING_COMPETITION": "colouring",
+		"COLORING_COMPETITION": "colouring",
+		"DRAWING_COMPETITION": "colouring",
+		"HANDWRITING_COMPETITION": "handwriting",
+		"SKETCHING_COMPETITION": "sketching",
+		"CARTOON_MAKING": "cartoon",
+		"CARTOON_COMPETITION": "cartoon",
+		"CARICATURE_(CARTOON)": "caricature",
+		"CARICATURE_CARTOON": "caricature",
+		"CARICATURE_COMPETITION": "caricature",
+		"GREETING_CARD_MAKING": "greeting_card",
+		"GREETING_CARD_COMPETITION": "greeting_card",
+		# Chitrakala subjects (abbreviated codes from School Subject)
+		"HWC": "handwriting",
+		"CLR": "colouring",
+		"COL": "colouring",
+		"SKT": "sketching",
+		"CTN": "cartoon",
+		"CRC": "caricature",
+		"GC": "greeting_card",
+		"GRD": "greeting_card",
 		# Olympiad subjects
 		"ISO": "iso",
 		"IMO": "imo",
@@ -2465,6 +2486,7 @@ def save_wof_student_list():
 				}
 
 				if isinstance(subs, dict):
+					frappe.log_error(f"DEBUG: Student={student_name}, subs={subs}, subject_field_map_keys={list(subject_field_map.keys())}", "WOF Student List Debug")
 					for sub_key, sub_val in subs.items():
 						is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
 						if not is_checked:
@@ -2477,9 +2499,11 @@ def save_wof_student_list():
 							subject_field_map.get(k_str.lower()) or
 							map_abbr_to_wof_list_field(k_str)
 						)
+						frappe.log_error(f"DEBUG: k_str={k_str}, field_name={field_name}", "WOF Student List Debug")
 						if field_name:
 							row_data[field_name] = 1
 
+				frappe.log_error(f"DEBUG: Final row_data={row_data}", "WOF Student List Debug")
 				bsl.append("table_xxdu", row_data)
 
 		if bsl.is_new():

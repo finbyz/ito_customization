@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "allow_bulk_edit": 1,
  "allow_rename": 1,
  "autoname": "naming_series:",
  "creation": "2026-06-01 18:29:21.023936",
@@ -84,7 +85,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-06-25 16:38:00.366920",
+ "modified": "2026-09-02 17:03:32.046683",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Yearly Exam Date",
