@@ -127,7 +127,7 @@ def _find_consent_fee_invoice(customer, company):
     return None
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def initiate_parent_consent_payment(data):
     payload = frappe.parse_json(data) if isinstance(data, str) else data
     token = payload.get("token")
@@ -182,7 +182,6 @@ def initiate_parent_consent_payment(data):
         invoice_name = invoice.name
         pay_amount = flt(invoice.outstanding_amount)
 
-    # Guest (allow_guest=True) endpoint - create_payment_for_sales_invoice enforces
     # a real Sales Invoice read-permission check that no guest/session has. The
     # invoice above was just created for the token-resolved customer, so it's
     # safe to bypass permissions only for this one call.
@@ -204,7 +203,7 @@ def initiate_parent_consent_payment(data):
     return checkout_context
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def confirm_parent_consent_payment(
     integration_request, razorpay_payment_id, razorpay_order_id, razorpay_signature
 ):
@@ -227,7 +226,7 @@ def confirm_parent_consent_payment(
     }
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_parent_consent_payment_status(token):
     customer, _school_name, _is_little_champ = _resolve_customer_by_token(token)
     company = get_settings_for_page(PAGE).company

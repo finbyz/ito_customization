@@ -8,12 +8,37 @@ from urllib.parse import parse_qs, urlparse
 from frappe.utils import cint, today,add_days,flt,getdate
 from multi_company_razorpay.api import (
     get_checkout_context,
+    get_settings_for_company,
     get_settings_for_page,
 )
 from frappe.desk.form import assign_to
 from frappe.model.base_document import get_controller
 
 RAZORPAY_PAGE = 'Little Champ Book Order'
+
+
+def _lc_get_razorpay_settings():
+    """Resolve Razorpay settings for Little Champ Book Order with fallback to Book Order / Olympiad Books."""
+    try:
+        settings = get_settings_for_page(RAZORPAY_PAGE)
+        if settings and getattr(settings, "enabled", 0):
+            return settings
+    except Exception:
+        pass
+
+    try:
+        settings = get_settings_for_page("Little Champ Book Order")
+        if settings and getattr(settings, "enabled", 0):
+            return settings
+    except Exception:
+        pass
+
+    try:
+        return get_settings_for_company("Olympiad Books")
+    except Exception:
+        pass
+
+    return get_settings_for_page("Little Champ Book Order")
 def ensure_subject_exists(subject_name):
     """Create a School Subject if it doesn't exist"""
     if not frappe.db.exists("School Subject", subject_name):
@@ -26,7 +51,7 @@ def ensure_subject_exists(subject_name):
 
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_little_champ_book_order(order_data):
     original_flag = frappe.flags.ignore_permissions
 
@@ -698,7 +723,7 @@ def create_or_update_olympiad_coordinator(
     return teacher.name
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_books_order_subjects():
 
     if frappe.session.user == "Guest":
@@ -875,7 +900,7 @@ def create_or_update_books_selection(
 
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_customer_from_session_user():
 
     if frappe.session.user == "Guest":
@@ -1512,7 +1537,7 @@ def create_quotation_from_books_order(order_data):
     
     
     
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def create_sales_order_from_books_order(order_data, customer=None):
     try:
         data = (
@@ -1552,7 +1577,7 @@ def create_sales_order_from_books_order(order_data, customer=None):
 
         delivery_date = add_days(today(), 7)
 
-        payment_company = get_settings_for_page(RAZORPAY_PAGE).company
+        payment_company = _lc_get_razorpay_settings().company
 
         delivery_warehouse = _get_delivery_warehouse(payment_company)
 
@@ -1699,7 +1724,7 @@ def create_sales_order_from_books_order(order_data, customer=None):
             "alert": True
         }
         
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def initiate_little_champ_books_order_payment(sales_order, customer=None, trans_item_json=None):
     """Initiate Razorpay payment WITHOUT submitting the Sales Order or creating
     a Sales Invoice.  Accounting documents (SO submit → SI → Payment Entry) are
@@ -1741,7 +1766,7 @@ def initiate_little_champ_books_order_payment(sales_order, customer=None, trans_
         # ------------------------------------------------------------
         # Update draft Sales Order items to match frontend (DON'T submit)
         # ------------------------------------------------------------
-        payment_company = get_settings_for_page(RAZORPAY_PAGE).company
+        payment_company = _lc_get_razorpay_settings().company
         delivery_warehouse = _get_delivery_warehouse(payment_company)
         delivery_date = add_days(today(), 7)
 
@@ -1800,7 +1825,7 @@ def initiate_little_champ_books_order_payment(sales_order, customer=None, trans_
         # ------------------------------------------------------------
         # Create Razorpay order directly (NO SO submit, NO SI creation)
         # ------------------------------------------------------------
-        settings = get_settings_for_page(RAZORPAY_PAGE)
+        settings = _lc_get_razorpay_settings()
         gateway_account = settings.get_payment_gateway_account()
 
         # Build exactly the kwargs that get_payment_url/create_order expect,
@@ -1863,7 +1888,7 @@ def initiate_little_champ_books_order_payment(sales_order, customer=None, trans_
         }
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def confirm_little_champ_books_order_payment(
     integration_request,
     razorpay_payment_id,
@@ -2442,7 +2467,7 @@ def confirm_little_champ_books_order_payment(
 
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_little_champ_books_order_payment_status(sales_order=None):
     if not sales_order:
         session_customer = frappe.db.get_value('Portal User', {'user': frappe.session.user}, 'parent')

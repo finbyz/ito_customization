@@ -101,7 +101,7 @@ def _find_fee_invoice(customer, company):
     return None
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def initiate_little_champ_registration_payment(customer=None):
     try:
         customer = _get_customer(customer)
@@ -518,7 +518,7 @@ def initiate_little_champ_registration_payment(customer=None):
             )
         )
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def confirm_little_champ_registration_payment(
     integration_request, razorpay_payment_id, razorpay_order_id, razorpay_signature
 ):
@@ -539,7 +539,7 @@ def confirm_little_champ_registration_payment(
     }
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_little_champ_payment_status():
     """Check if the current session customer's Little Champ fee has been paid."""
     session_customer = frappe.db.get_value(

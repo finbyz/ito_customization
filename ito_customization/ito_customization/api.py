@@ -29,7 +29,7 @@ def ensure_subject_exists(subject_name):
 # SECTION 2: ITO REGISTRATION FORM APIS
 # ==============================================================================
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_ito_registration(registration_data):
 	try:
 		data = json.loads(registration_data) if isinstance(registration_data, str) else registration_data
@@ -115,7 +115,7 @@ def save_ito_registration(registration_data):
 		frappe.log_error(frappe.get_traceback(), "ITO Registration Error")
 		return {"success": False, "message": str(e)}
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_registration_step():
 	if frappe.session.user == "Guest":
 		data = frappe.request.get_json() or {}
@@ -516,7 +516,7 @@ def create_or_update_teachers(coordinators, customer_name):
 	customer.save(ignore_permissions=True)
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_customer_from_session_user():
 	if frappe.session.user == "Guest":
 		return {}
@@ -820,7 +820,7 @@ def get_customer_from_session_user():
 # SECTION 3: LITTLE CHAMP REGISTRATION FORM APIS
 # ==============================================================================
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_little_champ_registration(registration_data):
 	original_ignore_permissions = frappe.flags.ignore_permissions
 	try:
@@ -1080,7 +1080,7 @@ def save_little_champ_step():
 # SECTION 4: WOF REGISTRATION & ENTRY MATRIX FORM APIS
 # ==============================================================================
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_wof_registration(registration_data):
 	original_ignore_permissions = frappe.flags.ignore_permissions
 	try:
@@ -1276,7 +1276,7 @@ def sync_wof_entry_matrix_to_exams_summary(customer, entry_matrix):
 		es_doc.save(ignore_permissions=True)
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_wof_step():
 	data = frappe.request.get_json() or {}
 	step = cint(data.get("step"))
@@ -1509,7 +1509,7 @@ def derive_short_name(subject_name):
 
 # ==================== 1. FETCH SUBJECTS API (Regular) ====================
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_bulk_subjects_for_year(academic_year=None, is_little_champ=0, for_chitrakala=0):
 	try:
 		customer_name = frappe.db.get_value("Portal User",
@@ -1542,7 +1542,7 @@ def get_bulk_subjects_for_year(academic_year=None, is_little_champ=0, for_chitra
 
 # ==================== 2. FETCH SUBJECTS API (Chitrakala) ====================
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_chitrakala_subjects_for_year(academic_year=None):
 	try:
 		customer_name = frappe.db.get_value("Portal User",
@@ -1575,7 +1575,7 @@ def get_chitrakala_subjects_for_year(academic_year=None):
 
 # ==================== 3. FETCH SUBJECTS API (Little Champ) ====================
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_little_champ_subjects_for_year(academic_year=None):
 	try:
 		customer_name = frappe.db.get_value("Portal User",
@@ -1603,7 +1603,7 @@ def get_little_champ_subjects_for_year(academic_year=None):
 
 # ==================== 3. DOWNLOAD TEMPLATE (Regular) ====================
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def download_bulk_student_template():
 	try:
 		data = frappe.request.args or {}
@@ -1661,7 +1661,7 @@ def download_bulk_student_template():
 
 # ==================== 4. DOWNLOAD TEMPLATE (Little Champ) ====================
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def download_little_champ_template():
 	try:
 		data = frappe.request.args or {}
@@ -1718,7 +1718,7 @@ def download_little_champ_template():
 
 # ==================== 5. UPLOAD TEMPLATE (Regular) ====================
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def upload_bulk_student_template():
 	try:
 		data = frappe.request.get_json() or {}
@@ -1829,7 +1829,7 @@ def upload_bulk_student_template():
 
 # ==================== 6. UPLOAD TEMPLATE (Little Champ) ====================
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def upload_little_champ_template():
 	try:
 		data = frappe.request.get_json() or {}
@@ -1940,7 +1940,7 @@ def upload_little_champ_template():
 
 # ==================== 7. SAVE BULK STUDENT LIST (Regular) ====================
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_bulk_student_list():
 	try:
 		data = frappe.request.get_json() or {}
@@ -2029,7 +2029,7 @@ def save_bulk_student_list():
 
 # ==================== 8. SAVE LITTLE CHAMP BULK ====================
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_little_champ_bulk():
 	try:
 		data = frappe.request.get_json() or {}
@@ -2117,50 +2117,12 @@ def save_little_champ_bulk():
 		return {"success": False, "message": str(e)}
 
 
-@frappe.whitelist(allow_guest=True)
-def debug_subjects():
-	"""
-	Debug endpoint to check what's happening with subject fetching.
-	"""
-	import inspect
-	
-	# Get the source of get_subjects_for_year
-	try:
-		source = inspect.getsource(get_subjects_for_year)
-	except:
-		source = "Could not get source"
-	
-	# Check database directly
-	yed = frappe.get_all("Yearly Exam Date",
-		filters={"academic_year": "AY-2026/27"},
-		fields=["name"],
-		limit=1)
-	
-	yed_name = yed[0].name if yed else None
-	
-	children = []
-	if yed_name:
-		children = frappe.get_all("Yearly Exam Date CT",
-			filters={"parent": yed_name},
-			fields=["subject", "school_subject", "idx", "is_little_champ"],
-			order_by="idx")
-	
-	return {
-		"success": True,
-		"yed_found": yed_name,
-		"yed_name": yed_name,
-		"children_count": len(children),
-		"children": children,
-		"function_source_preview": source[:500] if source else "N/A",
-		"has_lc_column": frappe.db.has_column("Yearly Exam Date CT", "is_little_champ")
-	}
-
 
 # ==============================================================================
 # SECTION 6: PARENT CONSENT FORM APIS
 # ==============================================================================
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_parent_consent(data):
 	try:
 		payload = json.loads(data) if isinstance(data, str) else data
@@ -2357,7 +2319,7 @@ def map_subject_to_wof_list_field(sub_code):
 	return map_abbr_to_wof_list_field(sub_code)
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_wof_student_list():
 	original_flag = frappe.flags.ignore_permissions
 	try:
@@ -2546,7 +2508,7 @@ def save_wof_student_list():
 		frappe.flags.ignore_permissions = original_flag
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_wof_student_draft():
 	original_flag = frappe.flags.ignore_permissions
 	try:
@@ -2711,7 +2673,7 @@ def save_wof_student_draft():
 		frappe.flags.ignore_permissions = original_flag
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_wof_student_draft(academic_year="AY-2026/27"):
 	try:
 		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
@@ -2779,7 +2741,7 @@ def get_wof_student_draft(academic_year="AY-2026/27"):
 
 # ==================== WOF OLYMPIAD STUDENT LIST APIS ====================
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_wof_olympiad_student_list():
 	original_flag = frappe.flags.ignore_permissions
 	try:
@@ -2948,7 +2910,7 @@ def save_wof_olympiad_student_list():
 		frappe.flags.ignore_permissions = original_flag
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_wof_olympiad_student_draft():
 	original_flag = frappe.flags.ignore_permissions
 	try:
@@ -3101,7 +3063,7 @@ def save_wof_olympiad_student_draft():
 		frappe.flags.ignore_permissions = original_flag
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_wof_olympiad_student_draft(academic_year="AY-2026/27"):
 	try:
 		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
@@ -3271,7 +3233,7 @@ def create_or_update_teacher_address(teacher_doc, teacher_info, customer_name):
 	return address.name
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_wof_teacher_entry():
 	original_flag = frappe.flags.ignore_permissions
 	try:
@@ -3461,7 +3423,7 @@ def save_wof_teacher_entry():
 		frappe.flags.ignore_permissions = original_flag
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_wof_teacher_draft():
 	original_flag = frappe.flags.ignore_permissions
 	try:
@@ -3624,7 +3586,7 @@ def save_wof_teacher_draft():
 		frappe.flags.ignore_permissions = original_flag
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_wof_teacher_draft(academic_year="AY-2026/27"):
 	try:
 		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
@@ -3743,7 +3705,7 @@ def get_wof_teacher_draft(academic_year="AY-2026/27"):
 
 # ==================== DYNAMIC REGISTRATION FEE API ====================
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_registration_fee(form_name="Little Champ Registration"):
 	"""
 	Fetch dynamic registration fee strictly from Item where custom_is_registration_item=1 and custom_form_name=form_name.
@@ -3845,7 +3807,7 @@ def get_registration_fee(form_name="Little Champ Registration"):
 # SECTION 9: WOF SCHOOL REGISTRATION FORM APIS
 # ==============================================================================
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_wof_school_registration(registration_data=None):
 	original_ignore_permissions = frappe.flags.ignore_permissions
 	try:
@@ -4051,7 +4013,7 @@ def save_wof_exams_summary(customer, exams_data):
 		es_doc.save(ignore_permissions=True)
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_wof_school_registration_step(step=None, data=None):
 	original_flag = frappe.flags.ignore_permissions
 	try:
@@ -4139,7 +4101,7 @@ def save_wof_school_registration_step(step=None, data=None):
 		frappe.flags.ignore_permissions = original_flag
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_wof_school_registration_draft():
 	original_flag = frappe.flags.ignore_permissions
 	try:
@@ -4169,7 +4131,7 @@ def save_wof_school_registration_draft():
 		frappe.flags.ignore_permissions = original_flag
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist(  )
 def get_wof_school_registration_draft(academic_year="AY-2026/27"):
 	try:
 		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")

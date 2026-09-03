@@ -18,7 +18,7 @@ def ensure_subject_exists(subject_name):
 
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_books_order(registration_data):
     try:
         data = (
@@ -531,7 +531,7 @@ def create_or_update_olympiad_coordinator(
     return teacher.name
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_books_order_subjects():
     if frappe.session.user == "Guest":
         return []
@@ -884,7 +884,7 @@ def _get_or_create_books_order_invoice(order_data, customer_name):
     return invoice.name, flt(invoice.outstanding_amount)
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def initiate_books_order_payment(order_data):
     session_customer = frappe.db.get_value(
         "Portal User", {"user": frappe.session.user}, "parent"
@@ -914,7 +914,7 @@ def initiate_books_order_payment(order_data):
     checkout_context["sales_invoice"] = invoice_name
     return checkout_context
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def confirm_books_order_payment(
     integration_request, razorpay_payment_id, razorpay_order_id, razorpay_signature
 ):
@@ -943,7 +943,7 @@ def confirm_books_order_payment(
         frappe.flags.ignore_permissions = original_ignore_permissions
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_books_order_payment_status():
     """Check if the current session customer's books order invoice has been paid."""
     session_customer = frappe.db.get_value(
@@ -992,7 +992,7 @@ def get_books_order_payment_status():
         "payment_entry": payment_entry,
     }
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_school_by_token(token):
     result = frappe.db.get_value(
         'Customer',
@@ -1021,7 +1021,7 @@ def extract_class_number(value):
     match = re.search(r'(\d+)', str(value))
     return int(match.group(1)) if match else None
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_class_options(token, is_little_champ=0):
     """Returns the ordered list of Class names actually configured
     for this school's assigned subjects."""
@@ -1083,7 +1083,7 @@ def get_class_options(token, is_little_champ=0):
     return {'classes': names}
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_dynamic_subjects(school_name, selected_class=None):
     """Returns fully dynamic subject config for the Exams & Books table.
     Branches on the Customer's custom_is_little_champ flag:

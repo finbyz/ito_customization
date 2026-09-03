@@ -18,21 +18,21 @@ RAZORPAY_PAGE = "WOF Book Order"
 
 
 def _wof_get_razorpay_settings():
-    """Resolve Razorpay settings for WOF Book Order with fallback to WOF company/page."""
+    """Resolve Razorpay settings for WOF Book Order with fallback to Olympiad Books company/page."""
     try:
         settings = get_settings_for_page(RAZORPAY_PAGE)
-        if settings and settings.company == "World Olympiad Foundation":
+        if settings and settings.company == "Olympiad Books":
             return settings
     except Exception:
         pass
 
     try:
-        return get_settings_for_company("World Olympiad Foundation")
+        return get_settings_for_company("Olympiad Books")
     except Exception:
         pass
 
     try:
-        return get_settings_for_page("WOF Registration")
+        return get_settings_for_page("WOF Book Order")
     except Exception:
         pass
 
@@ -301,7 +301,7 @@ def _wof_create_or_update_books_selection(customer_name, books_selection, is_sub
     return books_doc.name
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def save_wof_books_order(registration_data):
     """Save/update WOF book order — school info, contacts, coordinator, book selections."""
     try:
@@ -380,9 +380,9 @@ def save_wof_books_order(registration_data):
 # 2. GET WOF BOOK ORDER SUBJECTS
 # ══════════════════════════════════════════════════════════════════════
 
-@frappe.whitelist(allow_guest=True)
-def get_wof_books_order_subjects():
-    """Return practice-material subject configs for the logged-in WOF customer."""
+@frappe.whitelist()
+def get_wof_books_order_subjects(for_chitrakala=0):
+    """Return practice-material subject configs for the logged-in WOF customer filtered by for_chitrakala flag."""
     if frappe.session.user == "Guest":
         return []
 
@@ -403,9 +403,20 @@ def get_wof_books_order_subjects():
     yearly_exam = frappe.get_doc("Yearly Exam Date", es_doc.exam_detail)
     subjects_data = []
 
+    has_chitrakala_col = frappe.db.has_column("Yearly Exam Date CT", "for_chitrakala")
+    for_chitrakala = cint(for_chitrakala or 0)
+
     for row in yearly_exam.target_dates:
         if not row.subject:
             continue
+
+        if has_chitrakala_col:
+            row_for_chitrakala = cint(getattr(row, "for_chitrakala", 0))
+            if for_chitrakala == 1 and row_for_chitrakala != 1:
+                continue
+            elif for_chitrakala == 0 and row_for_chitrakala == 1:
+                continue
+
         if not frappe.db.exists("School Subject", row.subject):
             continue
 
@@ -413,6 +424,7 @@ def get_wof_books_order_subjects():
 
         subjects_data.append({
             "subject": subject_doc.name,
+            "for_chitrakala": getattr(row, "for_chitrakala", 0),
             "practice_workbook_110": [
                 {"class": d.get("class"), "item": d.get("item"), "item_price": d.get("item_price")}
                 for d in subject_doc.practice_workbook_110
@@ -439,7 +451,7 @@ def get_wof_books_order_subjects():
 # 3. CREATE WOF SALES ORDER
 # ══════════════════════════════════════════════════════════════════════
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def create_wof_sales_order(order_data, customer=None):
     """Create or update a draft Sales Order for WOF book items."""
     try:
@@ -546,7 +558,7 @@ def create_wof_sales_order(order_data, customer=None):
 # 4. INITIATE WOF BOOKS ORDER PAYMENT
 # ══════════════════════════════════════════════════════════════════════
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def initiate_wof_books_order_payment(sales_order, customer=None, trans_item_json=None):
     """Initiate Razorpay payment for WOF book order without submitting the SO."""
     session_customer = frappe.db.get_value(
@@ -683,7 +695,7 @@ def initiate_wof_books_order_payment(sales_order, customer=None, trans_item_json
 # 5. CONFIRM WOF BOOKS ORDER PAYMENT
 # ══════════════════════════════════════════════════════════════════════
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def confirm_wof_books_order_payment(
     integration_request,
     razorpay_payment_id,
@@ -987,7 +999,7 @@ def confirm_wof_books_order_payment(
 # 6. GET WOF BOOKS ORDER PAYMENT STATUS
 # ══════════════════════════════════════════════════════════════════════
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_wof_books_order_payment_status(sales_order=None):
     """Check if the WOF book order has been paid."""
     if not sales_order:

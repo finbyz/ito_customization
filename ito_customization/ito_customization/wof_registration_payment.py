@@ -232,7 +232,7 @@ def _find_fee_invoice(customer, company):
     return None
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def initiate_wof_registration_payment(customer=None, entry_matrix=None, currency="INR", total_students=None):
     try:
         customer = _get_customer(customer)
@@ -461,7 +461,7 @@ def initiate_wof_registration_payment(customer=None, entry_matrix=None, currency
         frappe.throw(_("Unable to initiate WOF registration payment. Please try again or contact support."))
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def confirm_wof_registration_fee_payment(
     integration_request, razorpay_payment_id, razorpay_order_id, razorpay_signature
 ):
@@ -486,7 +486,7 @@ def confirm_wof_registration_fee_payment(
         raise
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_wof_registration_fee_payment_status(customer=None):
     try:
         customer = _get_customer(customer)

@@ -16,7 +16,7 @@ def _resolve_registration_by_token(token):
     return frappe.get_doc(REGISTRATION_DOCTYPE, reg_name)
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_book_order_prefill(token):
     reg = _resolve_registration_by_token(token)
     existing = frappe.db.get_value(BOOK_ORDER_DOCTYPE, {"parent_consent_registration": reg.name}, "name")
@@ -41,7 +41,7 @@ def get_book_order_prefill(token):
     }
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def initiate_book_order_payment(token, selections):
     reg = _resolve_registration_by_token(token)
 
@@ -55,7 +55,7 @@ def initiate_book_order_payment(token, selections):
     # — mirror your existing exam-fee initiate function.
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def confirm_book_order_payment(integration_request, razorpay_payment_id, razorpay_order_id, razorpay_signature):
     # --- verify signature, mark Integration Request completed, create
     # Sales Invoice + Payment Entry as your existing confirm function does,

@@ -192,7 +192,7 @@ def _find_registration_fee_invoice(customer, company, fee_item=None):
     return None
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def initiate_registration_fee_payment(customer=None, free_registrations=0, form_name=None, total_students=None):
     try:
         customer = _get_customer(customer)
@@ -671,7 +671,7 @@ def initiate_registration_fee_payment(customer=None, free_registrations=0, form_
             )
         )
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def confirm_registration_fee_payment(
     integration_request, razorpay_payment_id, razorpay_order_id, razorpay_signature
 ):  
@@ -702,7 +702,7 @@ def confirm_registration_fee_payment(
 
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_registration_fee_payment_status(customer=None, form_name=None):
     customer = _get_customer(customer)
     if not form_name and customer:
