@@ -9,19 +9,6 @@
  "field_order": [
   "student_name",
   "parent_name",
-  "class_grade",
-  "section",
-  "offline_exam",
-  "online_exam",
-  "iso",
-  "imo",
-  "ieo",
-  "iabo",
-  "isbo",
-  "wgko",
-  "waio",
-  "wflo",
-  "wiho",
   "colouring",
   "handwriting",
   "sketching",
@@ -43,104 +30,6 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Parent Name"
-  },
-  {
-   "columns": 1,
-   "fieldname": "class_grade",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Class"
-  },
-  {
-   "columns": 1,
-   "fieldname": "section",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Section"
-  },
-  {
-   "default": "0",
-   "fieldname": "offline_exam",
-   "fieldtype": "Check",
-   "label": "Offline Exam"
-  },
-  {
-   "default": "0",
-   "fieldname": "online_exam",
-   "fieldtype": "Check",
-   "label": "Online Exam"
-  },
-  {
-   "columns": 1,
-   "default": "0",
-   "fieldname": "iso",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "label": "ISO"
-  },
-  {
-   "columns": 1,
-   "default": "0",
-   "fieldname": "imo",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "label": "IMO"
-  },
-  {
-   "columns": 1,
-   "default": "0",
-   "fieldname": "ieo",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "label": "IEO"
-  },
-  {
-   "columns": 1,
-   "default": "0",
-   "fieldname": "iabo",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "label": "IABO"
-  },
-  {
-   "columns": 1,
-   "default": "0",
-   "fieldname": "isbo",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "label": "ISBO"
-  },
-  {
-   "columns": 1,
-   "default": "0",
-   "fieldname": "wgko",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "label": "WGKO"
-  },
-  {
-   "columns": 1,
-   "default": "0",
-   "fieldname": "waio",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "label": "WAIO"
-  },
-  {
-   "columns": 1,
-   "default": "0",
-   "fieldname": "wflo",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "label": "WFLO"
-  },
-  {
-   "columns": 1,
-   "default": "0",
-   "fieldname": "wiho",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "label": "WIHO"
   },
   {
    "columns": 1,
@@ -195,7 +84,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-08-26 12:00:00.000000",
+ "modified": "2026-09-04 13:41:06.435091",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "WOF List",
