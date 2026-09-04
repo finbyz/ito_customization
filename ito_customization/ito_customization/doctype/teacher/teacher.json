@@ -2,6 +2,7 @@
  "actions": [],
  "allow_bulk_edit": 1,
  "allow_rename": 1,
+ "autoname": "field:name1",
  "creation": "2026-05-22 16:26:26.078564",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -42,7 +43,8 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Name",
-   "reqd": 1
+   "reqd": 1,
+   "unique": 1
   },
   {
    "fieldname": "date_of_birth",
@@ -85,6 +87,7 @@
    "fieldname": "subject",
    "fieldtype": "Link",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Subject",
    "options": "School Subject",
    "reqd": 1
@@ -137,6 +140,7 @@
    "fieldname": "school_name",
    "fieldtype": "Link",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "School Name",
    "options": "Customer"
   },
@@ -178,10 +182,11 @@
    "link_fieldname": "custom_teacher_ref"
   }
  ],
- "modified": "2026-08-26 12:15:00.000000",
+ "modified": "2026-09-04 16:37:42.525931",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Teacher",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {

@@ -31,6 +31,7 @@
   {
    "fieldname": "coordinator_name",
    "fieldtype": "Link",
+   "in_standard_filter": 1,
    "label": "Coordinator Name",
    "options": "Teacher"
   },
@@ -69,6 +70,7 @@
   {
    "fieldname": "district",
    "fieldtype": "Data",
+   "in_standard_filter": 1,
    "label": "District"
   },
   {
@@ -109,6 +111,7 @@
   {
    "fieldname": "customer",
    "fieldtype": "Link",
+   "in_standard_filter": 1,
    "label": "Customer ",
    "options": "Customer"
   },
@@ -132,7 +135,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-04 14:44:53.610903",
+ "modified": "2026-09-04 16:46:31.277516",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Teacher Entry",

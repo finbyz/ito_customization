@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "allow_bulk_edit": 1,
  "allow_rename": 1,
  "autoname": "naming_series:",
  "creation": "2026-06-01 18:39:17.933392",
@@ -8,6 +9,7 @@
  "field_order": [
   "naming_series",
   "customer",
+  "customer_name",
   "is_little_champ",
   "column_break_whmk",
   "exam_detail",
@@ -25,6 +27,7 @@
    "fieldname": "exam_detail",
    "fieldtype": "Link",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Exam Detail",
    "options": "Yearly Exam Date",
    "reqd": 1
@@ -36,6 +39,7 @@
   {
    "fieldname": "customer",
    "fieldtype": "Link",
+   "in_standard_filter": 1,
    "label": "Customer",
    "options": "Customer"
   },
@@ -54,12 +58,18 @@
    "fieldname": "is_little_champ",
    "fieldtype": "Check",
    "label": "Is Little Champ"
+  },
+  {
+   "fetch_from": "customer.customer_name",
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Customer name"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-06 13:19:44.120308",
+ "modified": "2026-09-04 16:43:41.243741",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Exams Summary",
