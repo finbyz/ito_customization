@@ -44,7 +44,7 @@
    "options": "Student List CT"
   },
   {
-   "depends_on": "eval:doc.for_student == 0 && doc.for_wof_list == 0",
+   "depends_on": "eval:doc.for_student == 0 && doc.for_wof_list == 0 && doc.for_wof_olympiad == 0",
    "fieldname": "section_break_joxq",
    "fieldtype": "Section Break"
   },
@@ -61,7 +61,7 @@
    "options": "Little champ List CT"
   },
   {
-   "depends_on": "eval:doc.for_little_champ == 0 && doc.for_wof_list == 0",
+   "depends_on": "eval:doc.for_little_champ == 0 && doc.for_wof_list == 0 && doc.for_wof_olympiad == 0",
    "fieldname": "section_break_jjer",
    "fieldtype": "Section Break"
   },
@@ -78,7 +78,7 @@
    "label": "For Chitrakala Student List"
   },
   {
-   "depends_on": "eval:doc.for_student == 0 && doc.for_little_champ == 0",
+   "depends_on": "eval:doc.for_student == 0 && doc.for_little_champ == 0 && doc.for_wof_olympiad == 0",
    "fieldname": "section_break_vznu",
    "fieldtype": "Section Break"
   },
@@ -100,6 +100,7 @@
    "label": "Name"
   },
   {
+   "depends_on": "eval:doc.for_student == 0 && doc.for_little_champ == 0 && doc.for_wof_list == 0",
    "fieldname": "section_break_xswz",
    "fieldtype": "Section Break"
   },
@@ -118,7 +119,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-01 15:20:30.006691",
+ "modified": "2026-09-04 13:37:11.702188",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Bulk Student List",
