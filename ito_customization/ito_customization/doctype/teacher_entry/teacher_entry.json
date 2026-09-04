@@ -73,7 +73,7 @@
   },
   {
    "fieldname": "mobile",
-   "fieldtype": "Phone",
+   "fieldtype": "Data",
    "label": "Mobile"
   },
   {
@@ -132,7 +132,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-01 13:40:30.451014",
+ "modified": "2026-09-04 14:44:53.610903",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Teacher Entry",

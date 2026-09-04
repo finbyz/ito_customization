@@ -28,6 +28,7 @@
   {
    "fieldname": "customer",
    "fieldtype": "Link",
+   "in_standard_filter": 1,
    "label": "Customer",
    "options": "Customer"
   },
@@ -119,7 +120,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-04 13:37:11.702188",
+ "modified": "2026-09-04 16:14:14.343230",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Bulk Student List",
