@@ -25,6 +25,57 @@ def ensure_subject_exists(subject_name):
 			pass
 
 
+def resolve_school_subject_name(subject_key):
+	"""
+	Dynamically resolve any raw subject key/slug/code to the canonical School Subject name in ERPNext.
+	1. Direct match in tabSchool Subject
+	2. Match by exact 'abbr' in tabSchool Subject
+	3. Dynamic lookup from database: match abbr in clean_key tokens
+	4. Dynamic substring match between clean_key and clean School Subject name
+	5. Fallback SQL LIKE search
+	6. Auto-create School Subject dynamically if not found
+	"""
+	if not subject_key:
+		return subject_key
+
+	raw_key = str(subject_key).strip()
+
+	# 1. Direct match
+	if frappe.db.exists("School Subject", raw_key):
+		return raw_key
+
+	clean_key = raw_key.lower().replace(" ", "_").strip("_")
+	tokens = set(clean_key.split("_"))
+
+	# 2. Match by exact abbr (case-insensitive)
+	subj_by_abbr = frappe.db.get_value("School Subject", {"abbr": ["like", raw_key]}, "name")
+	if subj_by_abbr:
+		return subj_by_abbr
+
+	# 3. Dynamic lookup against active School Subjects in DB
+	all_subjects = frappe.get_all("School Subject", fields=["name", "abbr"])
+	for s in all_subjects:
+		s_name = (s.get("name") or "").strip()
+		s_abbr = (s.get("abbr") or "").strip().lower()
+
+		# Match abbr in tokens (e.g. 'ido' in ['drawing', 'olympiad', 'ido'])
+		if s_abbr and s_abbr in tokens:
+			return s_name
+
+		clean_s_name = s_name.lower().replace(" ", "_")
+		if clean_s_name and (clean_s_name in clean_key or clean_key in clean_s_name):
+			return s_name
+
+	# 4. Partial SQL match
+	found = frappe.db.get_value("School Subject", {"name": ["like", f"%{raw_key}%"]}, "name")
+	if found:
+		return found
+
+	# 5. Auto-create dynamically if completely new
+	ensure_subject_exists(raw_key)
+	return raw_key
+
+
 # ==============================================================================
 # SECTION 2: ITO REGISTRATION FORM APIS
 # ==============================================================================
@@ -3969,11 +4020,21 @@ def create_or_update_wof_coordinators(coordinators, customer_name):
 def save_wof_exams_summary(customer, exams_data):
 	es_name = frappe.db.get_value("Exams Summary", {"customer": customer})
 	if not es_name:
-		yed_name = frappe.db.get_value("Yearly Exam Date", {"docstatus": 1}, "name", order_by="creation desc")
+		yed_name = (
+			frappe.db.get_value("Yearly Exam Date", {"docstatus": 1}, "name", order_by="creation desc")
+			or frappe.db.get_value("Yearly Exam Date", {}, "name", order_by="creation desc")
+		)
 		es_doc = frappe.new_doc("Exams Summary")
+		es_doc.naming_series = "ES-.#####."
 		es_doc.customer = customer
 		if yed_name:
 			es_doc.exam_detail = yed_name
+		else:
+			# Fallback: create a dummy Yearly Exam Date if none exists
+			yed_doc = frappe.new_doc("Yearly Exam Date")
+			yed_doc.academic_year = "AY-2026/27"
+			yed_doc.insert(ignore_permissions=True)
+			es_doc.exam_detail = yed_doc.name
 		es_doc.insert(ignore_permissions=True)
 		es_name = es_doc.name
 
@@ -3982,12 +4043,13 @@ def save_wof_exams_summary(customer, exams_data):
 		es_doc.exam_summary = []
 
 		for subj_key, subj_val in exams_data.items():
+			resolved_subj = resolve_school_subject_name(subj_key)
 			if isinstance(subj_val, list):
 				for row in subj_val:
 					num_students = cint(row.get("students") or 0)
 					if num_students > 0 or row.get("teacher_name") or row.get("class"):
 						es_doc.append("exam_summary", {
-							"subject": subj_key,
+							"subject": resolved_subj,
 							"class": str(row.get("class") or ""),
 							"teacher_name": row.get("teacher_name") or "",
 							"whatsapp_no": row.get("whatsapp") or "",
@@ -3995,14 +4057,15 @@ def save_wof_exams_summary(customer, exams_data):
 							"slot_date": row.get("slot_date") or ""
 						})
 			elif isinstance(subj_val, dict):
-				subj_name = subj_val.get("name") or subj_key
+				raw_name = subj_val.get("name") or subj_key
+				resolved_subj_dict = resolve_school_subject_name(raw_name)
 				rows_dict = subj_val.get("rows") or {}
 				slot_date = subj_val.get("selected_date") or ""
 				for cls_key, row in rows_dict.items():
 					num_students = cint(row.get("students") or 0)
 					if num_students > 0 or row.get("teacher_name"):
 						es_doc.append("exam_summary", {
-							"subject": subj_name,
+							"subject": resolved_subj_dict,
 							"class": cls_key,
 							"teacher_name": row.get("teacher_name") or "",
 							"whatsapp_no": row.get("whatsapp") or "",
