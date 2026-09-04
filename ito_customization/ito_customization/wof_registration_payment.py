@@ -113,38 +113,55 @@ def _get_razorpay_settings():
 
 
 def _get_or_create_fee_item(company):
-    existing = frappe.db.get_value("Item", {"item_name": FEE_ITEM_NAME}, "name")
+    existing = (
+        frappe.db.get_value("Item", {"custom_is_registration_item": 1, "custom_form_name": WOF_PAGE, "disabled": 0}, "name")
+        or frappe.db.get_value("Item", {"name": "ITO-WOF Registration Fee", "disabled": 0}, "name")
+        or frappe.db.get_value("Item", {"item_name": ["like", "%WOF Registration Fee%"], "disabled": 0}, "name")
+    )
     if existing:
         item = frappe.get_doc("Item", existing)
+        needs_save = False
         if not any(row.uom == "Nos" for row in item.uoms or []):
             item.append("uoms", {"uom": "Nos", "conversion_factor": 1})
+            needs_save = True
+        if hasattr(item, "custom_is_registration_item") and not item.custom_is_registration_item:
+            item.custom_is_registration_item = 1
+            needs_save = True
+        if hasattr(item, "custom_form_name") and not item.custom_form_name:
+            item.custom_form_name = WOF_PAGE
+            needs_save = True
+        if needs_save:
             item.save(ignore_permissions=True)
         return item.name
 
     item = frappe.get_doc({
         "doctype": "Item",
+        "item_code": "ITO-WOF Registration Fee",
         "item_name": FEE_ITEM_NAME,
         "item_group": FEE_ITEM_GROUP,
         "stock_uom": "Nos",
         "is_stock_item": 0,
         "gst_hsn_code": "999295",
         "custom_company": company,
+        "custom_is_registration_item": 1,
+        "custom_form_name": WOF_PAGE,
         "uoms": [{"uom": "Nos", "conversion_factor": 1}],
     }).insert(ignore_permissions=True)
     return item.name
 
 
 def _get_registration_fee_item(company=None):
-    item = frappe.db.get_value(
-        "Item",
-        {"custom_is_registration_item": 1, "custom_form_name": WOF_PAGE, "disabled": 0},
-        "name",
+    item = (
+        frappe.db.get_value(
+            "Item",
+            {"custom_is_registration_item": 1, "custom_form_name": WOF_PAGE, "disabled": 0},
+            "name",
+        )
+        or frappe.db.get_value("Item", {"name": "ITO-WOF Registration Fee", "disabled": 0}, "name")
+        or frappe.db.get_value("Item", {"item_name": ["like", "%WOF Registration Fee%"], "disabled": 0}, "name")
     )
     if item:
         return item
-    existing = frappe.db.get_value("Item", {"item_name": FEE_ITEM_NAME, "disabled": 0}, "name")
-    if existing:
-        return existing
     if company:
         return _get_or_create_fee_item(company)
     return None

@@ -3719,18 +3719,18 @@ def get_registration_fee(form_name="Little Champ Registration"):
 			as_dict=True
 		)
 
-		if not item and ("WOF" in form_name or "Olympiad" in form_name):
+		if not item and form_name == "WOF Olympiad":
 			item = frappe.db.get_value(
 				"Item",
-				{"custom_is_registration_item": 1, "custom_form_name": ["in", ["WOF Olympiad", "WOF Registration", "WOF Olympiad Registration"]], "disabled": 0},
+				{"name": "ITO-WOF Olympiad Fee", "disabled": 0},
 				["name", "item_code", "item_name", "standard_rate"],
 				as_dict=True
 			)
 
-		if not item and ("WOF" in form_name or "Olympiad" in form_name):
+		if not item and form_name in ["WOF Registration", "Chitrakala Registration"]:
 			item = frappe.db.get_value(
 				"Item",
-				{"item_name": ["like", "%WOF%"], "disabled": 0},
+				{"name": "ITO-WOF Registration Fee", "disabled": 0},
 				["name", "item_code", "item_name", "standard_rate"],
 				as_dict=True
 			)

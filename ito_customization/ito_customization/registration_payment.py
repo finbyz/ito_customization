@@ -60,17 +60,15 @@ def _get_registration_fee_item(company=None, form_name=None, customer=None):
         {"custom_is_registration_item": 1, "custom_form_name": form_name, "disabled": 0},
         "name",
     )
-    if not item and ("WOF" in str(form_name) or "Olympiad" in str(form_name)):
-        item = frappe.db.get_value(
-            "Item",
-            {"custom_is_registration_item": 1, "custom_form_name": ["in", ["WOF Olympiad", "WOF Registration", "WOF Olympiad Registration"]], "disabled": 0},
-            "name",
+    if not item and form_name == "WOF Olympiad":
+        item = (
+            frappe.db.get_value("Item", {"custom_is_registration_item": 1, "custom_form_name": "WOF Olympiad", "disabled": 0}, "name")
+            or frappe.db.get_value("Item", {"name": "ITO-WOF Olympiad Fee", "disabled": 0}, "name")
         )
-    if not item and ("WOF" in str(form_name) or "Olympiad" in str(form_name)):
-        item = frappe.db.get_value(
-            "Item",
-            {"item_name": ["like", "%WOF%"], "disabled": 0},
-            "name",
+    elif not item and form_name in ["WOF Registration", "Chitrakala Registration"]:
+        item = (
+            frappe.db.get_value("Item", {"custom_is_registration_item": 1, "custom_form_name": "WOF Registration", "disabled": 0}, "name")
+            or frappe.db.get_value("Item", {"name": "ITO-WOF Registration Fee", "disabled": 0}, "name")
         )
     if not item:
         item = frappe.db.get_value(
@@ -138,7 +136,7 @@ def _get_razorpay_settings(form_name=None, customer=None):
         except Exception:
             pass
 
-    for candidate in ["WOF Registration", "WOF Olympiad", "WOF Olympiad Registration"]:
+    for candidate in ["WOF Olympiad", "WOF Registration", "WOF Olympiad Registration"]:
         try:
             return get_settings_for_page(candidate), candidate
         except Exception:
@@ -169,9 +167,9 @@ def _get_razorpay_settings(form_name=None, customer=None):
     frappe.throw(_("No enabled Razorpay settings configured in the system."))
 
 
-def _find_registration_fee_invoice(customer, company, fee_item=None):
+def _find_registration_fee_invoice(customer, company, fee_item=None, form_name=None):
     if not fee_item:
-        fee_item = _get_registration_fee_item(company, customer=customer)
+        fee_item = _get_registration_fee_item(company=company, form_name=form_name, customer=customer)
     if not fee_item:
         return None
     rows = frappe.get_all(
