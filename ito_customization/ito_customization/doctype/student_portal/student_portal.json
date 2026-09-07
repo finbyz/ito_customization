@@ -1,0 +1,133 @@
+{
+ "actions": [],
+ "allow_bulk_edit": 1,
+ "allow_rename": 1,
+ "creation": "2026-09-07 16:18:40.621830",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "verified_school_profile_section",
+  "school_name",
+  "full_name",
+  "school_code",
+  "student_details_section",
+  "student_full_name",
+  "email_id",
+  "class",
+  "column_break_qdvq",
+  "parent_full_name",
+  "mobile_number",
+  "selected_exams_section",
+  "exam_list",
+  "books_order_tab",
+  "books_selected"
+ ],
+ "fields": [
+  {
+   "fieldname": "verified_school_profile_section",
+   "fieldtype": "Section Break",
+   "label": "Verified School Profile"
+  },
+  {
+   "fieldname": "school_name",
+   "fieldtype": "Link",
+   "label": "School Name",
+   "options": "Customer"
+  },
+  {
+   "fieldname": "school_code",
+   "fieldtype": "Data",
+   "label": "School Code"
+  },
+  {
+   "fieldname": "student_details_section",
+   "fieldtype": "Section Break",
+   "label": "Student Details"
+  },
+  {
+   "fieldname": "student_full_name",
+   "fieldtype": "Data",
+   "label": "Student Full Name"
+  },
+  {
+   "fieldname": "email_id",
+   "fieldtype": "Data",
+   "label": "Email ID",
+   "options": "Email"
+  },
+  {
+   "fieldname": "class",
+   "fieldtype": "Data",
+   "label": "Class"
+  },
+  {
+   "fieldname": "column_break_qdvq",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "parent_full_name",
+   "fieldtype": "Data",
+   "label": "Parent Full Name"
+  },
+  {
+   "fieldname": "mobile_number",
+   "fieldtype": "Phone",
+   "label": "Mobile Number"
+  },
+  {
+   "fetch_from": "school_name.customer_name",
+   "fieldname": "full_name",
+   "fieldtype": "Data",
+   "label": "Full Name"
+  },
+  {
+   "fieldname": "selected_exams_section",
+   "fieldtype": "Section Break",
+   "label": "Selected Exams"
+  },
+  {
+   "fieldname": "exam_list",
+   "fieldtype": "Table",
+   "label": "Exam List",
+   "options": "Exam List CT"
+  },
+  {
+   "fieldname": "books_order_tab",
+   "fieldtype": "Tab Break",
+   "label": "Books Order"
+  },
+  {
+   "fieldname": "books_selected",
+   "fieldtype": "Table",
+   "label": "Books Selected",
+   "options": "Books Selection CT"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-07 16:52:56.428398",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "Student Portal",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
