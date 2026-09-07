@@ -71,7 +71,7 @@
   },
   {
    "fieldname": "mobile_number",
-   "fieldtype": "Phone",
+   "fieldtype": "Data",
    "label": "Mobile Number"
   },
   {
@@ -106,7 +106,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-07 16:52:56.428398",
+ "modified": "2026-09-07 18:06:21.950697",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Student Portal",

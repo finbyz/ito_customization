@@ -24,13 +24,13 @@ frappe.ui.form.on('Customer', {
 			}
 
 			frappe.call({
-				method: 'ito_customization.ito_customization.doc_events.web_page.olympiad_book_order.generate_consent_token',
+				method: 'ito_customization.ito_customization.doctype.student_portal.student_portal.generate_student_portal_token',
 				args: { customer: frm.doc.name },
 				callback: function(r) {
 					if (!r.message) return;
 
 					frappe.show_alert({
-						message: __('Parent consent form URL generated and saved'),
+						message: __('Student portal URL generated and saved'),
 						indicator: 'green'
 					});
 
