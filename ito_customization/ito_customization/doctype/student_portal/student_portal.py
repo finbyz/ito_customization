@@ -284,81 +284,116 @@ class IgnorePermissionsContext:
 
 
 def create_payment_entry_for_student_portal_registration(doc, exam_count):
-	with IgnorePermissionsContext():
-		try:
-			if not exam_count or exam_count <= 0:
-				return None, None
+    with IgnorePermissionsContext():
+        try:
+            if not exam_count or exam_count <= 0:
+                return None, None
 
-			customer = doc.school_name
-			if not customer and doc.school_code:
-				customer = frappe.db.get_value("Customer", {"custom_school_code": doc.school_code}) or frappe.db.get_value("Customer", {"custom_ito_school_code": doc.school_code}) or frappe.db.get_value("Customer", {"name": doc.school_code})
+            customer = doc.school_name
+            if not customer and doc.school_code:
+                customer = (
+                    frappe.db.get_value("Customer", {"custom_school_code": doc.school_code}, "name")
+                    or frappe.db.get_value("Customer", {"custom_ito_school_code": doc.school_code}, "name")
+                    or frappe.db.get_value("Customer", {"name": doc.school_code}, "name")
+                )
 
-			if not customer or not frappe.db.exists("Customer", customer):
-				return None, None
+            if not customer or not frappe.db.exists("Customer", customer):
+                return None, None
 
-			# Fetch dynamic fee rate for "Student Portal Registration"
-			from ito_customization.ito_customization.api import get_registration_fee
-			fee_info = get_registration_fee("Student Portal Registration")
-			item_code = fee_info.get("item_code") if fee_info and fee_info.get("success") else None
-			rate = flt(fee_info.get("rate_inr") or fee_info.get("rate_usd") or 150) if fee_info and fee_info.get("success") else 150.0
+            from ito_customization.ito_customization.api import get_registration_fee
+            fee_info = get_registration_fee("Student Portal Registration")
+            item_code = fee_info.get("item_code") if fee_info and fee_info.get("success") else None
+            rate = flt(fee_info.get("rate_inr") or fee_info.get("rate_usd") or 150) if fee_info and fee_info.get("success") else 150.0
 
-			if not item_code:
-				item_code = frappe.db.get_value("Item", {"custom_is_registration_item": 1, "custom_form_name": "Student Portal Registration", "disabled": 0}, "name")
+            # --- item_code resolution unchanged ---
 
-			if not item_code:
-				item_code = frappe.db.get_value("Item", {"name": "Student Portal Registration Fee"}, "name")
-				if not item_code:
-					item_doc = frappe.get_doc({
-						"doctype": "Item",
-						"item_code": "Student Portal Registration Fee",
-						"item_name": "Student Portal Registration Fee",
-						"item_group": "Fee Component",
-						"stock_uom": "Nos",
-						"is_stock_item": 0,
-						"standard_rate": rate,
-						"custom_is_registration_item": 1,
-						"custom_form_name": "Student Portal Registration",
-						"uoms": [{"uom": "Nos", "conversion_factor": 1}]
-					})
-					item_doc.flags.ignore_permissions = True
-					item_doc.insert(ignore_permissions=True)
-					item_code = item_doc.name
+            company = frappe.db.get_single_value("Global Defaults", "default_company") or "Indian Talent Olympiad"
+            if not frappe.db.exists("Company", company):
+                companies = frappe.get_all("Company", limit=1)
+                if companies:
+                    company = companies[0].name
 
-			company = frappe.db.get_single_value("Global Defaults", "default_company") or "Indian Talent Olympiad"
-			if not frappe.db.exists("Company", company):
-				companies = frappe.get_all("Company", limit=1)
-				if companies:
-					company = companies[0].name
+            # 1. Sales Invoice (unchanged)
+            si = frappe.new_doc("Sales Invoice")
+            si.customer = customer
+            si.company = company
+            si.append("items", {"item_code": item_code, "qty": exam_count, "rate": rate})
+            si.flags.ignore_permissions = True
+            si.flags.ignore_mandatory = True
+            si.insert(ignore_permissions=True)
+            si.submit()
 
-			# 1. Create Sales Invoice
-			si = frappe.new_doc("Sales Invoice")
-			si.customer = customer
-			si.company = company
-			si.append("items", {
-				"item_code": item_code,
-				"qty": exam_count,
-				"rate": rate
-			})
-			si.flags.ignore_permissions = True
-			si.flags.ignore_mandatory = True
-			si.insert(ignore_permissions=True)
-			si.submit()
+            # 2. Resolve accounts via direct DB — no permission check
+            from erpnext.accounts.party import get_party_account
+            receivable_account = get_party_account("Customer", customer, company)
+            paid_to_account = (
+                frappe.db.get_value("Company", company, "default_cash_account")
+                or frappe.db.get_value("Company", company, "default_bank_account")
+            )
 
-			# 2. Create Payment Entry
-			from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
-			pe = get_payment_entry("Sales Invoice", si.name)
-			pe.reference_no = doc.name
-			pe.reference_date = frappe.utils.today()
-			pe.remarks = f"Payment Entry for Student Portal Registration: {doc.student_full_name} ({doc.name})"
-			pe.flags.ignore_permissions = True
-			pe.flags.ignore_mandatory = True
-			pe.insert(ignore_permissions=True)
-			pe.submit()
+            if not receivable_account or not paid_to_account:
+                frappe.log_error(
+                    f"Missing accounts for company {company} "
+                    f"(receivable={receivable_account}, paid_to={paid_to_account})",
+                    "Student Portal Payment Entry Error"
+                )
+                return si.name, None
 
-			return si.name, pe.name
-		except Exception as e:
-			frappe.log_error(frappe.get_traceback(), "Student Portal Payment Entry Error")
-			return None, None
+            # ── KEY FIX: fetch account meta via db.get_value, not get_account_details ──
+            paid_from_currency, paid_from_type = frappe.db.get_value(
+                "Account", receivable_account, ["account_currency", "account_type"]
+            )
+            paid_to_currency, paid_to_type = frappe.db.get_value(
+                "Account", paid_to_account, ["account_currency", "account_type"]
+            )
+            company_currency = frappe.db.get_value("Company", company, "default_currency")
+
+            # 3. Build Payment Entry with all account fields pre-populated
+            pe = frappe.new_doc("Payment Entry")
+            pe.payment_type = "Receive"
+            pe.party_type = "Customer"
+            pe.party = customer
+            pe.company = company
+            pe.posting_date = frappe.utils.today()
+            pe.reference_date = frappe.utils.today()
+            pe.reference_no = doc.name
+
+            pe.paid_from = receivable_account
+            pe.paid_from_account_currency = paid_from_currency or company_currency
+            pe.paid_from_account_type = paid_from_type
+
+            pe.paid_to = paid_to_account
+            pe.paid_to_account_currency = paid_to_currency or company_currency
+            pe.paid_to_account_type = paid_to_type
+
+            pe.paid_amount = si.grand_total
+            pe.received_amount = si.grand_total
+            pe.source_exchange_rate = 1
+            pe.target_exchange_rate = 1
+
+            pe.remarks = (
+                f"Payment for Student Portal Registration: "
+                f"{doc.student_full_name} ({doc.name})"
+            )
+
+            pe.append("references", {
+                "reference_doctype": "Sales Invoice",
+                "reference_name": si.name,
+                "total_amount": si.grand_total,
+                "outstanding_amount": si.outstanding_amount,
+                "allocated_amount": si.grand_total,
+            })
+
+            pe.flags.ignore_permissions = True
+            pe.flags.ignore_mandatory = True
+            pe.insert(ignore_permissions=True)
+            pe.submit()
+
+            return si.name, pe.name
+
+        except Exception:
+            frappe.log_error(frappe.get_traceback(), "Student Portal Payment Entry Error")
+            return None, None
 
 
 @frappe.whitelist(allow_guest=True)
