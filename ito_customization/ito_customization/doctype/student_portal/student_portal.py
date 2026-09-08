@@ -233,7 +233,8 @@ def get_customer_exam_details(customer=None, school_code=None, token=None):
 		"school_code": code,
 		"address": address,
 		"subjects": subject_details,
-		"registration_fee_rate": registration_fee_rate
+		"registration_fee_rate": registration_fee_rate,
+		"is_little_champ": bool(customer_doc.get("custom_is_little_champ"))
 	}
 
 
@@ -496,6 +497,19 @@ def initiate_student_portal_registration_payment(doc, exam_count):
 			return None, None
 
 
+def _get_valid_class_name(cval):
+	if not cval:
+		return None
+	sval = str(cval).strip()
+	if frappe.db.exists("Class", sval):
+		return sval
+	clean_val = sval.replace("Class", "").replace("class", "").strip()
+	if frappe.db.exists("Class", clean_val):
+		return clean_val
+	all_cls = frappe.db.get_value("Class", {}, "name")
+	return all_cls or sval
+
+
 @frappe.whitelist(allow_guest=True)
 def create_student_portal_entry(data):
 	with IgnorePermissionsContext():
@@ -522,7 +536,7 @@ def create_student_portal_entry(data):
 		doc.parent_full_name = data.get("parent_full_name")
 		doc.email_id = data.get("email_id")
 		doc.mobile_number = data.get("mobile_number")
-		doc.set("class", str(data.get("class") or data.get("class_grade") or ""))
+		doc.set("class", _get_valid_class_name(data.get("class") or data.get("class_grade")) or "")
 
 		exam_count = 0
 		for item in data.get("selected_exams", []):
@@ -551,6 +565,144 @@ def create_student_portal_entry(data):
 		}
 
 
+def _get_or_create_book_order_item(company="Olympiad Books"):
+	item_code = frappe.db.get_value("Item", {"item_name": "Olympiad Books Order"}, "name")
+	if not item_code:
+		item_code = frappe.db.get_value("Item", {"item_group": "Products", "disabled": 0}, "name")
+	if not item_code:
+		item_code = frappe.db.get_value("Item", {"disabled": 0}, "name")
+	if not item_code:
+		item_code = "ITO-Book Order"
+		if not frappe.db.exists("Item", item_code):
+			try:
+				idoc = frappe.new_doc("Item")
+				idoc.item_code = item_code
+				idoc.item_name = "Olympiad Books Order"
+				idoc.item_group = "Products"
+				idoc.stock_uom = "Nos"
+				idoc.is_stock_item = 0
+				idoc.flags.ignore_permissions = True
+				idoc.insert(ignore_permissions=True)
+			except Exception:
+				pass
+	return item_code
+
+
+def initiate_student_portal_book_order_payment(customer, grand_total, doc_name=None):
+	with IgnorePermissionsContext():
+		try:
+			if not grand_total or grand_total <= 0:
+				return None, None
+
+			# Customer resolution logic to ensure si.customer is a valid Customer in ERPNext
+			cust_name = None
+			if customer:
+				if frappe.db.exists("Customer", customer):
+					cust_name = customer
+				else:
+					cust_name = (
+						frappe.db.get_value("Customer", {"custom_school_code": customer}, "name")
+						or frappe.db.get_value("Customer", {"custom_ito_school_code": customer}, "name")
+						or frappe.db.get_value("Customer", {"customer_name": customer}, "name")
+					)
+
+			if not cust_name and doc_name and frappe.db.exists("Student Portal", doc_name):
+				sp = frappe.get_doc("Student Portal", doc_name)
+				if sp.school_name and frappe.db.exists("Customer", sp.school_name):
+					cust_name = sp.school_name
+				elif sp.school_code:
+					cust_name = (
+						frappe.db.get_value("Customer", {"custom_school_code": sp.school_code}, "name")
+						or frappe.db.get_value("Customer", {"custom_ito_school_code": sp.school_code}, "name")
+					)
+
+			if not cust_name:
+				cust_name = frappe.db.get_value("Customer", {"disabled": 0}, "name")
+
+			if not cust_name:
+				# Create fallback customer if no customer doc exists in DB
+				try:
+					cdoc = frappe.new_doc("Customer")
+					cdoc.customer_name = customer or "Student Portal Direct Customer"
+					cdoc.customer_group = "Individual"
+					cdoc.territory = "India"
+					cdoc.flags.ignore_permissions = True
+					cdoc.insert(ignore_permissions=True)
+					cust_name = cdoc.name
+				except Exception:
+					pass
+
+			customer = cust_name
+
+			company = "Olympiad Books"
+			if not frappe.db.exists("Company", company):
+				company = frappe.db.get_single_value("Global Defaults", "default_company") or "Indian Talent Olympiad"
+
+			item_code = _get_or_create_book_order_item(company)
+
+			# 1. Sales Invoice
+			si = frappe.new_doc("Sales Invoice")
+			si.customer = customer
+			si.company = company
+			si.append("items", {"item_code": item_code, "qty": 1, "rate": flt(grand_total)})
+			si.flags.ignore_permissions = True
+			si.flags.ignore_mandatory = True
+			si.insert(ignore_permissions=True)
+			si.submit()
+
+			# 2. Initiate Razorpay Checkout Payload for Olympiad Books
+			from multi_company_razorpay.api import create_payment_for_sales_invoice, get_checkout_context
+			from urllib.parse import parse_qs, urlparse
+
+			original_ignore = frappe.flags.ignore_permissions
+			try:
+				frappe.flags.ignore_permissions = True
+				res = create_payment_for_sales_invoice(
+					sales_invoice=si.name,
+					amount=si.grand_total,
+					page=None
+				)
+			finally:
+				frappe.flags.ignore_permissions = original_ignore
+
+			if not res or not res.get("checkout_url"):
+				return si.name, None
+
+			checkout_token = parse_qs(urlparse(res["checkout_url"]).query).get("token", [None])[0]
+			if not checkout_token:
+				return si.name, None
+
+			checkout_context = get_checkout_context(checkout_token)
+			checkout_context["sales_invoice"] = si.name
+			return si.name, checkout_context
+
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), "Student Portal Book Order Payment Initiation Error")
+			return None, None
+
+
+@frappe.whitelist(allow_guest=True)
+def confirm_student_portal_book_order_payment(integration_request, razorpay_payment_id, razorpay_order_id, razorpay_signature):
+	with IgnorePermissionsContext():
+		from multi_company_razorpay.api import checkout_success
+		result = checkout_success(
+			integration_request=integration_request,
+			razorpay_payment_id=razorpay_payment_id,
+			razorpay_order_id=razorpay_order_id,
+			razorpay_signature=razorpay_signature,
+		)
+		integration = frappe.get_doc("Integration Request", integration_request)
+		data = frappe.parse_json(integration.data or "{}")
+		transaction = frappe.get_doc("Razorpay Transaction", data["razorpay_transaction"])
+		return {
+			"success": True,
+			"paid": transaction.status == "Completed",
+			"payment_entry": transaction.payment_entry,
+			"sales_invoice": transaction.reference_docname,
+			"redirect_to": result.get("redirect_to"),
+		}
+
+
 @frappe.whitelist(allow_guest=True)
 def save_student_portal_book_order(data):
 	with IgnorePermissionsContext():
@@ -563,7 +715,7 @@ def save_student_portal_book_order(data):
 		parent_full_name = data.get("parent_full_name")
 		email_id = data.get("email_id")
 		mobile_number = data.get("mobile_number")
-		class_grade = str(data.get("class") or data.get("class_grade") or "")
+		class_grade = _get_valid_class_name(data.get("class") or data.get("class_grade")) or ""
 		book_items = data.get("book_items", [])
 
 		if not customer and school_code:
@@ -612,13 +764,16 @@ def save_student_portal_book_order(data):
 		if book_items:
 			doc.set("books_selected", [])
 			for item in book_items:
-				wb = int(item.get("practice_workbook_110") or item.get("wb") or 0)
+				tb = int(item.get("text_book") or item.get("tb") or 0)
+				wb = int(item.get("work_book") or item.get("practice_workbook_110") or item.get("wb") or 0)
 				guide = int(item.get("student_guide_220") or item.get("guide") or 0)
 				pyqp = int(item.get("prev_year_paper_160") or item.get("pyqp") or 0)
-				if wb or guide or pyqp:
+				if tb or wb or guide or pyqp:
 					doc.append("books_selected", {
 						"subject": item.get("subject"),
-						"class_grade": item.get("class_grade") or class_grade,
+						"class_grade": _get_valid_class_name(item.get("class_grade") or class_grade) or class_grade,
+						"text_book": tb,
+						"work_book": wb,
 						"practice_workbook_110": wb,
 						"student_guide_220": guide,
 						"prev_year_paper_160": pyqp,
@@ -641,13 +796,16 @@ def save_student_portal_book_order(data):
 				bs_doc.order_date = frappe.utils.today()
 
 			for item in book_items:
-				wb = int(item.get("practice_workbook_110") or item.get("wb") or 0)
+				tb = int(item.get("text_book") or item.get("tb") or 0)
+				wb = int(item.get("work_book") or item.get("practice_workbook_110") or item.get("wb") or 0)
 				guide = int(item.get("student_guide_220") or item.get("guide") or 0)
 				pyqp = int(item.get("prev_year_paper_160") or item.get("pyqp") or 0)
-				if wb or guide or pyqp:
+				if tb or wb or guide or pyqp:
 					bs_doc.append("select_books", {
 						"subject": item.get("subject"),
-						"class_grade": item.get("class_grade") or class_grade,
+						"class_grade": _get_valid_class_name(item.get("class_grade") or class_grade) or class_grade,
+						"text_book": tb,
+						"work_book": wb,
 						"practice_workbook_110": wb,
 						"student_guide_220": guide,
 						"prev_year_paper_160": pyqp,
@@ -659,4 +817,25 @@ def save_student_portal_book_order(data):
 			else:
 				bs_doc.save(ignore_permissions=True)
 
-		return {"success": True, "name": doc.name, "message": "Book order saved successfully!"}
+		# 3. Calculate total amount & initiate Razorpay Payment for Olympiad Books
+		grand_total = flt(data.get("grand_total") or 0)
+		if not grand_total and book_items:
+			for b in book_items:
+				tb = flt(b.get("text_book") or b.get("tb") or 0)
+				wb = flt(b.get("work_book") or b.get("practice_workbook_110") or b.get("wb") or 0)
+				guide = flt(b.get("student_guide_220") or b.get("guide") or 0)
+				pyqp = flt(b.get("prev_year_paper_160") or b.get("pyqp") or 0)
+				grand_total += (tb * 100) + (wb * 100) + (guide * 200) + (pyqp * 150)
+
+		si_name = None
+		checkout_context = None
+		if grand_total > 0:
+			si_name, checkout_context = initiate_student_portal_book_order_payment(customer, grand_total, doc.name)
+
+		return {
+			"success": True,
+			"name": doc.name,
+			"sales_invoice": si_name,
+			"checkout": checkout_context,
+			"message": "Book order saved successfully!"
+		}
