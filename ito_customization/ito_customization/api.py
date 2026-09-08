@@ -3756,7 +3756,7 @@ def get_wof_teacher_draft(academic_year="AY-2026/27"):
 
 # ==================== DYNAMIC REGISTRATION FEE API ====================
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=True)
 def get_registration_fee(form_name="Little Champ Registration"):
 	"""
 	Fetch dynamic registration fee strictly from Item where custom_is_registration_item=1 and custom_form_name=form_name.
@@ -3782,6 +3782,14 @@ def get_registration_fee(form_name="Little Champ Registration"):
 			item = frappe.db.get_value(
 				"Item",
 				{"name": "ITO-WOF Registration Fee", "disabled": 0},
+				["name", "item_code", "item_name", "standard_rate"],
+				as_dict=True
+			)
+
+		if not item and form_name == "Student Portal Registration":
+			item = frappe.db.get_value(
+				"Item",
+				{"item_name": ["like", "%Student Portal Registration%"], "disabled": 0},
 				["name", "item_code", "item_name", "standard_rate"],
 				as_dict=True
 			)

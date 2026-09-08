@@ -2,6 +2,7 @@
  "actions": [],
  "allow_bulk_edit": 1,
  "allow_rename": 1,
+ "autoname": "{full_name}.-.####.",
  "creation": "2026-09-07 16:18:40.621830",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -57,8 +58,9 @@
   },
   {
    "fieldname": "class",
-   "fieldtype": "Data",
-   "label": "Class"
+   "fieldtype": "Link",
+   "label": "Class",
+   "options": "Class"
   },
   {
    "fieldname": "column_break_qdvq",
@@ -106,10 +108,11 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-07 18:06:21.950697",
+ "modified": "2026-09-08 12:21:18.811445",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Student Portal",
+ "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {
