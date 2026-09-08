@@ -397,6 +397,106 @@ def create_payment_entry_for_student_portal_registration(doc, exam_count):
 
 
 @frappe.whitelist(allow_guest=True)
+def confirm_student_portal_payment(integration_request, razorpay_payment_id, razorpay_order_id, razorpay_signature):
+	with IgnorePermissionsContext():
+		from multi_company_razorpay.api import checkout_success
+		result = checkout_success(
+			integration_request=integration_request,
+			razorpay_payment_id=razorpay_payment_id,
+			razorpay_order_id=razorpay_order_id,
+			razorpay_signature=razorpay_signature,
+		)
+		integration = frappe.get_doc("Integration Request", integration_request)
+		data = frappe.parse_json(integration.data or "{}")
+		transaction = frappe.get_doc("Razorpay Transaction", data["razorpay_transaction"])
+		return {
+			"success": True,
+			"paid": transaction.status == "Completed",
+			"payment_entry": transaction.payment_entry,
+			"sales_invoice": transaction.reference_docname,
+			"redirect_to": result.get("redirect_to"),
+		}
+
+
+def initiate_student_portal_registration_payment(doc, exam_count):
+	with IgnorePermissionsContext():
+		try:
+			if not exam_count or exam_count <= 0:
+				return None, None
+
+			customer = doc.school_name
+			if not customer and doc.school_code:
+				customer = (
+					frappe.db.get_value("Customer", {"custom_school_code": doc.school_code}, "name")
+					or frappe.db.get_value("Customer", {"custom_ito_school_code": doc.school_code}, "name")
+					or frappe.db.get_value("Customer", {"name": doc.school_code}, "name")
+				)
+
+			if not customer or not frappe.db.exists("Customer", customer):
+				return None, None
+
+			from ito_customization.ito_customization.api import get_registration_fee
+			fee_info = get_registration_fee("Student Portal Registration")
+			item_code = fee_info.get("item_code") if fee_info and fee_info.get("success") else None
+			rate = flt(fee_info.get("rate_inr") or fee_info.get("rate_usd") or 150) if fee_info and fee_info.get("success") else 150.0
+
+			if not item_code:
+				item_code = frappe.db.get_value(
+					"Item",
+					{"custom_is_registration_item": 1, "disabled": 0},
+					"name"
+				) or "ITO-Student Portal Registration"
+
+			company = "Indian Talent Olympiad"
+			if not frappe.db.exists("Company", company):
+				company = frappe.db.get_single_value("Global Defaults", "default_company") or "Indian Talent Olympiad"
+				if not frappe.db.exists("Company", company):
+					companies = frappe.get_all("Company", limit=1)
+					if companies:
+						company = companies[0].name
+
+			# 1. Sales Invoice
+			si = frappe.new_doc("Sales Invoice")
+			si.customer = customer
+			si.company = company
+			si.append("items", {"item_code": item_code, "qty": exam_count, "rate": rate})
+			si.flags.ignore_permissions = True
+			si.flags.ignore_mandatory = True
+			si.insert(ignore_permissions=True)
+			si.submit()
+
+			# 2. Initiate Razorpay Checkout Payload (page=None so default company Razorpay settings are used)
+			from multi_company_razorpay.api import create_payment_for_sales_invoice, get_checkout_context
+			from urllib.parse import parse_qs, urlparse
+
+			original_ignore = frappe.flags.ignore_permissions
+			try:
+				frappe.flags.ignore_permissions = True
+				res = create_payment_for_sales_invoice(
+					sales_invoice=si.name,
+					amount=si.grand_total,
+					page=None
+				)
+			finally:
+				frappe.flags.ignore_permissions = original_ignore
+
+			if not res or not res.get("checkout_url"):
+				return si.name, None
+
+			checkout_token = parse_qs(urlparse(res["checkout_url"]).query).get("token", [None])[0]
+			if not checkout_token:
+				return si.name, None
+
+			checkout_context = get_checkout_context(checkout_token)
+			checkout_context["sales_invoice"] = si.name
+			return si.name, checkout_context
+
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), "Student Portal Payment Initiation Error")
+			return None, None
+
+
+@frappe.whitelist(allow_guest=True)
 def create_student_portal_entry(data):
 	with IgnorePermissionsContext():
 		if isinstance(data, str):
@@ -438,9 +538,17 @@ def create_student_portal_entry(data):
 		doc.flags.ignore_permissions = True
 		doc.insert(ignore_permissions=True)
 
-		si_name, pe_name = create_payment_entry_for_student_portal_registration(doc, exam_count)
+		si_name = None
+		checkout_context = None
+		if exam_count > 0:
+			si_name, checkout_context = initiate_student_portal_registration_payment(doc, exam_count)
 
-		return {"success": True, "name": doc.name, "sales_invoice": si_name, "payment_entry": pe_name}
+		return {
+			"success": True,
+			"name": doc.name,
+			"sales_invoice": si_name,
+			"checkout": checkout_context
+		}
 
 
 @frappe.whitelist(allow_guest=True)
