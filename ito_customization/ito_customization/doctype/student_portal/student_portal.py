@@ -127,7 +127,7 @@ def get_customer_info(query=None):
 
 
 @frappe.whitelist(allow_guest=True)
-def get_customer_exam_details(customer=None, school_code=None, token=None):
+def get_customer_exam_details(customer=None, school_code=None, token=None, class_grade=None):
 	if not customer and token:
 		customer = (
 			frappe.db.get_value("Customer", {"custom_consent_token": token}, "name")
@@ -155,6 +155,10 @@ def get_customer_exam_details(customer=None, school_code=None, token=None):
 	customer_doc = frappe.get_doc("Customer", customer)
 	code = customer_doc.get("custom_school_code") or customer_doc.get("custom_ito_school_code") or customer_doc.name
 	address = _get_customer_full_address(customer_doc)
+	is_lc = bool(customer_doc.get("custom_is_little_champ"))
+
+	if not class_grade:
+		class_grade = "Nursery" if is_lc else "6"
 
 	subjects = []
 	seen = set()
@@ -214,12 +218,23 @@ def get_customer_exam_details(customer=None, school_code=None, token=None):
 					seen.add(row.subject)
 					subjects.append(row.subject)
 
+	if not subjects and is_lc:
+		lc_subs = frappe.get_all("School Subject", filters={"name": ["like", "%Little Champ%"]}, fields=["name"])
+		for s in lc_subs:
+			if s.name not in seen:
+				seen.add(s.name)
+				subjects.append(s.name)
+
 	subject_details = []
 	for subj in subjects:
 		abbr = frappe.db.get_value("School Subject", subj, "abbr") or ""
 		subject_details.append({
 			"school_subject": subj,
-			"abbr": abbr
+			"abbr": abbr,
+			"tb_price": get_book_unit_price(subj, class_grade, "tb"),
+			"wb_price": get_book_unit_price(subj, class_grade, "wb"),
+			"guide_price": get_book_unit_price(subj, class_grade, "guide"),
+			"pyqp_price": get_book_unit_price(subj, class_grade, "pyqp"),
 		})
 
 	from ito_customization.ito_customization.api import get_registration_fee
@@ -234,7 +249,7 @@ def get_customer_exam_details(customer=None, school_code=None, token=None):
 		"address": address,
 		"subjects": subject_details,
 		"registration_fee_rate": registration_fee_rate,
-		"is_little_champ": bool(customer_doc.get("custom_is_little_champ"))
+		"is_little_champ": is_lc
 	}
 
 
@@ -262,14 +277,21 @@ class IgnorePermissionsContext:
 		self.orig_ignore = frappe.flags.ignore_permissions
 		self.orig_ignore_account = getattr(frappe.flags, "ignore_account_permission", False)
 
-		def custom_has_permission(doctype, ptype="read", doc=None, user=None, **kwargs):
-			if doctype in ("Account", "Sales Invoice", "Payment Entry", "Customer", "Item", "Company", "Student Portal", "Books Selection"):
+		def custom_has_permission(doctype=None, ptype="read", doc=None, user=None, *args, **kwargs):
+			if doctype in ("Account", "Sales Invoice", "Payment Entry", "Customer", "Item", "Company", "Student Portal", "Books Selection", "Item Price"):
 				return True
-			return self.orig_has_permission(doctype, ptype=ptype, doc=doc, user=user, **kwargs)
+			return self.orig_has_permission(doctype, ptype=ptype, doc=doc, user=user, *args, **kwargs)
+
+		def custom_perm_has_permission(doctype=None, ptype="read", doc=None, user=None, throw=False, *args, **kwargs):
+			if doctype in ("Account", "Sales Invoice", "Payment Entry", "Customer", "Item", "Company", "Student Portal", "Books Selection", "Item Price"):
+				return True
+			if self.orig_permissions_has_permission:
+				return self.orig_permissions_has_permission(doctype, ptype=ptype, doc=doc, user=user, throw=throw, *args, **kwargs)
+			return True
 
 		frappe.has_permission = custom_has_permission
 		if hasattr(frappe, "permissions"):
-			frappe.permissions.has_permission = custom_has_permission
+			frappe.permissions.has_permission = custom_perm_has_permission
 
 		frappe.flags.ignore_permissions = True
 		frappe.flags.ignore_account_permission = True
@@ -503,6 +525,17 @@ def _get_valid_class_name(cval):
 	sval = str(cval).strip()
 	if frappe.db.exists("Class", sval):
 		return sval
+
+	lc_map = {
+		"Nursery": "Nursery",
+		"Junior": "Junior KG",
+		"Junior KG": "Junior KG",
+		"Senior": "Senior KG",
+		"Senior KG": "Senior KG",
+	}
+	if sval in lc_map and frappe.db.exists("Class", lc_map[sval]):
+		return lc_map[sval]
+
 	clean_val = sval.replace("Class", "").replace("class", "").strip()
 	if frappe.db.exists("Class", clean_val):
 		return clean_val
@@ -566,29 +599,117 @@ def create_student_portal_entry(data):
 
 
 def _get_or_create_book_order_item(company="Olympiad Books"):
-	item_code = frappe.db.get_value("Item", {"item_name": "Olympiad Books Order"}, "name")
-	if not item_code:
-		item_code = frappe.db.get_value("Item", {"item_group": "Products", "disabled": 0}, "name")
-	if not item_code:
-		item_code = frappe.db.get_value("Item", {"disabled": 0}, "name")
-	if not item_code:
-		item_code = "ITO-Book Order"
-		if not frappe.db.exists("Item", item_code):
-			try:
-				idoc = frappe.new_doc("Item")
-				idoc.item_code = item_code
-				idoc.item_name = "Olympiad Books Order"
-				idoc.item_group = "Products"
-				idoc.stock_uom = "Nos"
-				idoc.is_stock_item = 0
-				idoc.flags.ignore_permissions = True
-				idoc.insert(ignore_permissions=True)
-			except Exception:
-				pass
-	return item_code
+	item_code = "ITO-Book Order"
+	if not frappe.db.exists("Item", item_code):
+		try:
+			idoc = frappe.new_doc("Item")
+			idoc.item_code = item_code
+			idoc.item_name = "Olympiad Book Order"
+			idoc.item_group = "Olympiad Books" if frappe.db.exists("Item Group", "Olympiad Books") else "Products"
+			idoc.stock_uom = "Nos"
+			idoc.is_stock_item = 0
+			idoc.gst_hsn_code = "490110"
+			idoc.append("uoms", {"uom": "Nos", "conversion_factor": 1})
+			idoc.flags.ignore_permissions = True
+			idoc.flags.ignore_mandatory = True
+			idoc.insert(ignore_permissions=True)
+		except Exception:
+			pass
+	if frappe.db.exists("Item", item_code):
+		return item_code
+	return frappe.db.get_value("Item", {"item_group": "Olympiad Books", "disabled": 0}, "name") or "ITO-Book Order"
 
 
-def initiate_student_portal_book_order_payment(customer, grand_total, doc_name=None):
+def get_book_item_and_price(subject_name, class_grade, book_type):
+	"""
+	Retrieves (item_code, item_price) from School Subject child tables.
+	"""
+	defaults = {
+		"tb": 100.0,
+		"text_book": 100.0,
+		"wb": 110.0,
+		"work_book": 110.0,
+		"practice_workbook_110": 110.0,
+		"guide": 220.0,
+		"student_guide_220": 220.0,
+		"pyqp": 160.0,
+		"prev_year_paper_160": 160.0,
+	}
+
+	fallback_price = defaults.get(book_type, 100.0)
+	if not subject_name:
+		return None, fallback_price
+
+	found_sub = None
+	if frappe.db.exists("School Subject", subject_name):
+		found_sub = subject_name
+	else:
+		found_sub = frappe.db.get_value("School Subject", {"name": ["like", f"%{subject_name}%"]}, "name")
+
+	if not found_sub:
+		return None, fallback_price
+
+	try:
+		sub_doc = frappe.get_doc("School Subject", found_sub)
+		field_map = {
+			"tb": ["text_book"],
+			"text_book": ["text_book"],
+			"wb": ["practice_workbook_110", "work_book"],
+			"work_book": ["work_book", "practice_workbook_110"],
+			"practice_workbook_110": ["practice_workbook_110", "work_book"],
+			"guide": ["student_guide_220"],
+			"student_guide_220": ["student_guide_220"],
+			"pyqp": ["prev_year_paper_160"],
+			"prev_year_paper_160": ["prev_year_paper_160"],
+		}
+		parentfields = field_map.get(book_type, [])
+		clean_cls = str(class_grade or "").replace("Class", "").replace("class", "").strip()
+
+		candidate_rows = []
+		for pf in parentfields:
+			rows = getattr(sub_doc, pf, []) or []
+			for r in rows:
+				candidate_rows.append(r)
+				val_cls = r.get("class") or r.get("class_grade") or getattr(r, "class", None)
+				if val_cls:
+					val_cls_str = str(val_cls).strip()
+					val_cls_clean = val_cls_str.replace("Class", "").replace("class", "").strip()
+					v1 = val_cls_str.lower()
+					c1 = str(class_grade or "").strip().lower()
+					v_clean = val_cls_clean.lower()
+					c_clean = clean_cls.lower()
+
+					if v1 == c1 or (c_clean and v_clean == c_clean) or (c1 and c1 in v1) or (v1 and v1 in c1):
+						price = flt(r.get("item_price") or getattr(r, "item_price", 0))
+						item_code = r.get("item") or getattr(r, "item", None)
+						if not price or price <= 0:
+							price = fallback_price
+						return item_code, price
+
+		# If no exact class match was found, fallback to first available row in the subject table
+		if candidate_rows:
+			r0 = candidate_rows[0]
+			p0 = flt(r0.get("item_price") or getattr(r0, "item_price", 0))
+			i0 = r0.get("item") or getattr(r0, "item", None)
+			price = p0 if p0 > 0 else fallback_price
+			return i0, price
+
+	except Exception as e:
+		frappe.log_error(f"Error in get_book_item_and_price: {e}")
+
+	return None, fallback_price
+
+
+def get_book_unit_price(subject_name, class_grade, book_type):
+	"""
+	Retrieves dynamic item_price from School Subject child tables.
+	If not found, falls back to default rates (110 for WB, 220 for Guide, 160 for PYQP, 100 for Little Champ).
+	"""
+	_, price = get_book_item_and_price(subject_name, class_grade, book_type)
+	return price
+
+
+def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=1, doc_name=None, book_items=None):
 	with IgnorePermissionsContext():
 		try:
 			if not grand_total or grand_total <= 0:
@@ -638,16 +759,95 @@ def initiate_student_portal_book_order_payment(customer, grand_total, doc_name=N
 			if not frappe.db.exists("Company", company):
 				company = frappe.db.get_single_value("Global Defaults", "default_company") or "Indian Talent Olympiad"
 
-			item_code = _get_or_create_book_order_item(company)
+			fallback_item = _get_or_create_book_order_item(company)
 
-			# 1. Sales Invoice
 			si = frappe.new_doc("Sales Invoice")
 			si.customer = customer
 			si.company = company
-			si.append("items", {"item_code": item_code, "qty": 1, "rate": flt(grand_total)})
+			si.due_date = frappe.utils.nowdate()
+
+			items_added = []
+			if book_items:
+				for b in book_items:
+					subj = b.get("subject")
+					cls_g = b.get("class_grade") or ""
+					tb = int(b.get("text_book") or b.get("tb") or 0)
+					wb = int(b.get("work_book") or b.get("practice_workbook_110") or b.get("wb") or 0)
+					guide = int(b.get("student_guide_220") or b.get("guide") or 0)
+					pyqp = int(b.get("prev_year_paper_160") or b.get("pyqp") or 0)
+
+					if tb > 0:
+						item_code, price = get_book_item_and_price(subj, cls_g, "tb")
+						items_added.append({
+							"item_code": item_code if (item_code and frappe.db.exists("Item", item_code)) else fallback_item,
+							"item_name": f"{subj} Text Book ({cls_g})",
+							"description": f"{subj} Text Book for {cls_g}",
+							"qty": tb,
+							"rate": price,
+							"gst_hsn_code": "490110",
+						})
+					if wb > 0:
+						item_code, price = get_book_item_and_price(subj, cls_g, "wb")
+						items_added.append({
+							"item_code": item_code if (item_code and frappe.db.exists("Item", item_code)) else fallback_item,
+							"item_name": f"{subj} Work Book ({cls_g})",
+							"description": f"{subj} Work Book for {cls_g}",
+							"qty": wb,
+							"rate": price,
+							"gst_hsn_code": "490110",
+						})
+					if guide > 0:
+						item_code, price = get_book_item_and_price(subj, cls_g, "guide")
+						items_added.append({
+							"item_code": item_code if (item_code and frappe.db.exists("Item", item_code)) else fallback_item,
+							"item_name": f"{subj} Student Guide ({cls_g})",
+							"description": f"{subj} Student Guide for {cls_g}",
+							"qty": guide,
+							"rate": price,
+							"gst_hsn_code": "490110",
+						})
+					if pyqp > 0:
+						item_code, price = get_book_item_and_price(subj, cls_g, "pyqp")
+						items_added.append({
+							"item_code": item_code if (item_code and frappe.db.exists("Item", item_code)) else fallback_item,
+							"item_name": f"{subj} Prev Year Papers ({cls_g})",
+							"description": f"{subj} Previous Year Question Papers for {cls_g}",
+							"qty": pyqp,
+							"rate": price,
+							"gst_hsn_code": "490110",
+						})
+
+			if items_added:
+				for itm in items_added:
+					si.append("items", itm)
+			else:
+				final_qty = max(int(total_qty or 1), 1)
+				rate = flt(grand_total) / final_qty
+				si.append("items", {
+					"item_code": fallback_item,
+					"qty": final_qty,
+					"rate": rate,
+					"gst_hsn_code": "490110",
+				})
+
 			si.flags.ignore_permissions = True
 			si.flags.ignore_mandatory = True
+			try:
+				si.set_missing_values()
+			except Exception:
+				pass
+
+			for itm in si.items:
+				if not itm.gst_hsn_code:
+					itm.gst_hsn_code = "490110"
+
+			si.calculate_taxes_and_totals()
 			si.insert(ignore_permissions=True)
+
+			for itm in si.items:
+				if not itm.gst_hsn_code:
+					itm.gst_hsn_code = "490110"
+
 			si.submit()
 
 			# 2. Initiate Razorpay Checkout Payload for Olympiad Books
@@ -659,8 +859,8 @@ def initiate_student_portal_book_order_payment(customer, grand_total, doc_name=N
 				frappe.flags.ignore_permissions = True
 				res = create_payment_for_sales_invoice(
 					sales_invoice=si.name,
-					amount=si.grand_total,
-					page=None
+					amount=flt(si.outstanding_amount),
+					page="Book Order"
 				)
 			finally:
 				frappe.flags.ignore_permissions = original_ignore
@@ -817,20 +1017,42 @@ def save_student_portal_book_order(data):
 			else:
 				bs_doc.save(ignore_permissions=True)
 
-		# 3. Calculate total amount & initiate Razorpay Payment for Olympiad Books
-		grand_total = flt(data.get("grand_total") or 0)
-		if not grand_total and book_items:
+		# 3. Calculate total quantity & dynamic grand total for books according to class
+		total_qty = 0
+		calculated_total = 0.0
+
+		if book_items:
 			for b in book_items:
-				tb = flt(b.get("text_book") or b.get("tb") or 0)
-				wb = flt(b.get("work_book") or b.get("practice_workbook_110") or b.get("wb") or 0)
-				guide = flt(b.get("student_guide_220") or b.get("guide") or 0)
-				pyqp = flt(b.get("prev_year_paper_160") or b.get("pyqp") or 0)
-				grand_total += (tb * 100) + (wb * 100) + (guide * 200) + (pyqp * 150)
+				subj = b.get("subject")
+				cls_g = b.get("class_grade") or class_grade
+				tb = int(b.get("text_book") or b.get("tb") or 0)
+				wb = int(b.get("work_book") or b.get("practice_workbook_110") or b.get("wb") or 0)
+				guide = int(b.get("student_guide_220") or b.get("guide") or 0)
+				pyqp = int(b.get("prev_year_paper_160") or b.get("pyqp") or 0)
+
+				if tb:
+					total_qty += tb
+					calculated_total += tb * get_book_unit_price(subj, cls_g, "tb")
+				if wb:
+					total_qty += wb
+					calculated_total += wb * get_book_unit_price(subj, cls_g, "wb")
+				if guide:
+					total_qty += guide
+					calculated_total += guide * get_book_unit_price(subj, cls_g, "guide")
+				if pyqp:
+					total_qty += pyqp
+					calculated_total += pyqp * get_book_unit_price(subj, cls_g, "pyqp")
+
+		grand_total = flt(data.get("grand_total") or calculated_total)
+		if not grand_total or grand_total <= 0:
+			grand_total = calculated_total
 
 		si_name = None
 		checkout_context = None
 		if grand_total > 0:
-			si_name, checkout_context = initiate_student_portal_book_order_payment(customer, grand_total, doc.name)
+			si_name, checkout_context = initiate_student_portal_book_order_payment(
+				customer, grand_total, total_qty=total_qty, doc_name=doc.name, book_items=book_items
+			)
 
 		return {
 			"success": True,
