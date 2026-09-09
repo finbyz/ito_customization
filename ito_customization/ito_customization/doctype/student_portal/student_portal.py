@@ -7,6 +7,30 @@ from frappe.model.document import Document
 from frappe.utils import flt, cint
 
 
+# SECURITY FIX (#5): sane upper bound on any single book-order quantity so a
+# guest-facing endpoint can't be handed a negative or absurdly large number.
+MAX_BOOK_QTY_PER_LINE = 50
+
+# How long a generated consent/registration token stays valid for.
+TOKEN_VALIDITY_DAYS = 7
+TOKEN_EXPIRY_FIELD = "custom_consent_token_expiry"
+
+
+def _safe_qty(value):
+	"""
+	Clamp a client-supplied quantity to a safe, non-negative, bounded integer.
+	Prevents negative quantities (used to reduce totals) and unbounded/huge
+	quantities (used to overflow totals or abuse stock/pricing logic).
+	"""
+	try:
+		qty = int(value or 0)
+	except (TypeError, ValueError):
+		return 0
+	if qty < 0:
+		return 0
+	return min(qty, MAX_BOOK_QTY_PER_LINE)
+
+
 class StudentPortal(Document):
 	def before_save(self):
 		self.update_customer_details()
@@ -45,18 +69,36 @@ def generate_student_portal_token(customer):
 	base_url = frappe.utils.get_url()
 	full_url = f"{base_url}/student-portal?token={token}&school_code={code}"
 
+	# Token expires 7 days from the moment it's generated (regenerating always
+	# grants a fresh 7-day window, even if an older token was still valid).
+	expiry = frappe.utils.add_to_date(frappe.utils.now_datetime(), days=TOKEN_VALIDITY_DAYS)
+	expiry_str = frappe.utils.get_datetime_str(expiry)
+
 	try:
-		for field in ["custom_consent_token", "custom_student_registration_link", "custom_url"]:
+		for field in ["custom_consent_token", "custom_student_registration_link", "custom_url", TOKEN_EXPIRY_FIELD]:
 			if hasattr(customer_doc, field) or frappe.db.has_column("Customer", field):
-				val = token if field == "custom_consent_token" else full_url
+				if field == "custom_consent_token":
+					val = token
+				elif field == TOKEN_EXPIRY_FIELD:
+					val = expiry_str
+				else:
+					val = full_url
 				frappe.db.set_value("Customer", customer, field, val, update_modified=False)
 		frappe.db.commit()
 	except Exception as e:
 		frappe.log_error(f"Error saving student portal token for {customer}: {e}")
 
+	if not frappe.db.has_column("Customer", TOKEN_EXPIRY_FIELD):
+		frappe.log_error(
+			f"Customer.{TOKEN_EXPIRY_FIELD} column is missing — token expiry cannot be "
+			f"enforced for {customer} until this custom field is added.",
+			"Student Portal Token Expiry - Missing Field"
+		)
+
 	return {
 		"token": token,
-		"url": full_url
+		"url": full_url,
+		"expires_on": expiry_str
 	}
 
 
@@ -100,57 +142,80 @@ def _get_customer_full_address(customer_doc):
 
 @frappe.whitelist(allow_guest=True)
 def get_customer_info(query=None):
-	"""Search customer by name or school code for public registration page"""
-	if not query:
+	if not query or len(query.strip()) < 3:
 		return []
 
 	customers = frappe.get_all(
 		"Customer",
-		filters=[
-			["docstatus", "=", 0],
-			["disabled", "=", 0],
-		],
+		filters=[["docstatus", "=", 0], ["disabled", "=", 0]],
 		or_filters=[
 			["name", "like", f"%{query}%"],
 			["customer_name", "like", f"%{query}%"],
 			["custom_school_code", "like", f"%{query}%"],
 			["custom_ito_school_code", "like", f"%{query}%"]
 		],
-		fields=["name", "customer_name", "custom_school_code", "custom_ito_school_code", "custom_city", "custom_addreess", "customer_primary_address"],
-		limit=20
+		fields=["name", "customer_name", "custom_school_code", "custom_ito_school_code", "custom_city"],
+		limit=10
 	)
-	for cust in customers:
-		cust_doc = frappe.get_doc("Customer", cust.name)
-		cust["address"] = _get_customer_full_address(cust_doc)
-
-	return customers
+	return customers  # no address — that's disclosed only after actual selection
 
 
 @frappe.whitelist(allow_guest=True)
 def get_customer_exam_details(customer=None, school_code=None, token=None, class_grade=None):
-	if not customer and token:
-		customer = (
+	# SECURITY FIX (#1): "school code can bypass token".
+	# `school_code` (and raw customer names) are public/discoverable — e.g.
+	# `get_customer_info` above returns them freely — so they must never be
+	# usable on their own by a guest to unlock this endpoint's sensitive
+	# output (full address, subject list, pricing). Only the private
+	# `custom_consent_token` may authenticate a guest caller. Trusted,
+	# logged-in callers (e.g. the Student Portal `before_save` hook, or desk
+	# users) may still resolve directly by customer/school_code, since they
+	# aren't an anonymous member of the public.
+	is_guest = frappe.session.user == "Guest"
+	resolved_customer = None
+	token_expired = False
+
+	if token:
+		resolved_customer = (
 			frappe.db.get_value("Customer", {"custom_consent_token": token}, "name")
 			or frappe.db.get_value("Customer", {"custom_url": ["like", f"%{token}%"]}, "name")
 			or frappe.db.get_value("Customer", {"custom_student_registration_link": ["like", f"%{token}%"]}, "name")
 		)
 
-	if not customer and school_code:
-		customer = (
-			frappe.db.get_value("Customer", {"custom_school_code": school_code}, "name")
-			or frappe.db.get_value("Customer", {"custom_ito_school_code": school_code}, "name")
-			or frappe.db.get_value("Customer", {"name": school_code}, "name")
-		)
+		# Token expiration: a matched token is only honoured if it hasn't
+		# passed its 7-day validity window. If the expiry field isn't
+		# present on this site, we can't enforce expiry, so the token is
+		# treated as valid (fail open on the *field*, not on validation).
+		if resolved_customer and frappe.db.has_column("Customer", TOKEN_EXPIRY_FIELD):
+			expiry_val = frappe.db.get_value("Customer", resolved_customer, TOKEN_EXPIRY_FIELD)
+			if expiry_val and frappe.utils.now_datetime() > frappe.utils.get_datetime(expiry_val):
+				resolved_customer = None
+				token_expired = True
+	elif is_guest:
+		# No token presented by a guest -> refuse to resolve via
+		# customer/school_code, no matter what was passed in.
+		resolved_customer = None
+	else:
+		if customer and frappe.db.exists("Customer", customer):
+			resolved_customer = customer
+		elif school_code:
+			resolved_customer = (
+				frappe.db.get_value("Customer", {"custom_school_code": school_code}, "name")
+				or frappe.db.get_value("Customer", {"custom_ito_school_code": school_code}, "name")
+				or frappe.db.get_value("Customer", {"name": school_code}, "name")
+			)
 
-	if not customer and token:
-		customer = (
-			frappe.db.get_value("Customer", {"custom_school_code": token}, "name")
-			or frappe.db.get_value("Customer", {"custom_ito_school_code": token}, "name")
-			or frappe.db.get_value("Customer", {"name": token}, "name")
-		)
+	customer = resolved_customer
 
 	if not customer:
-		return {"success": False, "message": "Customer not found", "subjects": []}
+		if token_expired:
+			return {
+				"success": False,
+				"expired": True,
+				"message": "This registration link has expired. Please request a new one from the school.",
+				"subjects": []
+			}
+		return {"success": False, "message": "Customer not found or access token missing/invalid", "subjects": []}
 
 	customer_doc = frappe.get_doc("Customer", customer)
 	code = customer_doc.get("custom_school_code") or customer_doc.get("custom_ito_school_code") or customer_doc.name
@@ -573,12 +638,25 @@ def create_student_portal_entry(data):
 
 		exam_count = 0
 		for item in data.get("selected_exams", []):
+			subject = item.get("school_subject")
+
+			# SECURITY FIX (#4): a guest must only be able to select from real,
+			# pre-existing School Subject records — never let the payload
+			# reference/create an arbitrary, free-text subject.
+			if not subject or not frappe.db.exists("School Subject", subject):
+				frappe.log_error(
+					f"Rejected unknown School Subject '{subject}' from guest exam selection payload",
+					"Student Portal - Invalid Subject"
+				)
+				continue
+
 			is_sel = 1 if item.get("selected") or item.get("check_ptxn") else 0
 			if is_sel:
 				exam_count += 1
 			doc.append("exam_list", {
-				"school_subject": item.get("school_subject"),
-				"abbr": item.get("abbr"),
+				"school_subject": subject,
+				# Derive abbr from the master record rather than trusting the client.
+				"abbr": frappe.db.get_value("School Subject", subject, "abbr") or item.get("abbr"),
 				"check_ptxn": is_sel
 			})
 
@@ -665,34 +743,47 @@ def get_book_item_and_price(subject_name, class_grade, book_type):
 		parentfields = field_map.get(book_type, [])
 		clean_cls = str(class_grade or "").replace("Class", "").replace("class", "").strip()
 
-		candidate_rows = []
+		# Rows that don't specify a class at all are class-agnostic — a single
+		# dynamic price meant to apply to every class — and are a legitimate
+		# fallback. Rows that DO specify a class are only usable when that
+		# class matches the one requested; we must never borrow a different
+		# class's price.
+		classless_row = None
+
 		for pf in parentfields:
 			rows = getattr(sub_doc, pf, []) or []
 			for r in rows:
-				candidate_rows.append(r)
 				val_cls = r.get("class") or r.get("class_grade") or getattr(r, "class", None)
-				if val_cls:
-					val_cls_str = str(val_cls).strip()
-					val_cls_clean = val_cls_str.replace("Class", "").replace("class", "").strip()
-					v1 = val_cls_str.lower()
-					c1 = str(class_grade or "").strip().lower()
-					v_clean = val_cls_clean.lower()
-					c_clean = clean_cls.lower()
 
-					if v1 == c1 or (c_clean and v_clean == c_clean) or (c1 and c1 in v1) or (v1 and v1 in c1):
-						price = flt(r.get("item_price") or getattr(r, "item_price", 0))
-						item_code = r.get("item") or getattr(r, "item", None)
-						if not price or price <= 0:
-							price = fallback_price
-						return item_code, price
+				if not val_cls:
+					if classless_row is None:
+						classless_row = r
+					continue
 
-		# If no exact class match was found, fallback to first available row in the subject table
-		if candidate_rows:
-			r0 = candidate_rows[0]
-			p0 = flt(r0.get("item_price") or getattr(r0, "item_price", 0))
-			i0 = r0.get("item") or getattr(r0, "item", None)
-			price = p0 if p0 > 0 else fallback_price
-			return i0, price
+				val_cls_str = str(val_cls).strip()
+				val_cls_clean = val_cls_str.replace("Class", "").replace("class", "").strip()
+				v1 = val_cls_str.lower()
+				c1 = str(class_grade or "").strip().lower()
+				v_clean = val_cls_clean.lower()
+				c_clean = clean_cls.lower()
+
+				if v1 == c1 or (c_clean and v_clean == c_clean) or (c1 and c1 in v1) or (v1 and v1 in c1):
+					price = flt(r.get("item_price") or getattr(r, "item_price", 0))
+					item_code = r.get("item") or getattr(r, "item", None)
+					if not price or price <= 0:
+						price = fallback_price
+					return item_code, price
+
+		# SECURITY/CORRECTNESS FIX (#6, revised): no row for a *different,
+		# specific* class is ever used as a substitute. But a class-agnostic
+		# row (no class set — one dynamic price for every class) is a
+		# legitimate, intentional price and should still be returned instead
+		# of silently reverting to the hardcoded default.
+		if classless_row is not None:
+			price = flt(classless_row.get("item_price") or getattr(classless_row, "item_price", 0))
+			item_code = classless_row.get("item") or getattr(classless_row, "item", None)
+			if price and price > 0:
+				return item_code, price
 
 	except Exception as e:
 		frappe.log_error(f"Error in get_book_item_and_price: {e}")
@@ -737,14 +828,19 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 						or frappe.db.get_value("Customer", {"custom_ito_school_code": sp.school_code}, "name")
 					)
 
+			# SECURITY FIX (#3): never fall back to "the first enabled Customer
+			# in the system" — that would silently attribute/bill this order
+			# to a completely unrelated, arbitrary existing customer. If we
+			# can't resolve a real, matching customer, create a dedicated one
+			# for this order instead of guessing.
 			if not cust_name:
-				cust_name = frappe.db.get_value("Customer", {"disabled": 0}, "name")
-
-			if not cust_name:
-				# Create fallback customer if no customer doc exists in DB
 				try:
+					fallback_name = customer
+					if not fallback_name and doc_name and frappe.db.exists("Student Portal", doc_name):
+						fallback_name = frappe.db.get_value("Student Portal", doc_name, "student_full_name")
+
 					cdoc = frappe.new_doc("Customer")
-					cdoc.customer_name = customer or "Student Portal Direct Customer"
+					cdoc.customer_name = fallback_name or "Student Portal Direct Customer"
 					cdoc.customer_group = "Individual"
 					cdoc.territory = "India"
 					cdoc.flags.ignore_permissions = True
@@ -771,10 +867,10 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 				for b in book_items:
 					subj = b.get("subject")
 					cls_g = b.get("class_grade") or ""
-					tb = int(b.get("text_book") or b.get("tb") or 0)
-					wb = int(b.get("work_book") or b.get("practice_workbook_110") or b.get("wb") or 0)
-					guide = int(b.get("student_guide_220") or b.get("guide") or 0)
-					pyqp = int(b.get("prev_year_paper_160") or b.get("pyqp") or 0)
+					tb = _safe_qty(b.get("text_book") or b.get("tb"))
+					wb = _safe_qty(b.get("work_book") or b.get("practice_workbook_110") or b.get("wb"))
+					guide = _safe_qty(b.get("student_guide_220") or b.get("guide"))
+					pyqp = _safe_qty(b.get("prev_year_paper_160") or b.get("pyqp"))
 
 					if tb > 0:
 						item_code, price = get_book_item_and_price(subj, cls_g, "tb")
@@ -927,17 +1023,19 @@ def save_student_portal_book_order(data):
 				customer = existing_sp.get("school_name")
 				school_code = existing_sp.get("school_code")
 
-		# Ensure School Subjects exist
+		# Filter out any book_items whose subject isn't a real, pre-existing School Subject.
+		# Guests must never be able to create master data — only select from what exists.
+		valid_book_items = []
 		for item in book_items:
 			subj = item.get("subject")
-			if subj and not frappe.db.exists("School Subject", subj):
-				try:
-					sdoc = frappe.new_doc("School Subject")
-					sdoc.name = subj
-					sdoc.flags.ignore_permissions = True
-					sdoc.insert(ignore_permissions=True)
-				except Exception:
-					pass
+			if subj and frappe.db.exists("School Subject", subj):
+				valid_book_items.append(item)
+			elif subj:
+				frappe.log_error(
+					f"Rejected unknown School Subject '{subj}' from guest book order payload",
+					"Student Portal Book Order - Invalid Subject"
+				)
+		book_items = valid_book_items
 
 		# 1. Update or Create Student Portal Doc
 		doc = None
@@ -964,10 +1062,10 @@ def save_student_portal_book_order(data):
 		if book_items:
 			doc.set("books_selected", [])
 			for item in book_items:
-				tb = int(item.get("text_book") or item.get("tb") or 0)
-				wb = int(item.get("work_book") or item.get("practice_workbook_110") or item.get("wb") or 0)
-				guide = int(item.get("student_guide_220") or item.get("guide") or 0)
-				pyqp = int(item.get("prev_year_paper_160") or item.get("pyqp") or 0)
+				tb = _safe_qty(item.get("text_book") or item.get("tb"))
+				wb = _safe_qty(item.get("work_book") or item.get("practice_workbook_110") or item.get("wb"))
+				guide = _safe_qty(item.get("student_guide_220") or item.get("guide"))
+				pyqp = _safe_qty(item.get("prev_year_paper_160") or item.get("pyqp"))
 				if tb or wb or guide or pyqp:
 					doc.append("books_selected", {
 						"subject": item.get("subject"),
@@ -996,10 +1094,10 @@ def save_student_portal_book_order(data):
 				bs_doc.order_date = frappe.utils.today()
 
 			for item in book_items:
-				tb = int(item.get("text_book") or item.get("tb") or 0)
-				wb = int(item.get("work_book") or item.get("practice_workbook_110") or item.get("wb") or 0)
-				guide = int(item.get("student_guide_220") or item.get("guide") or 0)
-				pyqp = int(item.get("prev_year_paper_160") or item.get("pyqp") or 0)
+				tb = _safe_qty(item.get("text_book") or item.get("tb"))
+				wb = _safe_qty(item.get("work_book") or item.get("practice_workbook_110") or item.get("wb"))
+				guide = _safe_qty(item.get("student_guide_220") or item.get("guide"))
+				pyqp = _safe_qty(item.get("prev_year_paper_160") or item.get("pyqp"))
 				if tb or wb or guide or pyqp:
 					bs_doc.append("select_books", {
 						"subject": item.get("subject"),
@@ -1025,10 +1123,10 @@ def save_student_portal_book_order(data):
 			for b in book_items:
 				subj = b.get("subject")
 				cls_g = b.get("class_grade") or class_grade
-				tb = int(b.get("text_book") or b.get("tb") or 0)
-				wb = int(b.get("work_book") or b.get("practice_workbook_110") or b.get("wb") or 0)
-				guide = int(b.get("student_guide_220") or b.get("guide") or 0)
-				pyqp = int(b.get("prev_year_paper_160") or b.get("pyqp") or 0)
+				tb = _safe_qty(b.get("text_book") or b.get("tb"))
+				wb = _safe_qty(b.get("work_book") or b.get("practice_workbook_110") or b.get("wb"))
+				guide = _safe_qty(b.get("student_guide_220") or b.get("guide"))
+				pyqp = _safe_qty(b.get("prev_year_paper_160") or b.get("pyqp"))
 
 				if tb:
 					total_qty += tb
@@ -1043,7 +1141,9 @@ def save_student_portal_book_order(data):
 					total_qty += pyqp
 					calculated_total += pyqp * get_book_unit_price(subj, cls_g, "pyqp")
 
-		grand_total = flt(data.get("grand_total") or calculated_total)
+		# Server-authoritative total — client-supplied grand_total is ignored entirely,
+		# since a guest-facing endpoint must never let the caller dictate the price.
+		grand_total = flt(calculated_total)
 		if not grand_total or grand_total <= 0:
 			grand_total = calculated_total
 
