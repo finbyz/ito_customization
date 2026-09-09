@@ -306,6 +306,17 @@ def get_customer_exam_details(customer=None, school_code=None, token=None, class
 	fee_info = get_registration_fee("Student Portal Registration")
 	registration_fee_rate = flt(fee_info.get("rate_inr") or fee_info.get("rate_usd") or 150) if fee_info and fee_info.get("success") else 150.0
 
+	raw_expiry = customer_doc.get(TOKEN_EXPIRY_FIELD) or customer_doc.get("custom_consent_token_expiry")
+	if not raw_expiry and frappe.db.has_column("Customer", TOKEN_EXPIRY_FIELD):
+		raw_expiry = frappe.db.get_value("Customer", customer_doc.name, TOKEN_EXPIRY_FIELD)
+
+	expiry_str = None
+	if raw_expiry:
+		try:
+			expiry_str = frappe.utils.get_datetime_str(raw_expiry)
+		except Exception:
+			expiry_str = str(raw_expiry)
+
 	return {
 		"success": True,
 		"customer": customer_doc.name,
@@ -314,7 +325,8 @@ def get_customer_exam_details(customer=None, school_code=None, token=None, class
 		"address": address,
 		"subjects": subject_details,
 		"registration_fee_rate": registration_fee_rate,
-		"is_little_champ": is_lc
+		"is_little_champ": is_lc,
+		"custom_consent_token_expiry": expiry_str
 	}
 
 
