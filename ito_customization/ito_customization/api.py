@@ -2020,13 +2020,23 @@ def save_bulk_student_list():
 			else:
 				academic_year = f"AY-{raw_year}"
 
-		if not frappe.db.exists("Academic Years", academic_year):
-			existing = frappe.db.get_value("Academic Years", {}, "name", order_by="creation desc")
+		if not frappe.db.exists("School Academic Year", academic_year):
+			existing = frappe.db.get_value("School Academic Year", {}, "name", order_by="creation desc")
 			if existing:
 				academic_year = existing
 
-		dynamic_subjects = get_subjects_for_year(academic_year, 0)
-		valid_subject_codes = [s["code"] for s in dynamic_subjects]
+		dynamic_subjects = get_subjects_for_year(academic_year, 0, customer_name=customer_name)
+
+		# Build lookup: normalized abbr/code/name -> real subject dict.
+		subject_lookup = {}
+		for sub in dynamic_subjects:
+			s_abbr = (sub.get("abbr") or sub.get("shortName") or sub.get("code") or "").strip()
+			s_code = (sub.get("code") or "").strip()
+			s_name = (sub.get("name") or "").strip()
+
+			for key in (s_abbr, s_code, s_name):
+				if key:
+					subject_lookup[key.strip().lower()] = sub
 
 		original_flag = frappe.flags.ignore_permissions
 		frappe.flags.ignore_permissions = True
@@ -2034,8 +2044,10 @@ def save_bulk_student_list():
 		try:
 			bsl_name = frappe.db.get_value("Bulk Student List", {
 				"customer": customer_name,
-				"academic_year": academic_year
-			})
+				"academic_year": academic_year,
+				"for_student": 1,
+				"is_submitted": 0
+			}, "name", order_by="creation desc")
 
 			if bsl_name:
 				bsl = frappe.get_doc("Bulk Student List", bsl_name)
@@ -2046,34 +2058,55 @@ def save_bulk_student_list():
 				bsl.academic_year = academic_year
 
 			bsl.for_little_champ = 0
+			bsl.for_wof_list = 0
+			bsl.for_wof_olympiad = 0
 			bsl.for_student = 1
 
 			for student in students:
+				student_name = (student.get("student_name") or "").strip().upper()
 				subjects = student.get("subjects", {})
 
-				row_data = {
-					"student_name": student.get("student_name", ""),
-					"mobile_no": student.get("mobile", ""),
-				}
+				if not student_name or not isinstance(subjects, dict):
+					continue
 
-				for code in valid_subject_codes:
-					row_data[code] = 1 if subjects.get(code, False) else 0
+				for sub_key, sub_val in subjects.items():
+					is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
+					if not is_checked:
+						continue
 
-				bsl.append("student_list", row_data)
+					matched = subject_lookup.get(str(sub_key).strip().lower())
+					if not matched:
+						frappe.log_error(
+							f"Rejected unknown subject '{sub_key}' for student '{student_name}' "
+							f"(customer={customer_name}, academic_year={academic_year})",
+							"Bulk Student List - Invalid Subject"
+						)
+						continue
+
+					subject_name = matched.get("name")
+					subject_abbr = matched.get("abbr") or matched.get("shortName") or matched.get("code") or ""
+
+					if not subject_name or not frappe.db.exists("School Subject", subject_name):
+						continue
+
+					bsl.append("student_list", {
+						"student_name": student_name,
+						"school_subject": subject_name,
+						"abbr": subject_abbr,
+						"check_ptxn": 1,
+					})
 
 			if bsl.is_new():
 				bsl.insert(ignore_permissions=True)
 			else:
 				bsl.save(ignore_permissions=True)
 
-			# NO explicit commit - let Frappe handle it
 			return {"success": True, "name": bsl.name}
 
 		finally:
 			frappe.flags.ignore_permissions = original_flag
 
 	except Exception as e:
-		# NO explicit rollback - let Frappe handle exceptions
 		frappe.log_error(frappe.get_traceback(), "Bulk Student List Save Error")
 		return {"success": False, "message": str(e)}
 
@@ -2109,13 +2142,22 @@ def save_little_champ_bulk():
 			else:
 				academic_year = f"AY-{raw_year}"
 
-		if not frappe.db.exists("Academic Years", academic_year):
-			existing = frappe.db.get_value("Academic Years", {}, "name", order_by="creation desc")
+		if not frappe.db.exists("School Academic Year", academic_year):
+			existing = frappe.db.get_value("School Academic Year", {}, "name", order_by="creation desc")
 			if existing:
 				academic_year = existing
 
-		dynamic_subjects = get_subjects_for_year(academic_year, is_little_champ=1)
-		valid_subject_codes = [s["code"] for s in dynamic_subjects]
+		dynamic_subjects = get_subjects_for_year(academic_year, is_little_champ=1, customer_name=customer_name)
+
+		subject_lookup = {}
+		for sub in dynamic_subjects:
+			s_abbr = (sub.get("abbr") or sub.get("shortName") or sub.get("code") or "").strip()
+			s_code = (sub.get("code") or "").strip()
+			s_name = (sub.get("name") or "").strip()
+
+			for key in (s_abbr, s_code, s_name):
+				if key:
+					subject_lookup[key.strip().lower()] = sub
 
 		original_flag = frappe.flags.ignore_permissions
 		frappe.flags.ignore_permissions = True
@@ -2124,12 +2166,13 @@ def save_little_champ_bulk():
 			bsl_name = frappe.db.get_value("Bulk Student List", {
 				"customer": customer_name,
 				"academic_year": academic_year,
-				"for_little_champ": 1
-			})
+				"for_little_champ": 1,
+				"is_submitted": 0
+			}, "name", order_by="creation desc")
 
 			if bsl_name:
 				bsl = frappe.get_doc("Bulk Student List", bsl_name)
-				bsl.student_list = []
+				bsl.little_champ_list = []
 			else:
 				bsl = frappe.new_doc("Bulk Student List")
 				bsl.customer = customer_name
@@ -2137,33 +2180,56 @@ def save_little_champ_bulk():
 
 			bsl.for_little_champ = 1
 			bsl.for_student = 0
+			bsl.for_wof_list = 0
+			bsl.for_wof_olympiad = 0
+			bsl.is_submitted = 1
 
 			for student in students:
+				student_name = (student.get("student_name") or "").strip().upper()
 				subjects = student.get("subjects", {})
 
-				row_data = {
-					"student_name": student.get("student_name", ""),
-					"mobile_no": student.get("mobile", ""),
-				}
+				if not student_name or not isinstance(subjects, dict):
+					continue
 
-				for code in valid_subject_codes:
-					row_data[code] = 1 if subjects.get(code, False) else 0
+				for sub_key, sub_val in subjects.items():
+					is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
+					if not is_checked:
+						continue
 
-				bsl.append("student_list", row_data)
+					matched = subject_lookup.get(str(sub_key).strip().lower())
+					if not matched:
+						frappe.log_error(
+							f"Rejected unknown subject '{sub_key}' for student '{student_name}' "
+							f"(customer={customer_name}, academic_year={academic_year})",
+							"Little Champ Bulk - Invalid Subject"
+						)
+						continue
+
+					subject_name = matched.get("name")
+					subject_abbr = matched.get("abbr") or matched.get("shortName") or matched.get("code") or ""
+
+					if not subject_name or not frappe.db.exists("School Subject", subject_name):
+						continue
+
+					bsl.append("little_champ_list", {
+						"student_name": student_name,
+						"school_subject": subject_name,
+						"abbr": subject_abbr,
+						"check_ptxn": 1,
+							
+					})
 
 			if bsl.is_new():
 				bsl.insert(ignore_permissions=True)
 			else:
 				bsl.save(ignore_permissions=True)
 
-			# NO explicit commit - let Frappe handle it
 			return {"success": True, "name": bsl.name}
 
 		finally:
 			frappe.flags.ignore_permissions = original_flag
 
 	except Exception as e:
-		# NO explicit rollback - let Frappe handle exceptions
 		frappe.log_error(frappe.get_traceback(), "Little Champ Bulk Save Error")
 		return {"success": False, "message": str(e)}
 
@@ -2411,7 +2477,6 @@ def save_wof_student_list():
 			if existing:
 				academic_year = existing
 
-		# Find existing unsubmitted Bulk Student List for this customer or create new
 		bsl_name = frappe.db.get_value("Bulk Student List", {
 			"customer": customer_name,
 			"for_wof_list": 1,
@@ -2431,24 +2496,18 @@ def save_wof_student_list():
 		bsl.for_little_champ = 0
 		bsl.is_submitted = 1
 
-		# Fetch dynamic subjects configured for this customer
 		dynamic_subjects = get_subjects_for_year(academic_year, 0, customer_name=customer_name, for_chitrakala=1)
 
-		# Build lookup map of subject abbr/code -> WOF List column field
-		subject_field_map = {}
+		subject_lookup = {}
 		for sub in dynamic_subjects:
-			s_abbr = (sub.get("abbr") or sub.get("shortName") or sub.get("code") or "").strip().upper()
-			s_code = (sub.get("code") or "").strip().lower()
+			s_abbr = (sub.get("abbr") or sub.get("shortName") or sub.get("code") or "").strip()
+			s_code = (sub.get("code") or "").strip()
 			s_name = (sub.get("name") or "").strip()
 
-			field_name = map_abbr_to_wof_list_field(s_abbr) or map_abbr_to_wof_list_field(s_code)
-			if field_name:
-				subject_field_map[s_abbr] = field_name
-				subject_field_map[s_code] = field_name
-				subject_field_map[s_name.lower()] = field_name
-				subject_field_map[s_name.upper()] = field_name
+			for key in (s_abbr, s_code, s_name):
+				if key:
+					subject_lookup[key.strip().lower()] = sub
 
-		# Append students to table_xxdu (WOF List child table)
 		for batch_key, batch_data in rosters.items():
 			students = []
 			if isinstance(batch_data, dict):
@@ -2456,14 +2515,8 @@ def save_wof_student_list():
 			elif isinstance(batch_data, list):
 				students = batch_data
 
-			class_grade = batch_data.get("class_grade") or batch_data.get("classGrade") or (batch_key.split("_")[0] if "_" in batch_key else "") if isinstance(batch_data, dict) else ""
-			section = batch_data.get("section") or (batch_key.split("_")[1] if "_" in batch_key else "") if isinstance(batch_data, dict) else ""
-			offline_exam = 1 if (isinstance(batch_data, dict) and (batch_data.get("offline_exam") or batch_data.get("offlineExam"))) else 0
-			online_exam = 1 if (isinstance(batch_data, dict) and (batch_data.get("online_exam") or batch_data.get("onlineExam"))) else 0
-
 			for st in students:
 				student_name = (st.get("student_name") or st.get("name") or "").strip().upper()
-				parent_name = (st.get("parent_name") or st.get("parentName") or "").strip()
 				subs = st.get("subjects", {})
 				if isinstance(subs, str):
 					try:
@@ -2471,60 +2524,41 @@ def save_wof_student_list():
 					except Exception:
 						subs = {}
 
-				if not student_name and not parent_name:
+				if not student_name or not isinstance(subs, dict):
 					continue
 
-				row_data = {
-					"student_name": student_name,
-					"parent_name": parent_name,
-					"class_grade": class_grade,
-					"section": section,
-					"offline_exam": offline_exam,
-					"online_exam": online_exam,
-					"colouring": 0,
-					"handwriting": 0,
-					"sketching": 0,
-					"cartoon": 0,
-					"caricature": 0,
-					"greeting_card": 0,
-					"iso": 0,
-					"imo": 0,
-					"ieo": 0,
-					"iabo": 0,
-					"isbo": 0,
-					"wgko": 0,
-					"waio": 0,
-					"wflo": 0,
-					"wiho": 0,
-				}
+				for sub_key, sub_val in subs.items():
+					is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
+					if not is_checked:
+						continue
 
-				if isinstance(subs, dict):
-					frappe.log_error(f"DEBUG: Student={student_name}, subs={subs}, subject_field_map_keys={list(subject_field_map.keys())}", "WOF Student List Debug")
-					for sub_key, sub_val in subs.items():
-						is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
-						if not is_checked:
-							continue
-						
-						k_str = str(sub_key).strip()
-						field_name = (
-							subject_field_map.get(k_str) or
-							subject_field_map.get(k_str.upper()) or
-							subject_field_map.get(k_str.lower()) or
-							map_abbr_to_wof_list_field(k_str)
+					matched = subject_lookup.get(str(sub_key).strip().lower())
+					if not matched:
+						frappe.log_error(
+							f"Rejected unknown subject '{sub_key}' for student '{student_name}' "
+							f"(customer={customer_name}, academic_year={academic_year})",
+							"WOF Student List - Invalid Subject"
 						)
-						frappe.log_error(f"DEBUG: k_str={k_str}, field_name={field_name}", "WOF Student List Debug")
-						if field_name:
-							row_data[field_name] = 1
+						continue
 
-				frappe.log_error(f"DEBUG: Final row_data={row_data}", "WOF Student List Debug")
-				bsl.append("table_xxdu", row_data)
+					subject_name = matched.get("name")
+					subject_abbr = matched.get("abbr") or matched.get("shortName") or matched.get("code") or ""
+
+					if not subject_name or not frappe.db.exists("School Subject", subject_name):
+						continue
+
+					bsl.append("table_xxdu", {
+						"student_name": student_name,
+						"school_subject": subject_name,
+						"abbr": subject_abbr,
+						"check_ptxn": 1,
+					})
 
 		if bsl.is_new():
 			bsl.insert(ignore_permissions=True)
 		else:
 			bsl.save(ignore_permissions=True)
 
-		# Clear draft cache on final submission
 		try:
 			frappe.cache().delete_value(f"wof_student_draft_{customer_name}_{academic_year}")
 			frappe.cache().delete_value(f"wof_student_draft_{customer_name}_{raw_year}")
@@ -2532,7 +2566,6 @@ def save_wof_student_list():
 		except Exception as e:
 			frappe.log_error(frappe.get_traceback(), "WOF Student List Cache Clear Error")
 
-		# Log comment on customer
 		try:
 			customer_doc = frappe.get_doc("Customer", customer_name)
 			total_students = totals.get("total_students", len(bsl.table_xxdu))
@@ -2618,24 +2651,23 @@ def save_wof_student_draft():
 		bsl.for_little_champ = 0
 		bsl.is_submitted = 0
 
-		# Fetch dynamic subjects configured for this customer
+		# Fetch dynamic subjects configured for this customer (Chitrakala set)
 		dynamic_subjects = get_subjects_for_year(academic_year, 0, customer_name=customer_name, for_chitrakala=1)
 
-		# Build lookup map of subject abbr/code -> WOF List column field
-		subject_field_map = {}
+		# Build lookup: normalized abbr/code/name -> real subject dict.
+		# Driven entirely by the customer's actual configured subjects, so
+		# any subject the school is configured for is recognized — nothing
+		# is silently dropped just because it wasn't in a hardcoded map.
+		subject_lookup = {}
 		for sub in dynamic_subjects:
-			s_abbr = (sub.get("abbr") or sub.get("shortName") or sub.get("code") or "").strip().upper()
-			s_code = (sub.get("code") or "").strip().lower()
+			s_abbr = (sub.get("abbr") or sub.get("shortName") or sub.get("code") or "").strip()
+			s_code = (sub.get("code") or "").strip()
 			s_name = (sub.get("name") or "").strip()
 
-			field_name = map_abbr_to_wof_list_field(s_abbr) or map_abbr_to_wof_list_field(s_code)
-			if field_name:
-				subject_field_map[s_abbr] = field_name
-				subject_field_map[s_code] = field_name
-				subject_field_map[s_name.lower()] = field_name
-				subject_field_map[s_name.upper()] = field_name
+			for key in (s_abbr, s_code, s_name):
+				if key:
+					subject_lookup[key.strip().lower()] = sub
 
-		# Append students to table_xxdu (WOF List child table)
 		for batch_key, batch_data in rosters.items():
 			students = []
 			if isinstance(batch_data, dict):
@@ -2643,14 +2675,8 @@ def save_wof_student_draft():
 			elif isinstance(batch_data, list):
 				students = batch_data
 
-			class_grade = batch_data.get("class_grade") or batch_data.get("classGrade") or (batch_key.split("_")[0] if "_" in batch_key else "") if isinstance(batch_data, dict) else ""
-			section = batch_data.get("section") or (batch_key.split("_")[1] if "_" in batch_key else "") if isinstance(batch_data, dict) else ""
-			offline_exam = 1 if (isinstance(batch_data, dict) and (batch_data.get("offline_exam") or batch_data.get("offlineExam"))) else 0
-			online_exam = 1 if (isinstance(batch_data, dict) and (batch_data.get("online_exam") or batch_data.get("onlineExam"))) else 0
-
 			for st in students:
 				student_name = (st.get("student_name") or st.get("name") or "").strip().upper()
-				parent_name = (st.get("parent_name") or st.get("parentName") or "").strip()
 				subs = st.get("subjects", {})
 				if isinstance(subs, str):
 					try:
@@ -2658,50 +2684,35 @@ def save_wof_student_draft():
 					except Exception:
 						subs = {}
 
-				if not student_name and not parent_name:
+				if not student_name or not isinstance(subs, dict):
 					continue
 
-				row_data = {
-					"student_name": student_name,
-					"parent_name": parent_name,
-					"class_grade": class_grade,
-					"section": section,
-					"offline_exam": offline_exam,
-					"online_exam": online_exam,
-					"colouring": 0,
-					"handwriting": 0,
-					"sketching": 0,
-					"cartoon": 0,
-					"caricature": 0,
-					"greeting_card": 0,
-					"iso": 0,
-					"imo": 0,
-					"ieo": 0,
-					"iabo": 0,
-					"isbo": 0,
-					"wgko": 0,
-					"waio": 0,
-					"wflo": 0,
-					"wiho": 0,
-				}
+				for sub_key, sub_val in subs.items():
+					is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
+					if not is_checked:
+						continue
 
-				if isinstance(subs, dict):
-					for sub_key, sub_val in subs.items():
-						is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
-						if not is_checked:
-							continue
-						
-						k_str = str(sub_key).strip()
-						field_name = (
-							subject_field_map.get(k_str) or
-							subject_field_map.get(k_str.upper()) or
-							subject_field_map.get(k_str.lower()) or
-							map_abbr_to_wof_list_field(k_str)
+					matched = subject_lookup.get(str(sub_key).strip().lower())
+					if not matched:
+						frappe.log_error(
+							f"Rejected unknown subject '{sub_key}' for student '{student_name}' "
+							f"(customer={customer_name}, academic_year={academic_year})",
+							"WOF Student Draft - Invalid Subject"
 						)
-						if field_name:
-							row_data[field_name] = 1
+						continue
 
-				bsl.append("table_xxdu", row_data)
+					subject_name = matched.get("name")
+					subject_abbr = matched.get("abbr") or matched.get("shortName") or matched.get("code") or ""
+
+					if not subject_name or not frappe.db.exists("School Subject", subject_name):
+						continue
+
+					bsl.append("table_xxdu", {
+						"student_name": student_name,
+						"school_subject": subject_name,
+						"abbr": subject_abbr,
+						"check_ptxn": 1,
+					})
 
 		if bsl.is_new():
 			bsl.insert(ignore_permissions=True)
@@ -2857,21 +2868,21 @@ def save_wof_olympiad_student_list():
 		# Fetch dynamic subjects configured for this customer
 		dynamic_subjects = get_subjects_for_year(academic_year, 0, customer_name=customer_name)
 
-		# Build lookup map of subject abbr/code -> WOF Olympiad column field
-		subject_field_map = {}
+		# Build lookup: normalized abbr/code/name -> real subject dict.
+		# Driven entirely by the customer's actual configured subjects, so
+		# any subject the school is configured for is recognized — nothing
+		# is silently dropped just because it wasn't in a hardcoded map.
+		subject_lookup = {}
 		for sub in dynamic_subjects:
-			s_abbr = (sub.get("abbr") or sub.get("shortName") or sub.get("code") or "").strip().upper()
-			s_code = (sub.get("code") or "").strip().lower()
+			s_abbr = (sub.get("abbr") or sub.get("shortName") or sub.get("code") or "").strip()
+			s_code = (sub.get("code") or "").strip()
 			s_name = (sub.get("name") or "").strip()
 
-			field_name = map_abbr_to_wof_list_field(s_abbr) or map_abbr_to_wof_list_field(s_code)
-			if field_name:
-				subject_field_map[s_abbr] = field_name
-				subject_field_map[s_code] = field_name
-				subject_field_map[s_name.lower()] = field_name
-				subject_field_map[s_name.upper()] = field_name
+			for key in (s_abbr, s_code, s_name):
+				if key:
+					subject_lookup[key.strip().lower()] = sub
 
-		# Append students to table_cbbz (WOF Olympiad child table)
+		# Append students to table_cbbz (Exam List CT — student_name, school_subject, abbr, check_ptxn)
 		for batch_key, batch_data in rosters.items():
 			students = []
 			if isinstance(batch_data, dict):
@@ -2888,39 +2899,37 @@ def save_wof_olympiad_student_list():
 					except Exception:
 						subs = {}
 
-				if not student_name:
+				if not student_name or not isinstance(subs, dict):
 					continue
 
-				row_data = {
-					"name_of_student": student_name,
-					"iso": 0,
-					"imo": 0,
-					"ieo": 0,
-					"iabo": 0,
-					"isbo": 0,
-					"wgko": 0,
-					"waio": 0,
-					"wflo": 0,
-					"wiho": 0,
-				}
+				for sub_key, sub_val in subs.items():
+					is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
+					if not is_checked:
+						continue
 
-				if isinstance(subs, dict):
-					for sub_key, sub_val in subs.items():
-						is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
-						if not is_checked:
-							continue
-						
-						k_str = str(sub_key).strip()
-						field_name = (
-							subject_field_map.get(k_str) or
-							subject_field_map.get(k_str.upper()) or
-							subject_field_map.get(k_str.lower()) or
-							map_abbr_to_wof_list_field(k_str)
+					matched = subject_lookup.get(str(sub_key).strip().lower())
+					if not matched:
+						frappe.log_error(
+							f"Rejected unknown subject '{sub_key}' for student '{student_name}' "
+							f"(customer={customer_name}, academic_year={academic_year})",
+							"WOF Olympiad Student List - Invalid Subject"
 						)
-						if field_name and field_name in row_data:
-							row_data[field_name] = 1
+						continue
 
-				bsl.append("table_cbbz", row_data)
+					subject_name = matched.get("name")
+					subject_abbr = matched.get("abbr") or matched.get("shortName") or matched.get("code") or ""
+
+					# Must be a real, existing School Subject record — never
+					# trust the client-supplied name/abbr for storage.
+					if not subject_name or not frappe.db.exists("School Subject", subject_name):
+						continue
+
+					bsl.append("table_cbbz", {
+						"student_name": student_name,
+						"school_subject": subject_name,
+						"abbr": subject_abbr,
+						"check_ptxn": 1,
+					})
 
 		if bsl.is_new():
 			bsl.insert(ignore_permissions=True)
@@ -3024,21 +3033,21 @@ def save_wof_olympiad_student_draft():
 		# Fetch dynamic subjects configured for this customer
 		dynamic_subjects = get_subjects_for_year(academic_year, 0, customer_name=customer_name)
 
-		# Build lookup map of subject abbr/code -> WOF Olympiad column field
-		subject_field_map = {}
+		# Build lookup: normalized abbr/code/name -> real subject dict.
+		# Driven entirely by the customer's actual configured subjects, so
+		# any subject the school is configured for is recognized — nothing
+		# is silently dropped just because it wasn't in a hardcoded map.
+		subject_lookup = {}
 		for sub in dynamic_subjects:
-			s_abbr = (sub.get("abbr") or sub.get("shortName") or sub.get("code") or "").strip().upper()
-			s_code = (sub.get("code") or "").strip().lower()
+			s_abbr = (sub.get("abbr") or sub.get("shortName") or sub.get("code") or "").strip()
+			s_code = (sub.get("code") or "").strip()
 			s_name = (sub.get("name") or "").strip()
 
-			field_name = map_abbr_to_wof_list_field(s_abbr) or map_abbr_to_wof_list_field(s_code)
-			if field_name:
-				subject_field_map[s_abbr] = field_name
-				subject_field_map[s_code] = field_name
-				subject_field_map[s_name.lower()] = field_name
-				subject_field_map[s_name.upper()] = field_name
+			for key in (s_abbr, s_code, s_name):
+				if key:
+					subject_lookup[key.strip().lower()] = sub
 
-		# Append students to table_cbbz (WOF Olympiad child table)
+		# Append students to table_cbbz (Exam List CT, now with student_name)
 		for batch_key, batch_data in rosters.items():
 			students = []
 			if isinstance(batch_data, dict):
@@ -3055,39 +3064,37 @@ def save_wof_olympiad_student_draft():
 					except Exception:
 						subs = {}
 
-				if not student_name:
+				if not student_name or not isinstance(subs, dict):
 					continue
 
-				row_data = {
-					"name_of_student": student_name,
-					"iso": 0,
-					"imo": 0,
-					"ieo": 0,
-					"iabo": 0,
-					"isbo": 0,
-					"wgko": 0,
-					"waio": 0,
-					"wflo": 0,
-					"wiho": 0,
-				}
+				for sub_key, sub_val in subs.items():
+					is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
+					if not is_checked:
+						continue
 
-				if isinstance(subs, dict):
-					for sub_key, sub_val in subs.items():
-						is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
-						if not is_checked:
-							continue
-						
-						k_str = str(sub_key).strip()
-						field_name = (
-							subject_field_map.get(k_str) or
-							subject_field_map.get(k_str.upper()) or
-							subject_field_map.get(k_str.lower()) or
-							map_abbr_to_wof_list_field(k_str)
+					matched = subject_lookup.get(str(sub_key).strip().lower())
+					if not matched:
+						frappe.log_error(
+							f"Rejected unknown subject '{sub_key}' for student '{student_name}' "
+							f"(customer={customer_name}, academic_year={academic_year})",
+							"WOF Olympiad Draft - Invalid Subject"
 						)
-						if field_name and field_name in row_data:
-							row_data[field_name] = 1
+						continue
 
-				bsl.append("table_cbbz", row_data)
+					subject_name = matched.get("name")
+					subject_abbr = matched.get("abbr") or matched.get("shortName") or matched.get("code") or ""
+
+					# Must be a real, existing School Subject record — never
+					# trust the client-supplied name/abbr for storage.
+					if not subject_name or not frappe.db.exists("School Subject", subject_name):
+						continue
+
+					bsl.append("table_cbbz", {
+						"student_name": student_name,
+						"school_subject": subject_name,
+						"abbr": subject_abbr,
+						"check_ptxn": 1,
+					})
 
 		if bsl.is_new():
 			bsl.insert(ignore_permissions=True)

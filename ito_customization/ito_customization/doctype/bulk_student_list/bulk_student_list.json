@@ -42,7 +42,7 @@
    "fieldname": "student_list",
    "fieldtype": "Table",
    "label": "Student List",
-   "options": "Student List CT"
+   "options": "Exam List CT"
   },
   {
    "depends_on": "eval:doc.for_student == 0 && doc.for_wof_list == 0 && doc.for_wof_olympiad == 0",
@@ -59,7 +59,7 @@
    "fieldname": "little_champ_list",
    "fieldtype": "Table",
    "label": "Little Champ List",
-   "options": "Little champ List CT"
+   "options": "Exam List CT"
   },
   {
    "depends_on": "eval:doc.for_little_champ == 0 && doc.for_wof_list == 0 && doc.for_wof_olympiad == 0",
@@ -86,7 +86,7 @@
   {
    "fieldname": "table_xxdu",
    "fieldtype": "Table",
-   "options": "WOF List"
+   "options": "Exam List CT"
   },
   {
    "default": "0",
@@ -114,13 +114,13 @@
   {
    "fieldname": "table_cbbz",
    "fieldtype": "Table",
-   "options": "WOF Olympiad"
+   "options": "Exam List CT"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-04 16:14:14.343230",
+ "modified": "2026-09-10 18:00:37.571312",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Bulk Student List",
