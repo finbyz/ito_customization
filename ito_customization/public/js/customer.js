@@ -2,42 +2,42 @@
 
 frappe.ui.form.on('Customer', {
 	setup(frm) {
-        frm.previous_academic_year = frm.doc.custom_current_academic_year;
-    },
-	onload(frm){
+		frm.previous_academic_year = frm.doc.custom_current_academic_year;
+	},
+	onload(frm) {
 		toggle_country_state(frm);
 		set_coordinator_state_options(frm);
 		set_customer_state_options(frm);
 	},
 	refresh(frm) {
 		if (frm.previous_academic_year === undefined) {
-            frm.previous_academic_year = frm.doc.custom_current_academic_year;
-        }
+			frm.previous_academic_year = frm.doc.custom_current_academic_year;
+		}
 		toggle_country_state(frm);
 		set_coordinator_state_options(frm);
 		set_customer_state_options(frm);
 
-		frm.add_custom_button(__('Create URL'), function() {
-			if (!frm.doc.customer_name) {
-				frappe.msgprint(__('Please set the Customer Name first.'));
-				return;
-			}
+		// frm.add_custom_button(__('Create URL'), function () {
+		// 	if (!frm.doc.customer_name) {
+		// 		frappe.msgprint(__('Please set the Customer Name first.'));
+		// 		return;
+		// 	}
 
-			frappe.call({
-				method: 'ito_customization.ito_customization.doctype.student_portal.student_portal.generate_student_portal_token',
-				args: { customer: frm.doc.name },
-				callback: function(r) {
-					if (!r.message) return;
+		// 	frappe.call({
+		// 		method: 'ito_customization.ito_customization.doctype.student_portal.student_portal.generate_student_portal_token',
+		// 		args: { customer: frm.doc.name },
+		// 		callback: function (r) {
+		// 			if (!r.message) return;
 
-					frappe.show_alert({
-						message: __('Student portal URL generated and saved'),
-						indicator: 'green'
-					});
+		// 			frappe.show_alert({
+		// 				message: __('Student portal URL generated and saved'),
+		// 				indicator: 'green'
+		// 			});
 
-					frm.reload_doc();
-				}
-			});
-		});
+		// 			frm.reload_doc();
+		// 		}
+		// 	});
+		// });
 
 		setTimeout(() => {
 
@@ -153,48 +153,48 @@ frappe.ui.form.on('Customer', {
 
 	},
 	custom_current_academic_year(frm) {
-        let old_year = frm.previous_academic_year;
-        let new_year = frm.doc.custom_current_academic_year;
+		let old_year = frm.previous_academic_year;
+		let new_year = frm.doc.custom_current_academic_year;
 
-        // First time or same value — nothing to archive
-        if (!old_year || old_year === new_year) {
-            frm.previous_academic_year = new_year;
-            return;
-        }
+		// First time or same value — nothing to archive
+		if (!old_year || old_year === new_year) {
+			frm.previous_academic_year = new_year;
+			return;
+		}
 
-        // Check if old year already exists in the child table
-        let exists = (frm.doc.custom_acedemic_years || []).some(
-            row => row.registration_from === old_year
-        );
+		// Check if old year already exists in the child table
+		let exists = (frm.doc.custom_acedemic_years || []).some(
+			row => row.registration_from === old_year
+		);
 
-        if (!exists) {
-            let child = frm.add_child("custom_acedemic_years", {
-                registration_from: old_year
-            });
-            frm.refresh_field("custom_acedemic_years");
-        }
+		if (!exists) {
+			let child = frm.add_child("custom_acedemic_years", {
+				registration_from: old_year
+			});
+			frm.refresh_field("custom_acedemic_years");
+		}
 
-        // Update tracker to the newly selected year
-        frm.previous_academic_year = new_year;
-    },
+		// Update tracker to the newly selected year
+		frm.previous_academic_year = new_year;
+	},
 	custom_copy(frm) {
 
-			if (!frm.doc.custom_student_registration_link) {
-				frappe.msgprint("No student registration link found to copy.");
-				return;
-			}
+		if (!frm.doc.custom_student_registration_link) {
+			frappe.msgprint("No student registration link found to copy.");
+			return;
+		}
 
-			navigator.clipboard.writeText(frm.doc.custom_student_registration_link)
-				.then(() => {
-					frappe.show_alert({
-						message: __("Student registration link copied to clipboard"),
-						indicator: "green"
-					});
-				})
-				.catch(() => {
-					frappe.msgprint("Unable to copy student registration link.");
+		navigator.clipboard.writeText(frm.doc.custom_student_registration_link)
+			.then(() => {
+				frappe.show_alert({
+					message: __("Student registration link copied to clipboard"),
+					indicator: "green"
 				});
-		},
+			})
+			.catch(() => {
+				frappe.msgprint("Unable to copy student registration link.");
+			});
+	},
 
 	custom_customer_category(frm) {
 
@@ -242,35 +242,35 @@ frappe.ui.form.on('Customer', {
 
 function set_coordinator_state_options(frm) {
 
-    const field = frm.fields_dict.custom_stateprovince;
+	const field = frm.fields_dict.custom_stateprovince;
 
-    if (!field) return;
+	if (!field) return;
 
-    field.set_data(
-        frappe.boot.india_state_options || []
-    );
+	field.set_data(
+		frappe.boot.india_state_options || []
+	);
 }
 
 function set_customer_state_options(frm) {
 
-    const field = frm.fields_dict.custom_state;
+	const field = frm.fields_dict.custom_state;
 
-    if (!field) return;
+	if (!field) return;
 
-    // set_data only exists on Autocomplete controls. If custom_state is still
-    // fieldtype Data (or anything else), calling it throws and silently kills
-    // the rest of refresh() — including toggle_country_state below. Guard it.
-    if (typeof field.set_data !== "function") {
-        console.warn(
-            "custom_state is not an Autocomplete field — change its fieldtype " +
-            "in Customize Form to Autocomplete for the state dropdown to work."
-        );
-        return;
-    }
+	// set_data only exists on Autocomplete controls. If custom_state is still
+	// fieldtype Data (or anything else), calling it throws and silently kills
+	// the rest of refresh() — including toggle_country_state below. Guard it.
+	if (typeof field.set_data !== "function") {
+		console.warn(
+			"custom_state is not an Autocomplete field — change its fieldtype " +
+			"in Customize Form to Autocomplete for the state dropdown to work."
+		);
+		return;
+	}
 
-    field.set_data(
-        frappe.boot.india_state_options || []
-    );
+	field.set_data(
+		frappe.boot.india_state_options || []
+	);
 }
 
 // Display-only now: toggles which field is visible based on GST Category.
@@ -280,30 +280,30 @@ function set_customer_state_options(frm) {
 // "Not Saved" immediately on load/reload, since refresh()/onload() call
 // this on every page open and every post-save reload.
 function toggle_country_state(frm) {
-    // State/Country only apply to School Customers — they drive school
-    // code generation. Online Student Customers store location on the
-    // Address instead, so hide both regardless of GST Category.
-    if (frm.doc.custom_customer_category === "Online Student Customer") {
-        frm.set_df_property("custom_country", "hidden", 1);
-        frm.set_df_property("custom_state", "hidden", 1);
+	// State/Country only apply to School Customers — they drive school
+	// code generation. Online Student Customers store location on the
+	// Address instead, so hide both regardless of GST Category.
+	if (frm.doc.custom_customer_category === "Online Student Customer") {
+		frm.set_df_property("custom_country", "hidden", 1);
+		frm.set_df_property("custom_state", "hidden", 1);
 
-        frm.refresh_field("custom_country");
-        frm.refresh_field("custom_state");
-        return;
-    }
+		frm.refresh_field("custom_country");
+		frm.refresh_field("custom_state");
+		return;
+	}
 
-    const is_overseas = frm.doc.gst_category === "Overseas";
+	const is_overseas = frm.doc.gst_category === "Overseas";
 
-    if (is_overseas) {
-        // Overseas: show Country, hide State
-        frm.set_df_property("custom_country", "hidden", 0);
-        frm.set_df_property("custom_state", "hidden", 1);
-    } else {
-        // Domestic: hide Country (force India), show State
-        frm.set_df_property("custom_country", "hidden", 1);
-        frm.set_df_property("custom_state", "hidden", 0);
-    }
+	if (is_overseas) {
+		// Overseas: show Country, hide State
+		frm.set_df_property("custom_country", "hidden", 0);
+		frm.set_df_property("custom_state", "hidden", 1);
+	} else {
+		// Domestic: hide Country (force India), show State
+		frm.set_df_property("custom_country", "hidden", 1);
+		frm.set_df_property("custom_state", "hidden", 0);
+	}
 
-    frm.refresh_field("custom_country");
-    frm.refresh_field("custom_state");
+	frm.refresh_field("custom_country");
+	frm.refresh_field("custom_state");
 }
