@@ -85,12 +85,52 @@ def _resolve_customer_via_token(token=None, customer=None, school_code=None):
 			return None, {
 				"success": False,
 				"expired": True,
+				"error_type": "expired",
 				"message": "This registration link has expired. Please request a new one from the school.",
+			}
+		if token:
+			return None, {
+				"success": False,
+				"not_found": True,
+				"error_type": "not_found",
+				"message": "School Not Found / Invalid Access Token: The registration link is invalid or the token does not exist.",
 			}
 		return None, {
 			"success": False,
-			"message": "Customer not found or access token missing/invalid",
+			"not_found": True,
+			"error_type": "not_found",
+			"message": "School Not Found: Customer not found or access token missing/invalid",
 		}
+
+	# Validation: If school_code was provided (e.g. via URL query parameter),
+	# it MUST match the customer resolved by the token.
+	# If someone alters the URL (e.g. changing RJ0005 to RJ0003), reject immediately.
+	if school_code:
+		school_code_clean = str(school_code).strip().lower()
+		valid_codes = {
+			frappe.db.get_value("Customer", resolved_customer, "custom_school_code"),
+			frappe.db.get_value("Customer", resolved_customer, "custom_ito_school_code"),
+			resolved_customer,
+		}
+		clean_valid_codes = {str(c).strip().lower() for c in valid_codes if c}
+		if school_code_clean not in clean_valid_codes:
+			return None, {
+				"success": False,
+				"not_found": True,
+				"error_type": "school_code_mismatch",
+				"message": f"School Not Found / Invalid URL: School code '{school_code}' does not match this registration link.",
+			}
+
+	# Validation: If customer was provided, it MUST match the resolved customer.
+	if customer:
+		customer_clean = str(customer).strip().lower()
+		if customer_clean != str(resolved_customer).strip().lower():
+			return None, {
+				"success": False,
+				"not_found": True,
+				"error_type": "customer_mismatch",
+				"message": "School Not Found / Invalid URL: Customer does not match this registration link.",
+			}
 
 	return resolved_customer, None
 
