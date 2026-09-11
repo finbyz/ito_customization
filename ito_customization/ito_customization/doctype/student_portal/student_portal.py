@@ -438,6 +438,36 @@ class IgnorePermissionsContext:
 		frappe.flags.ignore_account_permission = self.orig_ignore_account
 
 
+def _submit_pending_draft_invoice(customer):
+	"""
+	Look for an existing DRAFT (docstatus=0) Sales Invoice already sitting
+	against this customer. Returns the draft doc or None.
+	"""
+	if not customer:
+		return None
+
+	draft_name = frappe.db.get_value(
+		"Sales Invoice",
+		{"customer": customer, "docstatus": 0},
+		"name",
+		order_by="creation desc"
+	)
+	if not draft_name:
+		return None
+
+	try:
+		si = frappe.get_doc("Sales Invoice", draft_name)
+		si.flags.ignore_permissions = True
+		si.flags.ignore_mandatory = True
+		return si
+	except Exception:
+		frappe.log_error(
+			frappe.get_traceback(),
+			"Student Portal - Failed to retrieve pending draft Sales Invoice"
+		)
+		return None
+
+
 def create_payment_entry_for_student_portal_registration(doc, exam_count):
     with IgnorePermissionsContext():
         try:
@@ -460,23 +490,39 @@ def create_payment_entry_for_student_portal_registration(doc, exam_count):
             item_code = fee_info.get("item_code") if fee_info and fee_info.get("success") else None
             rate = flt(fee_info.get("rate_inr") or fee_info.get("rate_usd") or 150) if fee_info and fee_info.get("success") else 150.0
 
-            # --- item_code resolution unchanged ---
-
             company = frappe.db.get_single_value("Global Defaults", "default_company") or "Indian Talent Olympiad"
             if not frappe.db.exists("Company", company):
                 companies = frappe.get_all("Company", limit=1)
                 if companies:
                     company = companies[0].name
 
-            # 1. Sales Invoice (unchanged)
-            si = frappe.new_doc("Sales Invoice")
-            si.customer = customer
-            si.company = company
-            si.append("items", {"item_code": item_code, "qty": exam_count, "rate": rate})
-            si.flags.ignore_permissions = True
-            si.flags.ignore_mandatory = True
-            si.insert(ignore_permissions=True)
-            si.submit()
+            # 1. Sales Invoice — reuse a pending draft for this customer if one already exists
+            draft_name = frappe.db.get_value("Sales Invoice", {"customer": customer, "company": company, "docstatus": 0}, "name", order_by="creation desc")
+            if draft_name:
+                si = frappe.get_doc("Sales Invoice", draft_name)
+                si.flags.ignore_permissions = True
+                si.flags.ignore_mandatory = True
+                si.set("items", [])
+                si.append("items", {"item_code": item_code, "qty": exam_count, "rate": rate})
+                si.calculate_taxes_and_totals()
+                si.save(ignore_permissions=True)
+            else:
+                submitted_name = frappe.db.get_value("Sales Invoice", {"customer": customer, "company": company, "docstatus": 1}, "name", order_by="creation desc")
+                if submitted_name and flt(frappe.db.get_value("Sales Invoice", submitted_name, "outstanding_amount")) > 0:
+                    si = frappe.get_doc("Sales Invoice", submitted_name)
+                else:
+                    si = frappe.new_doc("Sales Invoice")
+                    si.customer = customer
+                    si.company = company
+                    si.append("items", {"item_code": item_code, "qty": exam_count, "rate": rate})
+                    si.flags.ignore_permissions = True
+                    si.flags.ignore_mandatory = True
+                    si.insert(ignore_permissions=True)
+
+            if si.docstatus == 0:
+                si.flags.ignore_permissions = True
+                si.flags.ignore_mandatory = True
+                si.submit()
 
             # 2. Resolve accounts via direct DB — no permission check
             from erpnext.accounts.party import get_party_account
@@ -494,7 +540,6 @@ def create_payment_entry_for_student_portal_registration(doc, exam_count):
                 )
                 return si.name, None
 
-            # ── KEY FIX: fetch account meta via db.get_value, not get_account_details ──
             paid_from_currency, paid_from_type = frappe.db.get_value(
                 "Account", receivable_account, ["account_currency", "account_type"]
             )
@@ -564,27 +609,62 @@ def confirm_student_portal_payment(integration_request, razorpay_payment_id, raz
 		integration = frappe.get_doc("Integration Request", integration_request)
 		data = frappe.parse_json(integration.data or "{}")
 		transaction = frappe.get_doc("Razorpay Transaction", data["razorpay_transaction"])
+
+		sp_name = None
+		if transaction.status == "Completed" and data.get("registration_payload"):
+			reg_data = frappe.parse_json(data["registration_payload"])
+			email = (reg_data.get("email_id") or "").strip().lower()
+			existing_sp = frappe.db.sql(
+				"SELECT name FROM `tabStudent Portal` WHERE LOWER(email_id) = %s LIMIT 1",
+				(email,),
+				as_dict=True
+			) if email else None
+
+			if existing_sp:
+				sp_name = existing_sp[0].name
+			else:
+				sp_doc = frappe.new_doc("Student Portal")
+				sp_doc.school_name = reg_data.get("school_name")
+				sp_doc.school_code = reg_data.get("school_code")
+				sp_doc.student_full_name = reg_data.get("student_full_name")
+				sp_doc.parent_full_name = reg_data.get("parent_full_name")
+				sp_doc.email_id = reg_data.get("email_id")
+				sp_doc.mobile_number = reg_data.get("mobile_number")
+				sp_doc.set("class", reg_data.get("class") or "")
+				for ex in reg_data.get("exam_list", []):
+					sp_doc.append("exam_list", ex)
+				sp_doc.flags.ignore_permissions = True
+				sp_doc.insert(ignore_permissions=True)
+				sp_name = sp_doc.name
+
 		return {
 			"success": True,
 			"paid": transaction.status == "Completed",
+			"name": sp_name,
 			"payment_entry": transaction.payment_entry,
 			"sales_invoice": transaction.reference_docname,
 			"redirect_to": result.get("redirect_to"),
 		}
 
 
-def initiate_student_portal_registration_payment(doc, exam_count):
+def initiate_student_portal_registration_payment(registration_payload, exam_count):
 	with IgnorePermissionsContext():
 		try:
 			if not exam_count or exam_count <= 0:
 				return None, None
 
-			customer = doc.school_name
-			if not customer and doc.school_code:
+			if isinstance(registration_payload, dict):
+				customer = registration_payload.get("school_name")
+				school_code = registration_payload.get("school_code")
+			else:
+				customer = getattr(registration_payload, "school_name", None)
+				school_code = getattr(registration_payload, "school_code", None)
+
+			if not customer and school_code:
 				customer = (
-					frappe.db.get_value("Customer", {"custom_school_code": doc.school_code}, "name")
-					or frappe.db.get_value("Customer", {"custom_ito_school_code": doc.school_code}, "name")
-					or frappe.db.get_value("Customer", {"name": doc.school_code}, "name")
+					frappe.db.get_value("Customer", {"custom_school_code": school_code}, "name")
+					or frappe.db.get_value("Customer", {"custom_ito_school_code": school_code}, "name")
+					or frappe.db.get_value("Customer", {"name": school_code}, "name")
 				)
 
 			if not customer or not frappe.db.exists("Customer", customer):
@@ -610,27 +690,57 @@ def initiate_student_portal_registration_payment(doc, exam_count):
 					if companies:
 						company = companies[0].name
 
-			# 1. Sales Invoice
-			si = frappe.new_doc("Sales Invoice")
-			si.customer = customer
-			si.company = company
-			si.append("items", {"item_code": item_code, "qty": exam_count, "rate": rate})
-			si.flags.ignore_permissions = True
-			si.flags.ignore_mandatory = True
-			si.insert(ignore_permissions=True)
-			si.submit()
+			amount = flt(exam_count * rate)
 
-			# 2. Initiate Razorpay Checkout Payload (page=None so default company Razorpay settings are used)
+			# 1. Sales Invoice — reuse a draft invoice for this customer if one already exists
+			draft_name = frappe.db.get_value("Sales Invoice", {"customer": customer, "company": company, "docstatus": 0}, "name", order_by="creation desc")
+			si = None
+			if draft_name:
+				si = frappe.get_doc("Sales Invoice", draft_name)
+				si.flags.ignore_permissions = True
+				si.flags.ignore_mandatory = True
+				si.set("items", [])
+				si.append("items", {"item_code": item_code, "qty": exam_count, "rate": rate})
+				si.due_date = frappe.utils.today()
+				si.calculate_taxes_and_totals()
+				si.save(ignore_permissions=True)
+			else:
+				submitted_name = frappe.db.get_value("Sales Invoice", {"customer": customer, "company": company, "docstatus": 1}, "name", order_by="creation desc")
+				if submitted_name:
+					sub_doc = frappe.get_doc("Sales Invoice", submitted_name)
+					if abs(flt(sub_doc.grand_total) - amount) <= 0.01 and flt(sub_doc.outstanding_amount) > 0:
+						si = sub_doc
+					elif flt(sub_doc.outstanding_amount) > 0:
+						try:
+							sub_doc.flags.ignore_permissions = True
+							sub_doc.cancel()
+						except Exception:
+							pass
+
+				if not si:
+					si = frappe.new_doc("Sales Invoice")
+					si.customer = customer
+					si.company = company
+					si.due_date = frappe.utils.today()
+					si.append("items", {"item_code": item_code, "qty": exam_count, "rate": rate})
+					si.flags.ignore_permissions = True
+					si.flags.ignore_mandatory = True
+					si.insert(ignore_permissions=True)
+
+			# 2. Initiate Razorpay Checkout Payload
 			from multi_company_razorpay.api import create_payment_for_sales_invoice, get_checkout_context
 			from urllib.parse import parse_qs, urlparse
+
+			payload_json = frappe.as_json(registration_payload) if isinstance(registration_payload, dict) else None
 
 			original_ignore = frappe.flags.ignore_permissions
 			try:
 				frappe.flags.ignore_permissions = True
 				res = create_payment_for_sales_invoice(
 					sales_invoice=si.name,
-					amount=si.grand_total,
-					page=None
+					amount=flt(si.outstanding_amount or si.grand_total),
+					page=None,
+					registration_payload=payload_json,
 				)
 			finally:
 				frappe.flags.ignore_permissions = original_ignore
@@ -698,7 +808,6 @@ def create_student_portal_entry(data):
 			or customer_doc.name
 		)
 
-		# --- Basic input validation ---
 		student_name = (data.get("student_full_name") or "").strip()
 		if not student_name:
 			return {"success": False, "message": "Student name is required."}
@@ -719,17 +828,9 @@ def create_student_portal_entry(data):
 					"message": "Registration is only allowed once! You can order books. Contact support if you have any queries."
 				}
 
-		doc = frappe.new_doc("Student Portal")
-		# school_name/school_code now come from the token-resolved customer,
-		# never from the raw request payload.
-		doc.school_name = customer
-		doc.school_code = school_code
-		doc.student_full_name = data.get("student_full_name")
-		doc.parent_full_name = data.get("parent_full_name")
-		doc.email_id = data.get("email_id")
-		doc.mobile_number = data.get("mobile_number")
-		doc.set("class", _get_valid_class_name(data.get("class") or data.get("class_grade")) or "")
+		valid_class = _get_valid_class_name(data.get("class") or data.get("class_grade")) or ""
 
+		exam_list = []
 		exam_count = 0
 		for item in data.get("selected_exams", []):
 			subject = item.get("school_subject")
@@ -744,23 +845,47 @@ def create_student_portal_entry(data):
 			is_sel = 1 if item.get("selected") or item.get("check_ptxn") else 0
 			if is_sel:
 				exam_count += 1
-			doc.append("exam_list", {
+			exam_list.append({
 				"school_subject": subject,
 				"abbr": frappe.db.get_value("School Subject", subject, "abbr") or item.get("abbr"),
 				"check_ptxn": is_sel
 			})
 
-		doc.flags.ignore_permissions = True
-		doc.insert(ignore_permissions=True)
+		registration_payload = {
+			"school_name": customer,
+			"school_code": school_code,
+			"student_full_name": data.get("student_full_name"),
+			"parent_full_name": data.get("parent_full_name"),
+			"email_id": data.get("email_id"),
+			"mobile_number": data.get("mobile_number"),
+			"class": valid_class,
+			"exam_list": exam_list,
+		}
 
 		si_name = None
 		checkout_context = None
+		doc_name = None
+
 		if exam_count > 0:
-			si_name, checkout_context = initiate_student_portal_registration_payment(doc, exam_count)
+			si_name, checkout_context = initiate_student_portal_registration_payment(registration_payload, exam_count)
+		else:
+			doc = frappe.new_doc("Student Portal")
+			doc.school_name = customer
+			doc.school_code = school_code
+			doc.student_full_name = data.get("student_full_name")
+			doc.parent_full_name = data.get("parent_full_name")
+			doc.email_id = data.get("email_id")
+			doc.mobile_number = data.get("mobile_number")
+			doc.set("class", valid_class)
+			for ex in exam_list:
+				doc.append("exam_list", ex)
+			doc.flags.ignore_permissions = True
+			doc.insert(ignore_permissions=True)
+			doc_name = doc.name
 
 		return {
 			"success": True,
-			"name": doc.name,
+			"name": doc_name,
 			"sales_invoice": si_name,
 			"checkout": checkout_context
 		}
@@ -921,11 +1046,6 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 						or frappe.db.get_value("Customer", {"custom_ito_school_code": sp.school_code}, "name")
 					)
 
-			# SECURITY FIX (#3): never fall back to "the first enabled Customer
-			# in the system" — that would silently attribute/bill this order
-			# to a completely unrelated, arbitrary existing customer. If we
-			# can't resolve a real, matching customer, create a dedicated one
-			# for this order instead of guessing.
 			if not cust_name:
 				try:
 					fallback_name = customer
@@ -950,11 +1070,9 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 
 			fallback_item = _get_or_create_book_order_item(company)
 
-			si = frappe.new_doc("Sales Invoice")
-			si.customer = customer
-			si.company = company
-			si.due_date = frappe.utils.nowdate()
+			delivery_date = frappe.utils.add_days(frappe.utils.today(), 7)
 
+			# 1. Build Item list
 			items_added = []
 			if book_items:
 				for b in book_items:
@@ -974,6 +1092,7 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 							"qty": tb,
 							"rate": price if price else _get_book_fallback_price("tb"),
 							"gst_hsn_code": "490110",
+							"delivery_date": delivery_date,
 						})
 					if wb > 0:
 						item_code, price = get_book_item_and_price(subj, cls_g, "wb")
@@ -984,6 +1103,7 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 							"qty": wb,
 							"rate": price if price else _get_book_fallback_price("wb"),
 							"gst_hsn_code": "490110",
+							"delivery_date": delivery_date,
 						})
 					if guide > 0:
 						item_code, price = get_book_item_and_price(subj, cls_g, "guide")
@@ -994,6 +1114,7 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 							"qty": guide,
 							"rate": price if price else _get_book_fallback_price("guide"),
 							"gst_hsn_code": "490110",
+							"delivery_date": delivery_date,
 						})
 					if pyqp > 0:
 						item_code, price = get_book_item_and_price(subj, cls_g, "pyqp")
@@ -1004,42 +1125,88 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 							"qty": pyqp,
 							"rate": price if price else _get_book_fallback_price("pyqp"),
 							"gst_hsn_code": "490110",
+							"delivery_date": delivery_date,
 						})
 
-			if items_added:
-				for itm in items_added:
-					si.append("items", itm)
-			else:
+			if not items_added:
 				final_qty = max(int(total_qty or 1), 1)
 				rate = flt(grand_total) / final_qty
-				si.append("items", {
+				items_added.append({
 					"item_code": fallback_item,
 					"qty": final_qty,
 					"rate": rate,
 					"gst_hsn_code": "490110",
+					"delivery_date": delivery_date,
 				})
 
-			si.flags.ignore_permissions = True
-			si.flags.ignore_mandatory = True
-			try:
-				si.set_missing_values()
-			except Exception:
-				pass
+			# 2. Create or Update Draft Sales Order (SO)
+			draft_so_name = frappe.db.get_value("Sales Order", {"customer": customer, "company": company, "docstatus": 0}, "name", order_by="creation desc")
+			if draft_so_name:
+				so = frappe.get_doc("Sales Order", draft_so_name)
+				so.flags.ignore_permissions = True
+				so.flags.ignore_mandatory = True
+				so.set("items", [])
+				for itm in items_added:
+					so.append("items", dict(itm))
+				so.delivery_date = delivery_date
+				so.save(ignore_permissions=True)
+			else:
+				so = frappe.new_doc("Sales Order")
+				so.customer = customer
+				so.company = company
+				so.transaction_date = frappe.utils.today()
+				so.delivery_date = delivery_date
+				so.currency = frappe.db.get_value("Customer", customer, "default_currency") or "INR"
+				for itm in items_added:
+					so.append("items", dict(itm))
+				so.flags.ignore_permissions = True
+				so.flags.ignore_mandatory = True
+				so.insert(ignore_permissions=True)
 
-			for itm in si.items:
-				if not itm.gst_hsn_code:
-					itm.gst_hsn_code = "490110"
+			# 3. Create or Update Draft Sales Invoice (SI) referencing the Sales Order
+			for itm in items_added:
+				itm["sales_order"] = so.name
 
-			si.calculate_taxes_and_totals()
-			si.insert(ignore_permissions=True)
+			draft_si_name = frappe.db.get_value("Sales Invoice", {"customer": customer, "company": company, "docstatus": 0}, "name", order_by="creation desc")
+			if draft_si_name:
+				si = frappe.get_doc("Sales Invoice", draft_si_name)
+				si.flags.ignore_permissions = True
+				si.flags.ignore_mandatory = True
+				si.set("items", [])
+				for itm in items_added:
+					si.append("items", dict(itm))
+				si.due_date = frappe.utils.nowdate()
+				try:
+					si.set_missing_values()
+				except Exception:
+					pass
+				for itm in si.items:
+					if not itm.gst_hsn_code:
+						itm.gst_hsn_code = "490110"
+					itm.sales_order = so.name
+				si.calculate_taxes_and_totals()
+				si.save(ignore_permissions=True)
+			else:
+				si = frappe.new_doc("Sales Invoice")
+				si.customer = customer
+				si.company = company
+				si.due_date = frappe.utils.nowdate()
+				for itm in items_added:
+					si.append("items", dict(itm))
+				si.flags.ignore_permissions = True
+				si.flags.ignore_mandatory = True
+				try:
+					si.set_missing_values()
+				except Exception:
+					pass
+				for itm in si.items:
+					if not itm.gst_hsn_code:
+						itm.gst_hsn_code = "490110"
+					itm.sales_order = so.name
+				si.calculate_taxes_and_totals()
+				si.insert(ignore_permissions=True)
 
-			for itm in si.items:
-				if not itm.gst_hsn_code:
-					itm.gst_hsn_code = "490110"
-
-			si.submit()
-
-			# 2. Initiate Razorpay Checkout Payload for Olympiad Books
+			# 4. Initiate Razorpay Checkout Payload for Olympiad Books
 			from multi_company_razorpay.api import create_payment_for_sales_invoice, get_checkout_context
 			from urllib.parse import parse_qs, urlparse
 
@@ -1048,7 +1215,7 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 				frappe.flags.ignore_permissions = True
 				res = create_payment_for_sales_invoice(
 					sales_invoice=si.name,
-					amount=flt(si.outstanding_amount),
+					amount=flt(si.outstanding_amount or si.grand_total),
 					page="Book Order"
 				)
 			finally:
@@ -1063,6 +1230,7 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 
 			checkout_context = get_checkout_context(checkout_token)
 			checkout_context["sales_invoice"] = si.name
+			checkout_context["sales_order"] = so.name
 			return si.name, checkout_context
 
 		except Exception:
@@ -1083,11 +1251,28 @@ def confirm_student_portal_book_order_payment(integration_request, razorpay_paym
 		integration = frappe.get_doc("Integration Request", integration_request)
 		data = frappe.parse_json(integration.data or "{}")
 		transaction = frappe.get_doc("Razorpay Transaction", data["razorpay_transaction"])
+
+		# SO -> SI -> PE: Submit Sales Order linked to this Sales Invoice
+		sales_invoice_name = transaction.reference_docname
+		sales_order_name = None
+		if sales_invoice_name and frappe.db.exists("Sales Invoice", sales_invoice_name):
+			si_doc = frappe.get_doc("Sales Invoice", sales_invoice_name)
+			for item in si_doc.items:
+				if item.sales_order and frappe.db.exists("Sales Order", item.sales_order):
+					sales_order_name = item.sales_order
+					so_doc = frappe.get_doc("Sales Order", sales_order_name)
+					if so_doc.docstatus == 0:
+						so_doc.flags.ignore_permissions = True
+						so_doc.flags.ignore_mandatory = True
+						so_doc.submit()
+					break
+
 		return {
 			"success": True,
 			"paid": transaction.status == "Completed",
-			"payment_entry": transaction.payment_entry,
+			"sales_order": sales_order_name,
 			"sales_invoice": transaction.reference_docname,
+			"payment_entry": transaction.payment_entry,
 			"redirect_to": result.get("redirect_to"),
 		}
 
