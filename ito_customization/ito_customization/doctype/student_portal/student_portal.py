@@ -15,6 +15,26 @@ MAX_BOOK_QTY_PER_LINE = 50
 # How long a generated consent/registration token stays valid for.
 TOKEN_VALIDITY_DAYS = 7
 TOKEN_EXPIRY_FIELD = "custom_consent_token_expiry"
+BOOK_ORDER_ITEM_CODE = "ITO-Olympiad Book Order"
+BOOK_ORDER_ITEM_NAME = "Olympiad Book Order"
+
+
+def _get_book_order_item():
+	"""
+	Returns the single, admin-provisioned Item used for every book-order
+	line (SO/SI/PE). Never creates an Item — guest-facing calls must not
+	be able to insert master data. If missing, logs an error so an admin
+	can create it; callers should treat a missing item as a hard failure.
+	"""
+	if frappe.db.exists("Item", BOOK_ORDER_ITEM_CODE):
+		return BOOK_ORDER_ITEM_CODE
+
+	frappe.log_error(
+		f"Required Item '{BOOK_ORDER_ITEM_CODE}' does not exist. "
+		f"Book order payments cannot proceed until an admin creates it.",
+		"Student Portal Book Order - Missing Item"
+	)
+	return None
 
 def _safe_qty(value):
 	"""
@@ -891,27 +911,6 @@ def create_student_portal_entry(data):
 		}
 
 
-def _get_or_create_book_order_item(company="Olympiad Books"):
-	item_code = "ITO-Book Order"
-	if not frappe.db.exists("Item", item_code):
-		try:
-			idoc = frappe.new_doc("Item")
-			idoc.item_code = item_code
-			idoc.item_name = "Olympiad Book Order"
-			idoc.item_group = "Olympiad Books" if frappe.db.exists("Item Group", "Olympiad Books") else "Products"
-			idoc.stock_uom = "Nos"
-			idoc.is_stock_item = 0
-			idoc.gst_hsn_code = "490110"
-			idoc.append("uoms", {"uom": "Nos", "conversion_factor": 1})
-			idoc.flags.ignore_permissions = True
-			idoc.flags.ignore_mandatory = True
-			idoc.insert(ignore_permissions=True)
-		except Exception:
-			pass
-	if frappe.db.exists("Item", item_code):
-		return item_code
-	return frappe.db.get_value("Item", {"item_group": "Olympiad Books", "disabled": 0}, "name") or "ITO-Book Order"
-
 
 def get_book_item_and_price(subject_name, class_grade, book_type):
 	"""
@@ -1068,11 +1067,18 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 			if not frappe.db.exists("Company", company):
 				company = frappe.db.get_single_value("Global Defaults", "default_company") or "Indian Talent Olympiad"
 
-			fallback_item = _get_or_create_book_order_item(company)
+			# SECURITY FIX: never create the Item from a guest-facing call.
+			# Only the fixed, admin-provisioned Item is ever used for book
+			# order lines — no per-subject item_code, no on-the-fly Item
+			# creation.
+			book_order_item = _get_book_order_item()
+			if not book_order_item:
+				return None, None
 
 			delivery_date = frappe.utils.add_days(frappe.utils.today(), 7)
 
-			# 1. Build Item list
+			# 1. Build Item list — item_code is ALWAYS book_order_item;
+			# only the rate varies by subject/class/book_type.
 			items_added = []
 			if book_items:
 				for b in book_items:
@@ -1084,10 +1090,10 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 					pyqp = _safe_qty(b.get("prev_year_paper_160") or b.get("pyqp"))
 
 					if tb > 0:
-						item_code, price = get_book_item_and_price(subj, cls_g, "tb")
+						price = get_book_unit_price(subj, cls_g, "tb")
 						items_added.append({
-							"item_code": item_code if (item_code and frappe.db.exists("Item", item_code)) else fallback_item,
-							"item_name": f"{subj} Text Book ({cls_g})",
+							"item_code": book_order_item,
+							"item_name": BOOK_ORDER_ITEM_NAME,
 							"description": f"{subj} Text Book for {cls_g}",
 							"qty": tb,
 							"rate": price if price else _get_book_fallback_price("tb"),
@@ -1095,10 +1101,10 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 							"delivery_date": delivery_date,
 						})
 					if wb > 0:
-						item_code, price = get_book_item_and_price(subj, cls_g, "wb")
+						price = get_book_unit_price(subj, cls_g, "wb")
 						items_added.append({
-							"item_code": item_code if (item_code and frappe.db.exists("Item", item_code)) else fallback_item,
-							"item_name": f"{subj} Work Book ({cls_g})",
+							"item_code": book_order_item,
+							"item_name": BOOK_ORDER_ITEM_NAME,
 							"description": f"{subj} Work Book for {cls_g}",
 							"qty": wb,
 							"rate": price if price else _get_book_fallback_price("wb"),
@@ -1106,10 +1112,10 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 							"delivery_date": delivery_date,
 						})
 					if guide > 0:
-						item_code, price = get_book_item_and_price(subj, cls_g, "guide")
+						price = get_book_unit_price(subj, cls_g, "guide")
 						items_added.append({
-							"item_code": item_code if (item_code and frappe.db.exists("Item", item_code)) else fallback_item,
-							"item_name": f"{subj} Student Guide ({cls_g})",
+							"item_code": book_order_item,
+							"item_name": BOOK_ORDER_ITEM_NAME,
 							"description": f"{subj} Student Guide for {cls_g}",
 							"qty": guide,
 							"rate": price if price else _get_book_fallback_price("guide"),
@@ -1117,10 +1123,10 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 							"delivery_date": delivery_date,
 						})
 					if pyqp > 0:
-						item_code, price = get_book_item_and_price(subj, cls_g, "pyqp")
+						price = get_book_unit_price(subj, cls_g, "pyqp")
 						items_added.append({
-							"item_code": item_code if (item_code and frappe.db.exists("Item", item_code)) else fallback_item,
-							"item_name": f"{subj} Prev Year Papers ({cls_g})",
+							"item_code": book_order_item,
+							"item_name": BOOK_ORDER_ITEM_NAME,
 							"description": f"{subj} Previous Year Question Papers for {cls_g}",
 							"qty": pyqp,
 							"rate": price if price else _get_book_fallback_price("pyqp"),
@@ -1132,7 +1138,7 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 				final_qty = max(int(total_qty or 1), 1)
 				rate = flt(grand_total) / final_qty
 				items_added.append({
-					"item_code": fallback_item,
+					"item_code": book_order_item,
 					"qty": final_qty,
 					"rate": rate,
 					"gst_hsn_code": "490110",
