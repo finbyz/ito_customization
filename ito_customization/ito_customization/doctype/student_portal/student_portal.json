@@ -32,6 +32,7 @@
   {
    "fieldname": "school_name",
    "fieldtype": "Link",
+   "in_standard_filter": 1,
    "label": "School Name",
    "options": "Customer"
   },
@@ -48,6 +49,7 @@
   {
    "fieldname": "student_full_name",
    "fieldtype": "Data",
+   "in_standard_filter": 1,
    "label": "Student Full Name"
   },
   {
@@ -59,6 +61,7 @@
   {
    "fieldname": "class",
    "fieldtype": "Link",
+   "in_standard_filter": 1,
    "label": "Class",
    "options": "Class"
   },
@@ -108,7 +111,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-08 12:21:18.811445",
+ "modified": "2026-09-12 11:05:14.193685",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Student Portal",

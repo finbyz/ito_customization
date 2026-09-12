@@ -50,13 +50,14 @@
    "fetch_from": "customer.customer_name",
    "fieldname": "customer_name",
    "fieldtype": "Data",
+   "in_standard_filter": 1,
    "label": "Customer Name"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-22 12:05:41.197619",
+ "modified": "2026-09-12 11:06:13.503378",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Books Selection",
