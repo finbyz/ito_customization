@@ -304,6 +304,132 @@ def save_registration_step():
 		return {"success": False, "message": str(e)}
 
 
+@frappe.whitelist()
+def save_review_window_registration():
+	"""
+	Saves School Info (step 1) and Co-ordinator (step 2) changes submitted
+	during the Review Window period.  Unlike save_registration_step() this
+	endpoint intentionally does NOT enforce the application deadline so the
+	school co-ordinator can still amend their details after the deadline has
+	passed while the review window is open.
+	"""
+	if frappe.session.user == "Guest":
+		return {"success": False, "message": "Authentication required"}
+
+	try:
+		data = frappe.request.get_json() or {}
+		original_flag = frappe.flags.ignore_permissions
+		frappe.flags.ignore_permissions = True
+
+		try:
+			customer = frappe.cache().get_value(f"ito_customer_{frappe.session.user}")
+			if not customer:
+				customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+			if not customer:
+				return {"success": False, "message": "No linked customer found for this user."}
+
+			# ------------------------------------------------------------------
+			# Validate that the review window is actually open on the server
+			# side so this endpoint cannot be abused after the window closes.
+			# ------------------------------------------------------------------
+			review_deadline = frappe.db.get_value(
+				"Customer", customer, "custom_review_window_deadline"
+			)
+			if review_deadline:
+				import frappe.utils as fu
+				if fu.now_datetime() > fu.get_datetime(review_deadline):
+					return {
+						"success": False,
+						"message": "The review window has closed. Changes cannot be saved.",
+					}
+
+			# ---- Step 1: School Info ------------------------------------------
+			school_info = data.get("school_info")
+			if school_info:
+				gstin = (school_info.get("gst_no") or "").strip().upper()
+				if gstin and len(gstin) != 15:
+					gstin = ""
+				school_info["gst_no"] = gstin
+
+				customer_doc = frappe.get_doc("Customer", customer)
+				customer_doc.customer_name = school_info.get("school_name", customer_doc.customer_name)
+				customer_doc.custom_ito_school_code = school_info.get("school_code", customer_doc.custom_ito_school_code)
+				customer_doc.custom_board = school_info.get("board", customer_doc.custom_board)
+				customer_doc.custom_student_strength = school_info.get("student_strength", customer_doc.custom_student_strength)
+				customer_doc.mobile_no = school_info.get("school_phone1", customer_doc.mobile_no)
+				customer_doc.email_id = school_info.get("school_email", customer_doc.email_id)
+				customer_doc.gstin = school_info.get("gst_no", customer_doc.gstin)
+				customer_doc.save(ignore_permissions=True)
+
+				create_or_update_address(customer, school_info)
+				frappe.cache().set_value(f"ito_customer_{frappe.session.user}", customer)
+
+			# ---- Step 2: Co-ordinators ----------------------------------------
+			coordinators = data.get("coordinators")
+			if coordinators:
+				create_or_update_teachers(coordinators, customer)
+
+			# ---- Step 3: Exams (class / teacher / whatsapp only — student count locked) ----
+			exams_data = data.get("exams")
+			if exams_data:
+				es_name = frappe.db.get_value("Exams Summary", {"customer": customer})
+				if es_name:
+					es_doc = frappe.get_doc("Exams Summary", es_name)
+
+					subject_map = {
+						"IDO": "Drawing Olympiad (IDO)",
+						"NESO": "Essay Olympiad (NESO)",
+						"EIO": "English Olympiad (EIO)",
+						"IMO": "Maths Olympiad (IMO)",
+						"ISO": "Science Olympiad (ISO)",
+						"GKIO": "General Knowledge (GKIO)",
+						"ICO": "Computer Olympiad (ICO)",
+						"NSSO": "Social Studies (NSSO)",
+						"NHO": "Hindi Olympiad (NHO)",
+						"NLRO": "Logical Reasoning (NLRO)",
+						"CIO": "Commerce Olympiad (CIO)",
+					}
+
+					# Build a lookup of existing rows by subject so we can
+					# preserve student counts from the DB.
+					existing_by_subject: dict = {}
+					for row in es_doc.exam_summary:
+						subj = row.subject
+						existing_by_subject.setdefault(subj, []).append(row)
+
+					es_doc.exam_summary = []
+
+					for subject_code, rows in exams_data.items():
+						subject_name = subject_map.get(subject_code, subject_code)
+						existing_rows = existing_by_subject.get(subject_name, [])
+						for idx, row in enumerate(rows):
+							# Preserve the student count from the existing DB row
+							existing_students = (
+								existing_rows[idx].no_of_students
+								if idx < len(existing_rows)
+								else 0
+							)
+							es_doc.append("exam_summary", {
+								"subject": subject_name,
+								"class": row.get("class"),
+								"teacher_name": row.get("teacher_name"),
+								"whatsapp_no": row.get("whatsapp"),
+								"no_of_students": existing_students,
+							})
+
+					es_doc.save(ignore_permissions=True)
+
+			return {"success": True}
+
+		finally:
+			frappe.flags.ignore_permissions = original_flag
+
+	except Exception as e:
+		frappe.flags.ignore_permissions = False
+		frappe.log_error(frappe.get_traceback(), "Save Review Window Registration Error")
+		return {"success": False, "message": str(e)}
+
+
 def create_or_update_customer(school_info):
 	school_name = school_info.get("school_name")
 	if not school_name:
@@ -522,24 +648,35 @@ def create_or_update_teachers(coordinators, customer_name):
 
 		ensure_subject_exists(subject)
 
-		teacher_name = frappe.db.get_value("Teacher", {
-			"name1": coordinator.get("name"),
-			"customer_reference": customer.name
-		})
+		teacher_email = (coordinator.get("email") or "").strip().lower()
+		teacher_name = None
+
+		# If Email ID is same then it should update the current record
+		if teacher_email:
+			teacher_name = frappe.db.get_value("Teacher", {"email_id": teacher_email})
+
+		# Fallback: check by name1 and customer_reference if not found by email
+		if not teacher_name and coordinator.get("name"):
+			teacher_name = frappe.db.get_value("Teacher", {
+				"name1": coordinator.get("name"),
+				"customer_reference": customer.name
+			})
 
 		if teacher_name:
 			teacher = frappe.get_doc("Teacher", teacher_name)
 		else:
+			# If different / not found, create new one
 			teacher = frappe.new_doc("Teacher")
 
 		teacher.name1 = coordinator.get("name")
 		teacher.phone_number = coordinator.get("mobile")
 		teacher.email_id = coordinator.get("email")
-		teacher.date_of_birth = coordinator.get("dob") or "2000-01-01"
+		teacher.date_of_birth = coordinator.get("dob") or getattr(teacher, "date_of_birth", None) or "2000-01-01"
 		teacher.subject = subject
 		teacher.status = "Active"
 		teacher.experience = "Experienced"
 		teacher.customer_reference = customer.name
+		teacher.school_name = customer.name
 
 		if teacher.is_new():
 			teacher.insert(ignore_permissions=True)
@@ -846,6 +983,7 @@ def get_customer_from_session_user():
 		"contact_email": contact_email,
 		"contact_mobile": contact_mobile,
 		"application_deadline": customer.custom_application_deadline,
+		"review_window_deadline": customer.get("custom_review_window_deadline"),
 		"school_code": customer.custom_school_code,
 		"registration_date_1": customer.custom_last_date_of_reg,
 		"registration_date_2": customer.custom_last_date_of_reg_2,
@@ -978,24 +1116,35 @@ def create_or_update_little_champ_teachers(coordinators, customer_name):
 		else:
 			subject = role.replace(" In-charge", "").strip()
 
-		teacher_name = frappe.db.get_value("Teacher", {
-			"name1": coordinator.get("name"),
-			"customer_reference": customer.name
-		})
+		teacher_email = (coordinator.get("email") or "").strip().lower()
+		teacher_name = None
+
+		# If Email ID is same then it should update the current record
+		if teacher_email:
+			teacher_name = frappe.db.get_value("Teacher", {"email_id": teacher_email})
+
+		# Fallback: check by name1 and customer_reference if not found by email
+		if not teacher_name and coordinator.get("name"):
+			teacher_name = frappe.db.get_value("Teacher", {
+				"name1": coordinator.get("name"),
+				"customer_reference": customer.name
+			})
 
 		if teacher_name:
 			teacher = frappe.get_doc("Teacher", teacher_name)
 		else:
+			# If different / not found, create new one
 			teacher = frappe.new_doc("Teacher")
 
 		teacher.name1 = coordinator.get("name")
 		teacher.phone_number = coordinator.get("mobile")
 		teacher.email_id = coordinator.get("email")
-		teacher.date_of_birth = coordinator.get("dob") or "2000-01-01"
+		teacher.date_of_birth = coordinator.get("dob") or getattr(teacher, "date_of_birth", None) or "2000-01-01"
 		teacher.subject = subject
 		teacher.status = "Active"
 		teacher.experience = "Experienced"
 		teacher.customer_reference = customer.name
+		teacher.school_name = customer.name
 
 		if teacher.is_new():
 			teacher.insert(ignore_permissions=True)
