@@ -1854,7 +1854,7 @@ def download_bulk_student_template():
 
 		writer.writerow(headers)
 
-		demo_row = ["001", "RAHUL SHARMA", "+91 9876543210"]
+		demo_row = ["001", "Demo Data", "+91 1234567890"]
 		for sub in subjects:
 			demo_row.append("1")
 		writer.writerow(demo_row)
@@ -1911,7 +1911,7 @@ def download_little_champ_template():
 
 		writer.writerow(headers)
 
-		demo_row = ["001", "RAHUL SHARMA", "+91 9876543210"]
+		demo_row = ["001", "Demo Data", "+91 1234567890"]
 		for sub in subjects:
 			demo_row.append("1")
 		writer.writerow(demo_row)
@@ -2218,9 +2218,28 @@ def save_bulk_student_list():
 				"for_student": 1,
 			}, "name", order_by="creation desc")
 
+			selected_class = str(school_info.get("selected_class") or "").strip()
+
+			def is_same_class(c1, c2):
+				c1_str = str(c1 or "").strip().lower()
+				c2_str = str(c2 or "").strip().lower()
+				if not c1_str or not c2_str:
+					return False
+				if c1_str == c2_str:
+					return True
+				return c1_str.replace("class", "").strip() == c2_str.replace("class", "").strip()
+
 			if bsl_name:
 				bsl = frappe.get_doc("Bulk Student List", bsl_name)
-				bsl.student_list = []
+				# Only remove rows belonging to selected_class, retaining other classes
+				if selected_class:
+					remaining_rows = [
+						row for row in (bsl.student_list or [])
+						if not is_same_class(row.get("class"), selected_class)
+					]
+					bsl.set("student_list", remaining_rows)
+				else:
+					bsl.set("student_list", [])
 			else:
 				bsl = frappe.new_doc("Bulk Student List")
 				bsl.customer = customer_name
@@ -2263,6 +2282,7 @@ def save_bulk_student_list():
 						"school_subject": subject_name,
 						"abbr": subject_abbr,
 						"check_ptxn": 1,
+						"class": selected_class,
 					})
 
 			if bsl.is_new():
@@ -2270,18 +2290,13 @@ def save_bulk_student_list():
 			else:
 				bsl.save(ignore_permissions=True)
 
-			# Cache the full payload for quick loading
-			frappe.cache().set_value(f"bulk_student_draft_{customer_name}_{academic_year}", payload)
-			frappe.cache().set_value(f"bulk_student_draft_{customer_name}_{raw_year}", payload)
-			selected_class = school_info.get("selected_class")
+			# Cache the payload per class for quick loading
 			if selected_class:
 				frappe.cache().set_value(f"bulk_student_draft_{customer_name}_{academic_year}_{selected_class}", payload)
-
-			# Also persist payload as comment on Bulk Student List doc
-			try:
-				bsl.add_comment("Comment", text=json.dumps(payload))
-			except Exception:
-				pass
+				frappe.cache().set_value(f"bulk_student_draft_{customer_name}_{raw_year}_{selected_class}", payload)
+			# Remove un-scoped cache so it doesn't mask other saved classes
+			frappe.cache().delete_value(f"bulk_student_draft_{customer_name}_{academic_year}")
+			frappe.cache().delete_value(f"bulk_student_draft_{customer_name}_{raw_year}")
 
 			return {"success": True, "name": bsl.name}
 
@@ -2313,15 +2328,25 @@ def get_bulk_student_list(academic_year=None, selected_class=None):
 		else:
 			raw_year = academic_year
 
+		def is_same_class(c1, c2):
+			c1_str = str(c1 or "").strip().lower()
+			c2_str = str(c2 or "").strip().lower()
+			if not c1_str or not c2_str:
+				return False
+			if c1_str == c2_str:
+				return True
+			return c1_str.replace("class", "").strip() == c2_str.replace("class", "").strip()
+
 		# 1. Try cache
 		saved_data = None
 		if selected_class:
 			saved_data = frappe.cache().get_value(f"bulk_student_draft_{customer_name}_{academic_year}_{selected_class}")
-
-		if not saved_data:
+			if not saved_data:
+				saved_data = frappe.cache().get_value(f"bulk_student_draft_{customer_name}_{raw_year}_{selected_class}")
+		else:
 			saved_data = frappe.cache().get_value(f"bulk_student_draft_{customer_name}_{academic_year}")
-		if not saved_data:
-			saved_data = frappe.cache().get_value(f"bulk_student_draft_{customer_name}_{raw_year}")
+			if not saved_data:
+				saved_data = frappe.cache().get_value(f"bulk_student_draft_{customer_name}_{raw_year}")
 
 		if saved_data:
 			if isinstance(saved_data, str):
@@ -2332,7 +2357,7 @@ def get_bulk_student_list(academic_year=None, selected_class=None):
 			if isinstance(saved_data, dict) and saved_data.get("students"):
 				return {"success": True, "data": saved_data}
 
-		# 2. Check Bulk Student List document
+		# 2. Reconstruct from Bulk Student List child table (primary DB source)
 		bsl_name = frappe.db.get_value("Bulk Student List", {
 			"customer": customer_name,
 			"academic_year": academic_year,
@@ -2346,61 +2371,58 @@ def get_bulk_student_list(academic_year=None, selected_class=None):
 			}, "name", order_by="creation desc")
 
 		if bsl_name:
-			comments = frappe.get_all(
-				"Comment",
-				filters={"reference_doctype": "Bulk Student List", "reference_name": bsl_name, "comment_type": "Comment"},
-				fields=["content"],
-				order_by="creation desc",
-				limit=5
-			)
-			for c in comments:
-				if c.content and "students" in c.content:
-					try:
-						c_data = json.loads(c.content)
-						if isinstance(c_data, dict) and c_data.get("students"):
-							return {"success": True, "data": c_data}
-					except Exception:
-						pass
-
-			# 3. Fallback: reconstruct from bsl.student_list
 			bsl = frappe.get_doc("Bulk Student List", bsl_name)
+
+			# Build subject lookup: abbr (uppercase) -> safe_code (lowercase normalized)
+			# so that the subjects dict keys match sub.code on the frontend
+			def to_safe_code(s):
+				return s.lower().replace(" ", "_").replace("-", "_").replace("(", "").replace(")", "")[:20]
+
 			students_map = {}
 			for row in bsl.student_list:
 				s_name = (row.student_name or "").strip().upper()
 				if not s_name:
 					continue
-				if s_name not in students_map:
-					students_map[s_name] = {
+				row_class = row.get("class") or ""
+				if selected_class and not is_same_class(row_class, selected_class):
+					continue
+				student_key = f"{row_class}_{s_name}" if not selected_class else s_name
+				if student_key not in students_map:
+					students_map[student_key] = {
 						"serial_num": f"{len(students_map)+1:03d}",
 						"student_name": s_name,
+						"class": row_class,
 						"mobile": "",
 						"subjects": {},
 						"paid_count": 0,
 						"free_count": 0,
 					}
+				# Use safe_code as key so it matches sub.code on the frontend
 				if row.abbr:
-					students_map[s_name]["subjects"][row.abbr] = True
+					safe_key = to_safe_code(row.abbr)
+					students_map[student_key]["subjects"][safe_key] = True
 
-			students_list = list(students_map.values())
-			for st in students_list:
-				cnt = len([k for k, v in st["subjects"].items() if v])
-				free_s = cnt // 4
-				st["free_count"] = free_s
-				st["paid_count"] = cnt - free_s
+			if students_map:
+				students_list = list(students_map.values())
+				for st in students_list:
+					cnt = len([k for k, v in st["subjects"].items() if v])
+					free_s = cnt // 4
+					st["free_count"] = free_s
+					st["paid_count"] = cnt - free_s
 
-			school_doc = frappe.get_doc("Customer", customer_name)
-			return {
-				"success": True,
-				"data": {
-					"school_info": {
-						"school_name": school_doc.customer_name or "",
-						"ito_school_code": school_doc.custom_ito_school_code or "",
-						"selected_class": "",
-						"academic_year": bsl.academic_year or academic_year,
-					},
-					"students": students_list
+				school_doc = frappe.get_doc("Customer", customer_name)
+				return {
+					"success": True,
+					"data": {
+						"school_info": {
+							"school_name": school_doc.customer_name or "",
+							"ito_school_code": school_doc.custom_ito_school_code or "",
+							"selected_class": "",
+							"academic_year": bsl.academic_year or academic_year,
+						},
+						"students": students_list
+					}
 				}
-			}
 
 		return {"success": True, "data": None}
 	except Exception as e:
@@ -2807,8 +2829,10 @@ def save_wof_student_list():
 
 		for batch_key, batch_data in rosters.items():
 			students = []
+			class_grade = ""
 			if isinstance(batch_data, dict):
 				students = batch_data.get("students", [])
+				class_grade = batch_data.get("class_grade") or ""
 			elif isinstance(batch_data, list):
 				students = batch_data
 
@@ -2849,6 +2873,7 @@ def save_wof_student_list():
 						"school_subject": subject_name,
 						"abbr": subject_abbr,
 						"check_ptxn": 1,
+						"class": class_grade,
 					})
 
 		if bsl.is_new():
