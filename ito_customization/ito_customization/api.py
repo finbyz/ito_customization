@@ -378,19 +378,24 @@ def save_review_window_registration():
 				if es_name:
 					es_doc = frappe.get_doc("Exams Summary", es_name)
 
-					subject_map = {
-						"IDO": "Drawing Olympiad (IDO)",
-						"NESO": "Essay Olympiad (NESO)",
-						"EIO": "English Olympiad (EIO)",
-						"IMO": "Maths Olympiad (IMO)",
-						"ISO": "Science Olympiad (ISO)",
-						"GKIO": "General Knowledge (GKIO)",
-						"ICO": "Computer Olympiad (ICO)",
-						"NSSO": "Social Studies (NSSO)",
-						"NHO": "Hindi Olympiad (NHO)",
-						"NLRO": "Logical Reasoning (NLRO)",
-						"CIO": "Commerce Olympiad (CIO)",
-					}
+					# Dynamically resolve subjects from customer's Yearly Exam Date / School Subject
+					customer_ay = frappe.db.get_value("Customer", customer, "custom_current_academic_year")
+					is_lc = frappe.db.get_value("Customer", customer, "custom_is_little_champ") or 0
+					dyn_subjects = get_subjects_for_year(customer_ay, is_lc, customer_name=customer)
+
+					subject_lookup = {}
+					for sub in dyn_subjects:
+						s_name = sub.get("name") or sub.get("title")
+						if s_name:
+							subject_lookup[s_name.strip().lower()] = s_name
+						for k in (sub.get("abbr"), sub.get("shortName"), sub.get("code")):
+							if k:
+								subject_lookup[k.strip().lower()] = s_name
+
+					# Also include any subjects already present in the existing doc
+					for row in es_doc.exam_summary:
+						if row.subject:
+							subject_lookup[row.subject.strip().lower()] = row.subject
 
 					# Build a lookup of existing rows by subject so we can
 					# preserve student counts from the DB.
@@ -402,8 +407,15 @@ def save_review_window_registration():
 					es_doc.exam_summary = []
 
 					for subject_code, rows in exams_data.items():
-						subject_name = subject_map.get(subject_code, subject_code)
-						existing_rows = existing_by_subject.get(subject_name, [])
+						subject_name = subject_lookup.get(str(subject_code).strip().lower())
+						if not subject_name:
+							if frappe.db.exists("School Subject", subject_code):
+								subject_name = subject_code
+							else:
+								abbr_match = frappe.db.get_value("School Subject", {"abbr": subject_code}, "name")
+								subject_name = abbr_match if abbr_match else subject_code
+
+						existing_rows = existing_by_subject.get(subject_name) or existing_by_subject.get(subject_code, [])
 						for idx, row in enumerate(rows):
 							# Preserve the student count from the existing DB row
 							existing_students = (
@@ -2204,7 +2216,6 @@ def save_bulk_student_list():
 				"customer": customer_name,
 				"academic_year": academic_year,
 				"for_student": 1,
-				"is_submitted": 0
 			}, "name", order_by="creation desc")
 
 			if bsl_name:
@@ -2259,6 +2270,19 @@ def save_bulk_student_list():
 			else:
 				bsl.save(ignore_permissions=True)
 
+			# Cache the full payload for quick loading
+			frappe.cache().set_value(f"bulk_student_draft_{customer_name}_{academic_year}", payload)
+			frappe.cache().set_value(f"bulk_student_draft_{customer_name}_{raw_year}", payload)
+			selected_class = school_info.get("selected_class")
+			if selected_class:
+				frappe.cache().set_value(f"bulk_student_draft_{customer_name}_{academic_year}_{selected_class}", payload)
+
+			# Also persist payload as comment on Bulk Student List doc
+			try:
+				bsl.add_comment("Comment", text=json.dumps(payload))
+			except Exception:
+				pass
+
 			return {"success": True, "name": bsl.name}
 
 		finally:
@@ -2267,6 +2291,121 @@ def save_bulk_student_list():
 	except Exception as e:
 		frappe.log_error(frappe.get_traceback(), "Bulk Student List Save Error")
 		return {"success": False, "message": str(e)}
+
+
+@frappe.whitelist()
+def get_bulk_student_list(academic_year=None, selected_class=None):
+	try:
+		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+		if not customer_name:
+			return {"success": False, "message": "Customer not found", "data": None}
+
+		if not academic_year:
+			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or "2026-27"
+			if raw_year.startswith("AY-"):
+				academic_year = raw_year
+			else:
+				parts = raw_year.replace("-", "/").split("/")
+				if len(parts) == 2:
+					academic_year = f"AY-{parts[0]}/{parts[1]}"
+				else:
+					academic_year = f"AY-{raw_year}"
+		else:
+			raw_year = academic_year
+
+		# 1. Try cache
+		saved_data = None
+		if selected_class:
+			saved_data = frappe.cache().get_value(f"bulk_student_draft_{customer_name}_{academic_year}_{selected_class}")
+
+		if not saved_data:
+			saved_data = frappe.cache().get_value(f"bulk_student_draft_{customer_name}_{academic_year}")
+		if not saved_data:
+			saved_data = frappe.cache().get_value(f"bulk_student_draft_{customer_name}_{raw_year}")
+
+		if saved_data:
+			if isinstance(saved_data, str):
+				try:
+					saved_data = json.loads(saved_data)
+				except Exception:
+					pass
+			if isinstance(saved_data, dict) and saved_data.get("students"):
+				return {"success": True, "data": saved_data}
+
+		# 2. Check Bulk Student List document
+		bsl_name = frappe.db.get_value("Bulk Student List", {
+			"customer": customer_name,
+			"academic_year": academic_year,
+			"for_student": 1,
+		}, "name", order_by="creation desc")
+
+		if not bsl_name:
+			bsl_name = frappe.db.get_value("Bulk Student List", {
+				"customer": customer_name,
+				"for_student": 1,
+			}, "name", order_by="creation desc")
+
+		if bsl_name:
+			comments = frappe.get_all(
+				"Comment",
+				filters={"reference_doctype": "Bulk Student List", "reference_name": bsl_name, "comment_type": "Comment"},
+				fields=["content"],
+				order_by="creation desc",
+				limit=5
+			)
+			for c in comments:
+				if c.content and "students" in c.content:
+					try:
+						c_data = json.loads(c.content)
+						if isinstance(c_data, dict) and c_data.get("students"):
+							return {"success": True, "data": c_data}
+					except Exception:
+						pass
+
+			# 3. Fallback: reconstruct from bsl.student_list
+			bsl = frappe.get_doc("Bulk Student List", bsl_name)
+			students_map = {}
+			for row in bsl.student_list:
+				s_name = (row.student_name or "").strip().upper()
+				if not s_name:
+					continue
+				if s_name not in students_map:
+					students_map[s_name] = {
+						"serial_num": f"{len(students_map)+1:03d}",
+						"student_name": s_name,
+						"mobile": "",
+						"subjects": {},
+						"paid_count": 0,
+						"free_count": 0,
+					}
+				if row.abbr:
+					students_map[s_name]["subjects"][row.abbr] = True
+
+			students_list = list(students_map.values())
+			for st in students_list:
+				cnt = len([k for k, v in st["subjects"].items() if v])
+				free_s = cnt // 4
+				st["free_count"] = free_s
+				st["paid_count"] = cnt - free_s
+
+			school_doc = frappe.get_doc("Customer", customer_name)
+			return {
+				"success": True,
+				"data": {
+					"school_info": {
+						"school_name": school_doc.customer_name or "",
+						"ito_school_code": school_doc.custom_ito_school_code or "",
+						"selected_class": "",
+						"academic_year": bsl.academic_year or academic_year,
+					},
+					"students": students_list
+				}
+			}
+
+		return {"success": True, "data": None}
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Get Bulk Student List Error")
+		return {"success": False, "message": str(e), "data": None}
 
 
 # ==================== 8. SAVE LITTLE CHAMP BULK ====================
