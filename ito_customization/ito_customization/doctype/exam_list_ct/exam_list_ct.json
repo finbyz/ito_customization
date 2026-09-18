@@ -11,7 +11,8 @@
   "abbr",
   "check_ptxn",
   "student_name",
-  "class"
+  "class",
+  "mobile_number"
  ],
  "fields": [
   {
@@ -47,13 +48,18 @@
    "fieldtype": "Link",
    "label": "Class",
    "options": "Class"
+  },
+  {
+   "fieldname": "mobile_number",
+   "fieldtype": "Data",
+   "label": "Mobile Number"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-09-17 12:51:33.373640",
+ "modified": "2026-09-18 18:11:49.898151",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Exam List CT",
