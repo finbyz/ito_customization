@@ -330,7 +330,7 @@ def save_review_window_registration():
 		frappe.flags.ignore_permissions = True
 
 		try:
-			customer = frappe.cache().get_value(f"ito_customer_{frappe.session.user}")
+			customer = frappe.cache().get_value(f"ito_customer_{frappe.session.user}") or frappe.cache().get_value(f"wof_customer_{frappe.session.user}")
 			if not customer:
 				customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
 			if not customer:
@@ -361,7 +361,10 @@ def save_review_window_registration():
 
 				customer_doc = frappe.get_doc("Customer", customer)
 				customer_doc.customer_name = school_info.get("school_name", customer_doc.customer_name)
-				customer_doc.custom_ito_school_code = school_info.get("school_code", customer_doc.custom_ito_school_code)
+				if hasattr(customer_doc, "custom_ito_school_code"):
+					customer_doc.custom_ito_school_code = school_info.get("school_code", customer_doc.custom_ito_school_code)
+				if hasattr(customer_doc, "custom_school_code") and school_info.get("school_code"):
+					customer_doc.custom_school_code = school_info.get("school_code", customer_doc.custom_school_code)
 				customer_doc.custom_board = school_info.get("board", customer_doc.custom_board)
 				customer_doc.custom_student_strength = school_info.get("student_strength", customer_doc.custom_student_strength)
 				customer_doc.mobile_no = school_info.get("school_phone1", customer_doc.mobile_no)
@@ -371,10 +374,14 @@ def save_review_window_registration():
 
 				create_or_update_address(customer, school_info)
 				frappe.cache().set_value(f"ito_customer_{frappe.session.user}", customer)
+				frappe.cache().set_value(f"wof_customer_{frappe.session.user}", customer)
 
 			# ---- Step 2: Co-ordinators ----------------------------------------
 			coordinators = data.get("coordinators")
 			if coordinators:
+				principal = coordinators.get("principal") or coordinators.get("head_master_principal")
+				if principal:
+					create_or_update_principal(principal, customer)
 				create_or_update_teachers(coordinators, customer)
 
 			# ---- Step 3: Exams (class / teacher / whatsapp only — student count locked) ----
