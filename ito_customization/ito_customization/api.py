@@ -3439,6 +3439,39 @@ def map_class_to_erp(class_grade):
 	return class_grade.strip()
 
 
+def get_wof_class_code(class_str):
+	"""Convert a WOF class to its code for roll numbers (Nursery->A, LKG->B, UKG->C, 1st->01, 12th->12)."""
+	if not class_str:
+		return "01"
+	c_clean = str(class_str).lower().replace("class", "").strip()
+	if c_clean in ("nursery", "a"):
+		return "A"
+	elif c_clean in ("junior kg", "lkg", "junior", "pre-kg", "b"):
+		return "B"
+	elif c_clean in ("senior kg", "ukg", "senior", "kg", "c"):
+		return "C"
+
+	erp_c = map_class_to_erp(c_clean) if callable(globals().get("map_class_to_erp")) else c_clean
+	erp_str = str(erp_c or "").strip()
+	erp_lower = erp_str.lower()
+	if erp_lower == "nursery":
+		return "A"
+	elif erp_lower in ("junior kg", "lkg"):
+		return "B"
+	elif erp_lower in ("senior kg", "ukg"):
+		return "C"
+
+	if erp_str.isdigit():
+		return erp_str.zfill(2)
+
+	import re
+	m = re.match(r"^(\d+)", erp_str)
+	if m:
+		return m.group(1).zfill(2)
+
+	return erp_str.upper()[:2]
+
+
 @frappe.whitelist()
 def save_wof_student_list():
 	original_flag = frappe.flags.ignore_permissions
@@ -3480,11 +3513,31 @@ def save_wof_student_list():
 			if existing:
 				academic_year = existing
 
+		school_name = (
+			frappe.db.get_value("Customer", customer_name, "customer_name")
+			or school_info.get("school_name")
+			or ""
+		).strip()
+
+		ito_code = (
+			frappe.db.get_value("Customer", customer_name, "custom_school_code")
+			or frappe.db.get_value("Customer", customer_name, "custom_ito_school_code")
+			or frappe.db.get_value("Customer", customer_name, "custom_lc_school_code")
+			or school_info.get("school_code")
+			or ""
+		).strip().upper()
+
 		bsl_name = frappe.db.get_value("Bulk Student List", {
 			"customer": customer_name,
 			"for_wof_list": 1,
 			"is_submitted": 0
 		}, "name", order_by="creation desc")
+
+		if not bsl_name:
+			bsl_name = frappe.db.get_value("Bulk Student List", {
+				"customer": customer_name,
+				"for_wof_list": 1,
+			}, "name", order_by="creation desc")
 
 		if bsl_name:
 			bsl = frappe.get_doc("Bulk Student List", bsl_name)
@@ -3511,15 +3564,25 @@ def save_wof_student_list():
 				if key:
 					subject_lookup[key.strip().lower()] = sub
 
+		has_registered_students_doctype = frappe.db.exists("DocType", "Registered Students")
+		saved_roll_numbers = {}
+
+		# Process each batch and its students
 		for batch_key, batch_data in rosters.items():
 			students = []
-			class_grade = ""
+			raw_class = ""
 			if isinstance(batch_data, dict):
 				students = batch_data.get("students", [])
-				class_grade = map_class_to_erp(batch_data.get("class_grade") or "")
+				raw_class = batch_data.get("class_grade") or batch_key.split('_')[0]
 			elif isinstance(batch_data, list):
 				students = batch_data
+				raw_class = batch_key.split('_')[0]
 
+			target_class = map_class_to_erp(raw_class)
+			class_code = get_wof_class_code(raw_class or target_class)
+
+			# Gather submitted students for this batch
+			batch_submitted_students = []
 			for st in students:
 				student_name = (st.get("student_name") or st.get("name") or "").strip().upper()
 				subs = st.get("subjects", {})
@@ -3532,6 +3595,11 @@ def save_wof_student_list():
 				if not student_name or not isinstance(subs, dict):
 					continue
 
+				submitted_roll = (st.get("roll_no") or "").strip()
+				submitted_mobile = (st.get("mobile") or st.get("mobile_number") or st.get("parent_mobile") or "").strip()
+				row_id = str(st.get("row_id") or st.get("id") or f"{batch_key}_{student_name}").strip()
+
+				student_registered_subjects = []
 				for sub_key, sub_val in subs.items():
 					is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
 					if not is_checked:
@@ -3539,11 +3607,6 @@ def save_wof_student_list():
 
 					matched = subject_lookup.get(str(sub_key).strip().lower())
 					if not matched:
-						frappe.log_error(
-							f"Rejected unknown subject '{sub_key}' for student '{student_name}' "
-							f"(customer={customer_name}, academic_year={academic_year})",
-							"WOF Student List - Invalid Subject"
-						)
 						continue
 
 					subject_name = matched.get("name")
@@ -3557,20 +3620,155 @@ def save_wof_student_list():
 						"school_subject": subject_name,
 						"abbr": subject_abbr,
 						"check_ptxn": 1,
-						"class": class_grade,
+						"class": target_class,
+						"mobile_number": submitted_mobile,
 					})
+					student_registered_subjects.append({"name": subject_name, "abbr": subject_abbr})
+
+				if student_registered_subjects:
+					batch_submitted_students.append({
+						"row_id": row_id,
+						"student_name": student_name,
+						"roll_no": submitted_roll,
+						"mobile": submitted_mobile,
+						"subjects": student_registered_subjects,
+						"target_class": target_class,
+						"class_code": class_code,
+					})
+
+			# Synchronize with Registered Students for this batch's class
+			if has_registered_students_doctype and batch_submitted_students:
+				active_records = frappe.get_all(
+					"Registered Students",
+					filters={
+						"school": customer_name,
+						"class": target_class,
+						"not_registered": 0,
+					},
+					fields=["name", "student_name", "roll_no", "mobile_number"],
+				)
+				records_by_roll = {record.roll_no: record for record in active_records if record.roll_no}
+				records_by_name = {}
+				for record in active_records:
+					normalized_name = (record.student_name or "").strip().upper()
+					if not normalized_name:
+						continue
+					records_by_name.setdefault(normalized_name, []).append(record)
+
+				matched_existing_names = set()
+				items_to_process = []
+
+				for item in batch_submitted_students:
+					sname = item["student_name"]
+					sroll = item["roll_no"]
+					smobile = item["mobile"]
+
+					record = None
+					if sroll:
+						record = records_by_roll.get(sroll)
+					else:
+						name_matches = records_by_name.get(sname, [])
+						if len(name_matches) == 1:
+							record = name_matches[0]
+						elif len(name_matches) > 1:
+							record = name_matches[0]
+
+					if record:
+						matched_existing_names.add(record["name"])
+						stored_mobile = (record.get("mobile_number") or "").strip()
+						if stored_mobile and smobile and stored_mobile != smobile:
+							items_to_process.append({"type": "mobile_changed", "item": item, "old_rec": record})
+						else:
+							items_to_process.append({"type": "update", "item": item, "rec": record})
+					else:
+						items_to_process.append({"type": "new", "item": item})
+
+				for proc in items_to_process:
+					itype = proc["type"]
+					item = proc["item"]
+					sname = item["student_name"]
+					smobile = item["mobile"]
+					ssubjects = item["subjects"]
+					item_cls = item["target_class"]
+					item_code = item["class_code"]
+
+					if itype == "mobile_changed":
+						old_rec = proc["old_rec"]
+
+						replacement = frappe.new_doc("Registered Students")
+						replacement.roll_no = allocate_roll_number(ito_code, item_code)
+						replacement.student_name = sname
+						replacement.mobile_number = smobile
+						replacement.school = customer_name
+						replacement.full_name = school_name
+						replacement.ito_school_code = ito_code
+						replacement.set("class", item_cls)
+						replacement.set("subjects_registered", [])
+						for sub in ssubjects:
+							replacement.append("subjects_registered", {
+								"subject": sub["name"],
+								"abbr": sub["abbr"],
+							})
+						replacement.insert(ignore_permissions=True)
+
+						old_doc = frappe.get_doc("Registered Students", old_rec["name"])
+						old_doc.not_registered = 1
+						old_doc.save(ignore_permissions=True)
+
+						saved_roll_numbers[item["row_id"]] = replacement.roll_no
+
+					elif itype == "update":
+						rec = proc["rec"]
+						rs_doc = frappe.get_doc("Registered Students", rec["name"])
+						rs_doc.not_registered = 0
+						rs_doc.student_name = sname
+						rs_doc.mobile_number = smobile
+						rs_doc.school = customer_name
+						rs_doc.full_name = school_name
+						rs_doc.ito_school_code = ito_code
+						rs_doc.set("class", item_cls)
+						rs_doc.set("subjects_registered", [])
+						for sub in ssubjects:
+							rs_doc.append("subjects_registered", {
+								"subject": sub["name"],
+								"abbr": sub["abbr"],
+							})
+						rs_doc.save(ignore_permissions=True)
+						saved_roll_numbers[item["row_id"]] = rs_doc.roll_no
+
+					else:  # "new"
+						rs_doc = frappe.new_doc("Registered Students")
+						rs_doc.roll_no = allocate_roll_number(ito_code, item_code)
+						rs_doc.student_name = sname
+						rs_doc.mobile_number = smobile
+						rs_doc.school = customer_name
+						rs_doc.full_name = school_name
+						rs_doc.ito_school_code = ito_code
+						rs_doc.set("class", item_cls)
+						rs_doc.set("subjects_registered", [])
+						for sub in ssubjects:
+							rs_doc.append("subjects_registered", {
+								"subject": sub["name"],
+								"abbr": sub["abbr"],
+							})
+						rs_doc.insert(ignore_permissions=True)
+						saved_roll_numbers[item["row_id"]] = rs_doc.roll_no
 
 		if bsl.is_new():
 			bsl.insert(ignore_permissions=True)
 		else:
 			bsl.save(ignore_permissions=True)
 
-		try:
-			frappe.cache().delete_value(f"wof_student_draft_{customer_name}_{academic_year}")
-			frappe.cache().delete_value(f"wof_student_draft_{customer_name}_{raw_year}")
-			frappe.cache().delete_value(f"wof_student_draft_{customer_name}_AY-2026/27")
-		except Exception as e:
-			frappe.log_error(frappe.get_traceback(), "WOF Student List Cache Clear Error")
+		# Cache the updated payload with allocated roll numbers so drafts and future views have roll numbers preserved
+		for b_key, b_val in rosters.items():
+			b_students = b_val.get("students", []) if isinstance(b_val, dict) else b_val
+			for st in b_students:
+				st_id = str(st.get("row_id") or st.get("id") or f"{b_key}_{(st.get('student_name') or st.get('name') or '').strip().upper()}").strip()
+				if st_id in saved_roll_numbers:
+					st["roll_no"] = saved_roll_numbers[st_id]
+
+		frappe.cache().set_value(f"wof_student_draft_{customer_name}_{academic_year}", payload)
+		frappe.cache().set_value(f"wof_student_draft_{customer_name}_{raw_year}", payload)
 
 		try:
 			customer_doc = frappe.get_doc("Customer", customer_name)
@@ -3588,6 +3786,7 @@ def save_wof_student_list():
 			"success": True,
 			"name": bsl.name,
 			"message": "WOF Student list submitted and saved to Bulk Student List successfully",
+			"roll_numbers": saved_roll_numbers,
 			"totals": totals
 		}
 
@@ -3660,10 +3859,6 @@ def save_wof_student_draft():
 		# Fetch dynamic subjects configured for this customer (Chitrakala set)
 		dynamic_subjects = get_subjects_for_year(academic_year, 0, customer_name=customer_name, for_chitrakala=1)
 
-		# Build lookup: normalized abbr/code/name -> real subject dict.
-		# Driven entirely by the customer's actual configured subjects, so
-		# any subject the school is configured for is recognized — nothing
-		# is silently dropped just because it wasn't in a hardcoded map.
 		subject_lookup = {}
 		for sub in dynamic_subjects:
 			s_abbr = (sub.get("abbr") or sub.get("shortName") or sub.get("code") or "").strip()
@@ -3676,10 +3871,15 @@ def save_wof_student_draft():
 
 		for batch_key, batch_data in rosters.items():
 			students = []
+			raw_class = ""
 			if isinstance(batch_data, dict):
 				students = batch_data.get("students", [])
+				raw_class = batch_data.get("class_grade") or batch_key.split('_')[0]
 			elif isinstance(batch_data, list):
 				students = batch_data
+				raw_class = batch_key.split('_')[0]
+
+			target_class = map_class_to_erp(raw_class)
 
 			for st in students:
 				student_name = (st.get("student_name") or st.get("name") or "").strip().upper()
@@ -3700,11 +3900,6 @@ def save_wof_student_draft():
 
 					matched = subject_lookup.get(str(sub_key).strip().lower())
 					if not matched:
-						frappe.log_error(
-							f"Rejected unknown subject '{sub_key}' for student '{student_name}' "
-							f"(customer={customer_name}, academic_year={academic_year})",
-							"WOF Student Draft - Invalid Subject"
-						)
 						continue
 
 					subject_name = matched.get("name")
@@ -3718,6 +3913,7 @@ def save_wof_student_draft():
 						"school_subject": subject_name,
 						"abbr": subject_abbr,
 						"check_ptxn": 1,
+						"class": target_class,
 					})
 
 		if bsl.is_new():
@@ -3760,35 +3956,32 @@ def get_wof_student_draft(academic_year="AY-2026/27"):
 				bsl = frappe.get_doc("Bulk Student List", bsl_name)
 				rosters = {}
 				for row in bsl.table_xxdu:
-					key = f"{row.class_grade}_{row.section}"
+					row_class = row.get("class") or "1"
+					key = f"{row_class}_A"
 					if key not in rosters:
 						rosters[key] = {
-							"class_grade": row.class_grade,
-							"section": row.section,
+							"class_grade": row_class,
+							"section": "A",
 							"students": []
 						}
-					rosters[key]["students"].append({
-						"student_name": row.student_name,
-						"parent_name": row.parent_name,
-						"subjects": {
-							"colouring": bool(row.colouring),
-							"handwriting": bool(row.handwriting),
-							"sketching": bool(row.sketching),
-							"cartoon": bool(row.cartoon),
-							"caricature": bool(row.caricature),
-							"greeting_card": bool(row.greeting_card),
-							"greeting": bool(row.greeting_card),
-							"iso": bool(row.iso),
-							"imo": bool(row.imo),
-							"ieo": bool(row.ieo),
-							"iabo": bool(row.iabo),
-							"isbo": bool(row.isbo),
-							"wgko": bool(row.wgko),
-							"waio": bool(row.waio),
-							"wflo": bool(row.wflo),
-							"wiho": bool(row.wiho),
+					
+					# Find or create student in roster
+					s_name = (row.student_name or "").strip().upper()
+					found_st = next((s for s in rosters[key]["students"] if (s.get("student_name") or s.get("name")) == s_name), None)
+					if not found_st:
+						found_st = {
+							"id": f"row_{len(rosters[key]['students'])+1}",
+							"student_name": s_name,
+							"name": s_name,
+							"parent_name": "",
+							"parentName": "",
+							"mobile": row.get("mobile_number") or "",
+							"subjects": {}
 						}
-					})
+						rosters[key]["students"].append(found_st)
+					if row.abbr:
+						found_st["subjects"][row.abbr.lower()] = True
+
 				saved_data = {
 					"school_info": {
 						"school_name": customer_name,
@@ -3796,6 +3989,52 @@ def get_wof_student_draft(academic_year="AY-2026/27"):
 					},
 					"rosters": rosters
 				}
+
+		if saved_data:
+			# Enrich with roll_no from Registered Students (class-aware)
+			if frappe.db.exists("DocType", "Registered Students"):
+				try:
+					registered_students = frappe.get_all(
+						"Registered Students",
+						filters={"school": customer_name, "not_registered": 0},
+						fields=["student_name", "roll_no", "class", "mobile_number"],
+					)
+					roll_number_by_student = {}
+					mobile_by_student = {}
+					for record in registered_students:
+						s_name = (record.student_name or "").strip().upper()
+						s_class = str(record.get("class") or "").strip()
+						if s_name and s_class:
+							roll_number_by_student[(s_class, s_name)] = record.roll_no or ""
+							if record.mobile_number:
+								mobile_by_student[(s_class, s_name)] = str(record.mobile_number).strip()
+
+					rosters_dict = saved_data.get("rosters") or {}
+					for b_key, b_val in rosters_dict.items():
+						b_class = ""
+						if isinstance(b_val, dict):
+							b_class = map_class_to_erp(b_val.get("class_grade") or b_key.split("_")[0])
+							st_list = b_val.get("students", [])
+						elif isinstance(b_val, list):
+							b_class = map_class_to_erp(b_key.split("_")[0])
+							st_list = b_val
+						else:
+							st_list = []
+
+						for st in st_list:
+							st_name = (st.get("student_name") or st.get("name") or "").strip().upper()
+							r_no = roll_number_by_student.get((b_class, st_name))
+							m_no = mobile_by_student.get((b_class, st_name))
+							if not r_no:
+								r_no = roll_number_by_student.get((str(b_class).zfill(2), st_name))
+							if not m_no:
+								m_no = mobile_by_student.get((str(b_class).zfill(2), st_name))
+							if r_no:
+								st["roll_no"] = r_no
+							if m_no and not st.get("mobile"):
+								st["mobile"] = m_no
+				except Exception:
+					frappe.log_error(frappe.get_traceback(), "Get WOF Student Draft - Roll No & Mobile Enrich Error")
 
 		return {
 			"success": True,
