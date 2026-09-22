@@ -2677,6 +2677,35 @@ def get_bulk_student_list(academic_year=None, selected_class=None):
 
 # ==================== 8. SAVE & GET LITTLE CHAMP BULK ====================
 
+def get_little_champ_class_code(class_str):
+	"""
+	Convert a Little Champ class to its letter code for roll numbers:
+	- Nursery -> A
+	- Junior KG -> B
+	- Senior KG -> C
+	"""
+	if not class_str:
+		return "A"
+	c_clean = str(class_str).lower().replace("class", "").strip()
+	if c_clean in ("nursery", "a"):
+		return "A"
+	elif c_clean in ("junior kg", "lkg", "junior", "pre-kg", "b"):
+		return "B"
+	elif c_clean in ("senior kg", "ukg", "senior", "kg", "c"):
+		return "C"
+
+	erp_class = map_class_to_erp(c_clean) if callable(globals().get("map_class_to_erp")) else c_clean
+	erp_lower = str(erp_class or "").lower()
+	if erp_lower == "nursery":
+		return "A"
+	elif erp_lower in ("junior kg", "lkg"):
+		return "B"
+	elif erp_lower in ("senior kg", "ukg"):
+		return "C"
+
+	return c_clean.zfill(2) if c_clean.isdigit() else c_clean.upper()
+
+
 @frappe.whitelist()
 def save_little_champ_bulk():
 	try:
@@ -2795,7 +2824,7 @@ def save_little_champ_bulk():
 			has_registered_students_doctype = frappe.db.exists("DocType", "Registered Students")
 
 			# ── Parse submitted students list ──────────────────────────────────────────
-			padded_class = clean_class.zfill(2) if clean_class.isdigit() else clean_class
+			lc_class_code = get_little_champ_class_code(selected_class or target_class)
 			submitted_students = []
 
 			for student in students:
@@ -2916,9 +2945,9 @@ def save_little_champ_bulk():
 						max_serial += 1
 						serial_str = str(max_serial).zfill(3)
 						new_roll_map[sname] = (
-							f"{ito_code}{padded_class}{serial_str}"
+							f"{ito_code}{lc_class_code}{serial_str}"
 							if ito_code
-							else f"{padded_class}{serial_str}"
+							else f"{lc_class_code}{serial_str}"
 						)
 
 					# Process each item
@@ -3364,6 +3393,52 @@ def map_subject_to_wof_list_field(sub_code):
 	return map_abbr_to_wof_list_field(sub_code)
 
 
+# Mapping from frontend display class names to ERP Class doctype names
+_FRONTEND_TO_ERP_CLASS = {
+	"nursery": "Nursery",
+	"lkg": "Junior KG",
+	"junior kg": "Junior KG",
+	"pre-kg": "Junior KG",
+	"ukg": "Senior KG",
+	"senior kg": "Senior KG",
+	"kg": "Senior KG",
+	"1st": "1",
+	"2nd": "2",
+	"3rd": "3",
+	"4th": "4",
+	"5th": "5",
+	"6th": "6",
+	"7th": "7",
+	"8th": "8",
+	"9th": "9",
+	"10th": "10",
+	"11th": "11",
+	"12th": "12",
+}
+
+
+def map_class_to_erp(class_grade):
+	"""Convert a frontend class name (e.g. '1st', 'LKG') to the ERP Class doctype name."""
+	if not class_grade:
+		return class_grade
+	lower = str(class_grade).strip().lower()
+	# Direct mapping first
+	if lower in _FRONTEND_TO_ERP_CLASS:
+		return _FRONTEND_TO_ERP_CLASS[lower]
+	# Already a plain number (e.g. "1", "12")
+	if lower.isdigit():
+		return lower
+	# If the value itself exists as a Class in ERP, use it as-is
+	if frappe.db.exists("Class", class_grade.strip()):
+		return class_grade.strip()
+	# Try stripping ordinal suffix (st/nd/rd/th) to get the number
+	import re
+	m = re.match(r"^(\d+)(st|nd|rd|th)$", lower)
+	if m:
+		return m.group(1)
+	return class_grade.strip()
+
+
 @frappe.whitelist()
 def save_wof_student_list():
 	original_flag = frappe.flags.ignore_permissions
@@ -3441,7 +3516,7 @@ def save_wof_student_list():
 			class_grade = ""
 			if isinstance(batch_data, dict):
 				students = batch_data.get("students", [])
-				class_grade = batch_data.get("class_grade") or ""
+				class_grade = map_class_to_erp(batch_data.get("class_grade") or "")
 			elif isinstance(batch_data, list):
 				students = batch_data
 
