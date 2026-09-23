@@ -73,13 +73,15 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Class",
-   "options": "Class"
+   "options": "Class",
+   "read_only": 1
   },
   {
    "fieldname": "roll_no",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Roll No",
+   "read_only": 1,
    "unique": 1
   },
   {
@@ -108,7 +110,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-09-18 17:42:32.736163",
+ "modified": "2026-09-22 17:35:26.554790",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Registered Students",
