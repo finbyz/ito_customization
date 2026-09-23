@@ -43,7 +43,83 @@ def _separator_html(top_mm):
 
 
 @frappe.whitelist()
-def download_hall_tickets(names):
+def get_registered_students_for_portal(selected_class=None):
+    """Fetch distinct classes and student records from Registered Students
+    for the currently logged in portal user (Customer).
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Please log in to view hall tickets."), frappe.PermissionError)
+
+    customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+    is_system_manager = "System Manager" in frappe.get_roles(frappe.session.user)
+
+    if not customer_name and is_system_manager:
+        customer_name = frappe.form_dict.get("school")
+        if not customer_name:
+            # Fallback to the first customer if in testing/admin mode
+            customer_name = frappe.db.get_value("Registered Students", {"not_registered": ("!=", 1)}, "school")
+
+    if not customer_name:
+        return {"success": False, "message": "Customer account not found", "classes": [], "students": []}
+
+    # 1. Fetch available classes for this school
+    raw_classes = frappe.get_all(
+        "Registered Students",
+        filters={"school": customer_name, "not_registered": ("!=", 1)},
+        distinct=True,
+        pluck="class",
+    )
+
+    def _class_sort_key(c):
+        digits = re.findall(r"\d+", str(c or ""))
+        return (0, int(digits[0])) if digits else (1, str(c or "").lower())
+
+    classes = sorted([str(c).strip() for c in raw_classes if c and str(c).strip()], key=_class_sort_key)
+
+    # 2. If selected_class is provided, fetch student details
+    students = []
+    if selected_class:
+        records = frappe.get_all(
+            "Registered Students",
+            filters={
+                "school": customer_name,
+                "class": str(selected_class).strip(),
+                "not_registered": ("!=", 1),
+            },
+            fields=["name", "roll_no", "student_name", "class", "mobile_number"],
+        )
+
+        def _roll_sort_key(s):
+            val = str(s.get("roll_no") or s.get("name") or "")
+            return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", val)]
+
+        records.sort(key=_roll_sort_key)
+
+        # Retrieve subjects from child table
+        for r in records:
+            subjects = frappe.get_all(
+                "Registered Students CT",
+                filters={"parent": r.name, "parenttype": "Registered Students"},
+                fields=["subject", "abbr"],
+            )
+            subj_list = []
+            for sub in subjects:
+                val = sub.get("abbr") or sub.get("subject")
+                if val and val not in subj_list:
+                    subj_list.append(val)
+            r["subjects"] = subj_list
+            students.append(r)
+
+    return {
+        "success": True,
+        "school": customer_name,
+        "classes": classes,
+        "students": students,
+    }
+
+
+@frappe.whitelist()
+def download_hall_tickets(names=None, selected_class=None):
     """Render the ITO Hall Ticket print format for many students,
     exactly 3 per A3 page, and return one PDF.
 
@@ -52,20 +128,42 @@ def download_hall_tickets(names):
     than being stacked in normal document flow.
     """
     if isinstance(names, str):
-        names = json.loads(names)
+        try:
+            names = json.loads(names)
+        except Exception:
+            names = [s.strip() for s in names.split(",") if s.strip()]
+
+    customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
+    is_system_manager = "System Manager" in frappe.get_roles(frappe.session.user)
+
+    # If selected_class is passed without names, get all registered students for that class
+    if not names and selected_class:
+        filters = {"class": str(selected_class).strip(), "not_registered": ("!=", 1)}
+        if not is_system_manager and customer_name:
+            filters["school"] = customer_name
+        elif customer_name:
+            filters["school"] = customer_name
+        names = frappe.get_all("Registered Students", filters=filters, pluck="name")
 
     if not names:
         frappe.throw(_("No students selected."))
+
+    names_list = list(names) if names is not None else []
 
     template = frappe.db.get_value("Print Format", PRINT_FORMAT, "html")
     if not template:
         frappe.throw(_("Print Format {0} not found.").format(PRINT_FORMAT))
 
-    # Fetch student documents
+    # Fetch and validate student documents
     docs = []
-    for name in names:
+    for name in names_list:
         doc = frappe.get_doc("Registered Students", name)
-        doc.check_permission("read")
+        # Security: portal user may only access their school's students
+        if not is_system_manager and customer_name and doc.get("school") != customer_name:
+            frappe.throw(
+                _("You are not permitted to view hall tickets for student {0}").format(name),
+                frappe.PermissionError,
+            )
         docs.append(doc)
 
     # Sort in ascending order by roll_no / name (natural sort: e.g. 001 before 002)
