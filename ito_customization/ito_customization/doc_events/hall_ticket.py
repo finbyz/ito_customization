@@ -1,12 +1,17 @@
 import json
 import re
+from io import BytesIO
 
 import frappe
 from frappe import _
+from pypdf import PdfReader, PdfWriter
+
 from frappe.utils.pdf import get_pdf
 
 PRINT_FORMAT = "ITO Hall ticket"  # <- must match your Print Format's exact name/case
 PER_PAGE = 3
+SINGLE_PAGE_HEIGHT_MM = 141.2
+POINTS_PER_MM = 72 / 25.4
 
 # --- sizing math (A3 portrait = 297mm x 420mm) ------------------------------
 # Every ticket is placed at an EXPLICIT top/left offset inside a page-sized
@@ -40,6 +45,38 @@ def _separator_html(top_mm):
         'vertical-align:middle;">%&lt;</div>'
         '</div>'.format(LEFT_OFFSET_MM, top_mm, CARD_WIDTH_MM, GAP_MM)
     )
+
+
+@frappe.whitelist()
+def download_hall_ticket(name):
+    pdf_content = frappe.get_print(
+        "Registered Students",
+        name,
+        PRINT_FORMAT,
+        as_pdf=True,
+        no_letterhead=True,
+    )
+
+    reader = PdfReader(BytesIO(pdf_content))
+    writer = PdfWriter()
+    target_height = SINGLE_PAGE_HEIGHT_MM * POINTS_PER_MM
+
+    for page in reader.pages:
+        page_top = float(page.mediabox.top)
+        crop_bottom = max(float(page.mediabox.bottom), page_top - target_height)
+        lower_left = (float(page.mediabox.left), crop_bottom)
+        upper_right = (float(page.mediabox.right), page_top)
+        page.mediabox.lower_left = lower_left
+        page.mediabox.upper_right = upper_right
+        page.cropbox.lower_left = lower_left
+        page.cropbox.upper_right = upper_right
+        writer.add_page(page)
+
+    output = BytesIO()
+    writer.write(output)
+    frappe.local.response.filename = f"{name}.pdf"
+    frappe.local.response.filecontent = output.getvalue()
+    frappe.local.response.type = "pdf"
 
 
 @frappe.whitelist()
