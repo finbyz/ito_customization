@@ -48,8 +48,7 @@
   {
    "fieldname": "date_of_birth",
    "fieldtype": "Date",
-   "label": "Date of Birth",
-   "reqd": 1
+   "label": "Date of Birth"
   },
   {
    "fieldname": "phone_number",
@@ -181,7 +180,7 @@
    "link_fieldname": "custom_teacher_ref"
   }
  ],
- "modified": "2026-09-10 16:53:03.953363",
+ "modified": "2026-09-24 12:55:09.828373",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Teacher",
