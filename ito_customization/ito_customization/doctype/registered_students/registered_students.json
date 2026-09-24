@@ -17,6 +17,7 @@
   "class",
   "roll_no",
   "not_registered",
+  "academic_year",
   "section_break_mxtf",
   "subjects_registered"
  ],
@@ -104,13 +105,20 @@
    "fieldname": "mobile_number",
    "fieldtype": "Data",
    "label": "Mobile Number"
+  },
+  {
+   "fetch_from": "school.custom_current_academic_year",
+   "fieldname": "academic_year",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Academic Year",
+   "options": "Academic Years"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
- "is_submittable": 1,
  "links": [],
- "modified": "2026-09-22 17:35:26.554790",
+ "modified": "2026-09-24 11:16:30.403755",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Registered Students",
@@ -126,7 +134,6 @@
    "report": 1,
    "role": "System Manager",
    "share": 1,
-   "submit": 1,
    "write": 1
   }
  ],

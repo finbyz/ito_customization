@@ -18,11 +18,15 @@ frappe.listview_settings["Registered Students"] = {
                 (f) => f[1] === "class" && f[3]
             );
 
-            if (!has_school || !has_class) {
+            const has_academic_year = filters.some(
+                (f) => f[1] === "academic_year" && f[3]
+            );
+
+            if (!has_school || !has_class || !has_academic_year) {
                 frappe.msgprint({
                     title: __("Filters Required"),
                     message: __(
-                        "Please filter the list by both <b>School</b> and <b>Class</b> before generating hall tickets."
+                        "Please filter the list by <b>School</b>, <b>Class</b>, and <b>Academic Year</b> before generating hall tickets."
                     ),
                     indicator: "red",
                 });
@@ -41,9 +45,13 @@ frappe.listview_settings["Registered Students"] = {
                 return;
             }
 
-            // Sort selected students in ascending natural order (e.g. 001, 002, 003...)
+            // Sort selected students in ascending natural order
+            // e.g. 001, 002, 003...
             names.sort((a, b) =>
-                a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+                a.localeCompare(b, undefined, {
+                    numeric: true,
+                    sensitivity: "base",
+                })
             );
 
             // --------------------------------------------------------
