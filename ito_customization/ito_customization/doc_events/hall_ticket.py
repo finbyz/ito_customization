@@ -1,7 +1,7 @@
 import json
 import re
 from io import BytesIO
-
+from frappe.utils import scrub_urls
 import frappe
 from frappe import _
 from pypdf import PdfReader, PdfWriter
@@ -272,7 +272,7 @@ def download_hall_tickets(names=None, selected_class=None):
         + "".join(page_blocks) +
         "</body></html>"
     )
-
+    html = scrub_urls(html)
     pdf_options = {
         "page-size": "A3",
         "orientation": "Portrait",
