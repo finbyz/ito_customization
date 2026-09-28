@@ -155,6 +155,9 @@ doc_events = {
     "Item Price": {
         "validate": "ito_customization.ito_customization.doc_events.item_price.validate_item_price"
     },
+    "Delivery Note": {
+        "validate": "ito_customization.ito_customization.doc_events.delivery_note.validate"
+    },
     "Customer": {
         "on_update": [
             "ito_customization.ito_customization.doc_events.customer.sync_teachers",

@@ -13,6 +13,7 @@ frappe.ui.form.on('Customer', {
 		if (frm.previous_academic_year === undefined) {
 			frm.previous_academic_year = frm.doc.custom_current_academic_year;
 		}
+		load_customer_summary(frm);
 		toggle_country_state(frm);
 		set_coordinator_state_options(frm);
 		set_customer_state_options(frm);
@@ -152,6 +153,11 @@ frappe.ui.form.on('Customer', {
 		}, 500);
 
 	},
+
+	custom_customer_summary(frm) {
+        load_customer_summary(frm);
+    },
+
 	custom_current_academic_year(frm) {
 		let old_year = frm.previous_academic_year;
 		let new_year = frm.doc.custom_current_academic_year;
@@ -306,4 +312,311 @@ function toggle_country_state(frm) {
 
 	frm.refresh_field("custom_country");
 	frm.refresh_field("custom_state");
+}
+
+
+function load_customer_summary(frm) {
+    const wrapper = frm.fields_dict.custom_customer_summary?.$wrapper;
+
+    if (!wrapper) {
+        return;
+    }
+
+    if (frm.is_new()) {
+        render_customer_summary(wrapper, {
+            registration_count: 0,
+            registration_amount: 0,
+            book_order_count: 0,
+            book_order_amount: 0
+        });
+        return;
+    }
+
+    wrapper.html(`
+        <div style="
+            padding: 20px;
+            text-align: center;
+            color: var(--text-muted);
+        ">
+            Loading customer summary...
+        </div>
+    `);
+
+    frappe.call({
+        method:
+            "ito_customization.ito_customization.doc_events.customer.get_customer_summary",
+
+        args: {
+            customer: frm.doc.name
+        },
+
+        callback(r) {
+            if (r.message) {
+                render_customer_summary(
+                    wrapper,
+                    r.message
+                );
+            }
+        },
+
+        error() {
+            wrapper.html(`
+                <div style="
+                    padding: 20px;
+                    text-align: center;
+                    color: var(--text-muted);
+                ">
+                    Unable to load customer summary.
+                </div>
+            `);
+        }
+    });
+}
+
+
+function render_customer_summary(wrapper, data) {
+	data = data || {};
+
+	const format_currency = (value) => {
+		const amount = Number(value || 0);
+
+		return `₹ ${amount.toLocaleString("en-IN", {
+			minimumFractionDigits: 2,
+			maximumFractionDigits: 2,
+		})}`;
+	};
+
+	const format_count = (value) =>
+		Number(value || 0).toLocaleString("en-IN");
+
+	const icons = {
+		users: `<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>`,
+		wallet: `<path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 1 0-4h14"/><path d="M3 5v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/>`,
+		book: `<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>`,
+		receipt: `<path d="M4 2v20l3-2 3 2 3-2 3 2 3-2 1 .67V2l-1 .67L17 2l-3 2-3-2-3 2-3-2z"/><path d="M8 8h8"/><path d="M8 12h8"/>`,
+	};
+
+	// Order matters: items 1-2 fill the left column, items 3-4 the right column
+	const cards = [
+		{
+			label: "Total Registration",
+			value: format_count(data.registration_count),
+			icon: icons.users,
+			color: "#3b82f6",
+		},
+		{
+			label: "Registration Amount",
+			value: format_currency(data.registration_amount),
+			icon: icons.wallet,
+			color: "#10b981",
+		},
+		{
+			label: "Book Order Count",
+			value: format_count(data.book_order_count),
+			icon: icons.book,
+			color: "#f59e0b",
+		},
+		{
+			label: "Book Order Amount",
+			value: format_currency(data.book_order_amount),
+			icon: icons.receipt,
+			color: "#8b5cf6",
+		},
+	];
+
+	// Progress of book orders against the 60% requirement
+	const REQUIRED_PERCENT = 60;
+	const registration_amount = Number(data.registration_amount || 0);
+	const book_order_amount = Number(data.book_order_amount || 0);
+	const required_amount = (registration_amount * REQUIRED_PERCENT) / 100;
+
+	let progress_html = "";
+
+	if (registration_amount > 0) {
+		const achieved_percent =
+			(book_order_amount / registration_amount) * 100;
+		const bar_width = Math.min(
+			(achieved_percent / REQUIRED_PERCENT) * 100,
+			100
+		);
+		const is_met = book_order_amount >= required_amount;
+		const bar_color = is_met ? "#10b981" : "#f59e0b";
+
+		progress_html = `
+			<div class="cs-progress">
+				<div class="cs-progress-head">
+					<span class="cs-progress-title">
+						Book order requirement (${REQUIRED_PERCENT}% of registration)
+					</span>
+					<span class="cs-badge" style="
+						color: ${bar_color};
+						background: ${bar_color}1a;
+					">
+						${is_met ? "Requirement met" : "Below requirement"}
+					</span>
+				</div>
+
+				<div class="cs-progress-track">
+					<div class="cs-progress-bar" style="
+						width: ${bar_width}%;
+						background: ${bar_color};
+					"></div>
+				</div>
+
+				<div class="cs-progress-foot">
+					<span>${achieved_percent.toFixed(1)}% achieved</span>
+					<span>
+						${format_currency(book_order_amount)}
+						of ${format_currency(required_amount)} required
+					</span>
+				</div>
+			</div>
+		`;
+	}
+
+	wrapper.html(`
+		<style>
+			.cs-grid {
+				display: grid;
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+				grid-template-rows: repeat(2, auto);
+				grid-auto-flow: column;
+				gap: 10px 14px;
+				margin: 8px 0 10px;
+			}
+
+			@media (max-width: 640px) {
+				.cs-grid {
+					grid-template-columns: minmax(0, 1fr);
+					grid-template-rows: none;
+					grid-auto-flow: row;
+				}
+			}
+
+			.cs-card {
+				display: flex;
+				align-items: center;
+				gap: 12px;
+				padding: 10px 14px;
+				border: 1px solid var(--border-color);
+				border-left: 3px solid var(--accent);
+				border-radius: 10px;
+				background: var(--card-bg);
+				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+				transition: transform 0.15s ease, box-shadow 0.15s ease;
+			}
+
+			.cs-card:hover {
+				transform: translateY(-1px);
+				box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+			}
+
+			.cs-icon {
+				flex: 0 0 auto;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				width: 34px;
+				height: 34px;
+				border-radius: 9px;
+				color: var(--accent);
+				background: color-mix(in srgb, var(--accent) 12%, transparent);
+			}
+
+			.cs-icon svg {
+				width: 18px;
+				height: 18px;
+				fill: none;
+				stroke: currentColor;
+				stroke-width: 2;
+				stroke-linecap: round;
+				stroke-linejoin: round;
+			}
+
+			.cs-label {
+				font-size: 11px;
+				font-weight: 500;
+				letter-spacing: 0.04em;
+				text-transform: uppercase;
+				color: var(--text-muted);
+				margin-bottom: 2px;
+			}
+
+			.cs-value {
+				font-size: 18px;
+				font-weight: 700;
+				line-height: 1.2;
+				color: var(--text-color);
+			}
+
+			.cs-progress {
+				margin: 0 0 16px;
+				padding: 10px 14px;
+				border: 1px solid var(--border-color);
+				border-radius: 10px;
+				background: var(--card-bg);
+			}
+
+			.cs-progress-head,
+			.cs-progress-foot {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				flex-wrap: wrap;
+				gap: 6px;
+			}
+
+			.cs-progress-title {
+				font-size: 12px;
+				font-weight: 600;
+				color: var(--text-color);
+			}
+
+			.cs-badge {
+				font-size: 11px;
+				font-weight: 600;
+				padding: 2px 9px;
+				border-radius: 999px;
+			}
+
+			.cs-progress-track {
+				height: 6px;
+				margin: 8px 0 6px;
+				border-radius: 999px;
+				background: var(--control-bg, rgba(128, 128, 128, 0.15));
+				overflow: hidden;
+			}
+
+			.cs-progress-bar {
+				height: 100%;
+				border-radius: 999px;
+				transition: width 0.4s ease;
+			}
+
+			.cs-progress-foot {
+				font-size: 11px;
+				color: var(--text-muted);
+			}
+		</style>
+
+		<div class="cs-grid">
+			${cards
+				.map(
+					(card) => `
+				<div class="cs-card" style="--accent: ${card.color};">
+					<div class="cs-icon">
+						<svg viewBox="0 0 24 24">${card.icon}</svg>
+					</div>
+					<div>
+						<div class="cs-label">${card.label}</div>
+						<div class="cs-value">${card.value}</div>
+					</div>
+				</div>
+			`
+				)
+				.join("")}
+		</div>
+
+		${progress_html}
+	`);
 }

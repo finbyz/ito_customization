@@ -2,6 +2,7 @@
 
 import frappe
 import re
+from frappe.utils import cint, flt
 
 
 def sync_teachers(doc, method=None):
@@ -286,3 +287,63 @@ def validate(doc, method):
     else:
         if doc.custom_country != "India":
             doc.custom_country = "India"
+
+
+
+@frappe.whitelist()
+def get_customer_summary(customer):
+    """
+    Return registration and book order summary
+    for a Customer based on submitted Sales Invoices.
+    """
+    summary = {
+        "registration_count": 0,
+        "registration_amount": 0,
+        "book_order_count": 0,
+        "book_order_amount": 0,
+    }
+
+    if not customer:
+        return summary
+
+    invoices = frappe.get_all(
+        "Sales Invoice",
+        filters={"customer": customer, "docstatus": 1},
+        pluck="name",
+    )
+
+    if not invoices:
+        return summary
+
+    rows = frappe.get_all(
+        "Sales Invoice Item",
+        filters={
+            "parent": ["in", invoices],
+            "parenttype": "Sales Invoice",
+            "item_group": ["in", ["Fee component", "Olympiad Books"]],
+        },
+        fields=[
+            "item_group",
+            {"SUM": "qty", "as": "total_qty"},
+            {"SUM": "amount", "as": "total_amount"},
+        ],
+        group_by="item_group",
+        parent_doctype="Sales Invoice",
+    )
+
+    # lowercase keys, since MariaDB matching is case-insensitive
+    key_map = {
+        "fee component": "registration",
+        "olympiad books": "book_order",
+    }
+
+    for row in rows:
+        prefix = key_map.get((row.item_group or "").strip().lower())
+        if not prefix:
+            continue
+
+        # += in case the DB returns two rows differing only by case
+        summary[f"{prefix}_count"] += cint(row.total_qty)
+        summary[f"{prefix}_amount"] += flt(row.total_amount)
+
+    return summary
