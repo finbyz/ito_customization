@@ -24,6 +24,7 @@
   {
    "fieldname": "school",
    "fieldtype": "Link",
+   "in_standard_filter": 1,
    "label": "School",
    "options": "Customer"
   },
@@ -36,6 +37,7 @@
   {
    "fieldname": "class",
    "fieldtype": "Link",
+   "in_standard_filter": 1,
    "label": "Class",
    "options": "Class"
   },
@@ -53,6 +55,7 @@
   {
    "fieldname": "roll_no",
    "fieldtype": "Data",
+   "in_standard_filter": 1,
    "label": "Roll No"
   },
   {
@@ -85,6 +88,7 @@
    "default": "0",
    "fieldname": "qualified",
    "fieldtype": "Check",
+   "in_standard_filter": 1,
    "label": "Qualified for Round Two"
   },
   {
@@ -98,7 +102,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-25 12:34:14.768429",
+ "modified": "2026-09-28 12:25:30.444298",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Result",

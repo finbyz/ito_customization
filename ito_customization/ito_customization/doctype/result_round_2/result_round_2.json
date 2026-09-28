@@ -20,7 +20,7 @@
    "fieldname": "academic_year_2",
    "fieldtype": "Link",
    "label": "Academic Year",
-   "options": "Academic Years"
+   "options": "School Academic Year"
   },
   {
    "columns": 2,
@@ -68,7 +68,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-09-25 12:41:43.096054",
+ "modified": "2026-09-28 10:57:16.887710",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Result Round 2",

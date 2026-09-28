@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "allow_bulk_edit": 1,
  "allow_rename": 1,
  "autoname": "prompt",
  "creation": "2026-05-22 16:58:42.462800",
@@ -67,13 +68,14 @@
   {
    "fieldname": "abbr",
    "fieldtype": "Data",
-   "label": "Abbr"
+   "label": "Abbr",
+   "reqd": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-24 16:13:22.245025",
+ "modified": "2026-09-28 10:54:22.549307",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "School Subject",

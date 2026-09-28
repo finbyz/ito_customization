@@ -112,13 +112,13 @@
    "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Academic Year",
-   "options": "Academic Years"
+   "options": "School Academic Year"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-24 11:16:30.403755",
+ "modified": "2026-09-28 10:59:53.407485",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Registered Students",
