@@ -1,0 +1,82 @@
+{
+ "actions": [],
+ "allow_bulk_edit": 1,
+ "allow_rename": 1,
+ "creation": "2026-09-25 12:09:58.263118",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "academic_year_2",
+  "subject_2",
+  "score_2",
+  "rank_2",
+  "award_2",
+  "topper_2",
+  "message_2"
+ ],
+ "fields": [
+  {
+   "fieldname": "academic_year_2",
+   "fieldtype": "Link",
+   "label": "Academic Year",
+   "options": "Academic Years"
+  },
+  {
+   "columns": 2,
+   "fieldname": "subject_2",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Subject",
+   "options": "School Subject"
+  },
+  {
+   "columns": 1,
+   "fieldname": "score_2",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Score"
+  },
+  {
+   "columns": 1,
+   "fieldname": "rank_2",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Rank"
+  },
+  {
+   "columns": 4,
+   "fieldname": "award_2",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Award"
+  },
+  {
+   "columns": 2,
+   "fieldname": "topper_2",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Topper"
+  },
+  {
+   "fieldname": "message_2",
+   "fieldtype": "Small Text",
+   "label": "Message"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-09-25 12:41:43.096054",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "Result Round 2",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
