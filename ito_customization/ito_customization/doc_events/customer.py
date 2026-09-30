@@ -312,38 +312,57 @@ def get_customer_summary(customer):
         pluck="name",
     )
 
-    if not invoices:
+    if invoices:
+        registration_rows = frappe.get_all(
+            "Sales Invoice Item",
+            filters={
+                "parent": ["in", invoices],
+                "parenttype": "Sales Invoice",
+                "item_group": "Fee component",
+            },
+            fields=[
+                {"SUM": "qty", "as": "total_qty"},
+                {"SUM": "amount", "as": "total_amount"},
+            ],
+            parent_doctype="Sales Invoice",
+        )
+
+        if registration_rows:
+            summary["registration_count"] = cint(registration_rows[0].total_qty)
+            summary["registration_amount"] = flt(registration_rows[0].total_amount)
+
+    book_groups = frappe.get_all(
+        "Item Group",
+        filters={"custom_is_book": 1},
+        pluck="name",
+    )
+    if not book_groups:
         return summary
 
-    rows = frappe.get_all(
-        "Sales Invoice Item",
+    orders = frappe.get_all(
+        "Sales Order",
+        filters={"customer": customer, "docstatus": 1},
+        pluck="name",
+    )
+    if not orders:
+        return summary
+
+    book_rows = frappe.get_all(
+        "Sales Order Item",
         filters={
-            "parent": ["in", invoices],
-            "parenttype": "Sales Invoice",
-            "item_group": ["in", ["Fee component", "Olympiad Books"]],
+            "parent": ["in", orders],
+            "parenttype": "Sales Order",
+            "item_group": ["in", book_groups],
         },
         fields=[
-            "item_group",
             {"SUM": "qty", "as": "total_qty"},
             {"SUM": "amount", "as": "total_amount"},
         ],
-        group_by="item_group",
-        parent_doctype="Sales Invoice",
+        parent_doctype="Sales Order",
     )
 
-    # lowercase keys, since MariaDB matching is case-insensitive
-    key_map = {
-        "fee component": "registration",
-        "olympiad books": "book_order",
-    }
-
-    for row in rows:
-        prefix = key_map.get((row.item_group or "").strip().lower())
-        if not prefix:
-            continue
-
-        # += in case the DB returns two rows differing only by case
-        summary[f"{prefix}_count"] += cint(row.total_qty)
-        summary[f"{prefix}_amount"] += flt(row.total_amount)
+    if book_rows:
+        summary["book_order_count"] = cint(book_rows[0].total_qty)
+        summary["book_order_amount"] = flt(book_rows[0].total_amount)
 
     return summary

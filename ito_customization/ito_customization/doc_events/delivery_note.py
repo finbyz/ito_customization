@@ -2,8 +2,6 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
-REGISTRATION_GROUP = "fee component"
-BOOK_GROUP = "olympiad books"
 REQUIRED_BOOK_PERCENT = 60
 
 
@@ -12,37 +10,55 @@ def validate(doc, method=None):
 
 
 def get_customer_totals(customer):
-    """Return (registration_amount, book_order_amount) from submitted Sales Invoices."""
+    """Return registration amount and book order amount for a customer."""
     invoices = frappe.get_all(
         "Sales Invoice",
         filters={"customer": customer, "docstatus": 1},
         pluck="name",
     )
 
-    if not invoices:
-        return 0.0, 0.0
-
-    items = frappe.get_all(
-        "Sales Invoice Item",
-        filters={
-            "parent": ["in", invoices],
-            "parenttype": "Sales Invoice",
-            "item_group": ["in", ["Fee component", "Olympiad Books"]],
-        },
-        fields=["item_group", "amount"],
-        parent_doctype="Sales Invoice",
-    )
-
     registration_amount = 0.0
-    book_order_amount = 0.0
+    if invoices:
+        registration_rows = frappe.get_all(
+            "Sales Invoice Item",
+            filters={
+                "parent": ["in", invoices],
+                "parenttype": "Sales Invoice",
+                "item_group": "Fee component",
+            },
+            fields=[{"SUM": "amount", "as": "total_amount"}],
+            parent_doctype="Sales Invoice",
+        )
+        if registration_rows:
+            registration_amount = flt(registration_rows[0].total_amount)
 
-    for item in items:
-        group = (item.item_group or "").strip().lower()
+    book_groups = frappe.get_all(
+        "Item Group",
+        filters={"custom_is_book": 1},
+        pluck="name",
+    )
+    if not book_groups:
+        return registration_amount, 0.0
 
-        if group == REGISTRATION_GROUP:
-            registration_amount += flt(item.amount)
-        elif group == BOOK_GROUP:
-            book_order_amount += flt(item.amount)
+    orders = frappe.get_all(
+        "Sales Order",
+        filters={"customer": customer, "docstatus": 1},
+        pluck="name",
+    )
+    if not orders:
+        return registration_amount, 0.0
+
+    rows = frappe.get_all(
+        "Sales Order Item",
+        filters={
+            "parent": ["in", orders],
+            "parenttype": "Sales Order",
+            "item_group": ["in", book_groups],
+        },
+        fields=[{"SUM": "amount", "as": "total_amount"}],
+        parent_doctype="Sales Order",
+    )
+    book_order_amount = flt(rows[0].total_amount) if rows else 0.0
 
     return registration_amount, book_order_amount
 
