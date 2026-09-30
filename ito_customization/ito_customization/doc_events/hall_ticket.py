@@ -8,29 +8,73 @@ from pypdf import PdfReader, PdfWriter
 
 from frappe.utils.pdf import get_pdf
 
-PRINT_FORMAT = "ITO Hall ticket"  # <- must match your Print Format's exact name/case
-PER_PAGE = 3
-SINGLE_PAGE_HEIGHT_MM = 141.2
+DEFAULT_FORMAT = "ITO Hall ticket"  # <- must match your Print Format's exact name/case
+LITTLE_CHAMP_FORMAT = "Little Champ Hall Ticket"
+
 POINTS_PER_MM = 72 / 25.4
 
 # --- sizing math (A3 portrait = 297mm x 420mm) ------------------------------
 # Every ticket is placed at an EXPLICIT top/left offset inside a page-sized
 # container, instead of letting content flow and hoping it breaks in the
-# right place. This is what actually guarantees 3-per-page: there is no
-# overflow calculation left for the PDF engine to get wrong.
+# right place. This is what actually guarantees a fixed count-per-page:
+# there is no overflow calculation left for the PDF engine to get wrong.
 #
-#   top margin + 3 x card height + 2 x gap + bottom margin = page height
-#   5 + 3x131.2 + 2x8.2 + 5 = 420  ->  3 cards end at 415mm
+# The two formats have different aspect ratios and so get different card
+# heights and a different number-per-page. Each format's tickets are
+# grouped onto their own pages rather than mixed on one page.
 PAGE_WIDTH_MM = 297
 PAGE_HEIGHT_MM = 418  # Safe height within 420mm to prevent subpixel page overflow
 CARD_WIDTH_MM = 287
-CARD_HEIGHT_MM = 131.2
-TOP_MARGIN_MM = 5
-GAP_MM = 8.2
 LEFT_OFFSET_MM = (PAGE_WIDTH_MM - CARD_WIDTH_MM) / 2  # centers the card horizontally
 
+FORMAT_SIZING = {
+    DEFAULT_FORMAT: {
+        "card_height_mm": 131.2,
+        "gap_mm": 8.2,
+        "per_page": 3,
+        "top_margin_mm": 5,       # fixed - matches the originally tuned layout
+        "single_crop_mm": 141.2,  # crop height for the single-ticket download
+    },
+    LITTLE_CHAMP_FORMAT: {
+        "card_height_mm": 143.5,
+        "gap_mm": 8.0,
+        "per_page": 2,            # taller template - 3 doesn't fit an A3 page
+        "top_margin_mm": None,    # None -> vertically center the group instead
+        "single_crop_mm": 153.5,  # same +10mm buffer convention as the ITO one
+    },
+}
 
-def _separator_html(top_mm):
+# --- backward-compatible aliases -------------------------------------------
+# These flat names existed before the multi-format refactor. Kept here,
+# pointing at the ITO (default) sizing, in case anything else in the app
+# imports them directly by name.
+PRINT_FORMAT = DEFAULT_FORMAT
+PER_PAGE = FORMAT_SIZING[DEFAULT_FORMAT]["per_page"]
+CARD_HEIGHT_MM = FORMAT_SIZING[DEFAULT_FORMAT]["card_height_mm"]
+GAP_MM = FORMAT_SIZING[DEFAULT_FORMAT]["gap_mm"]
+TOP_MARGIN_MM = FORMAT_SIZING[DEFAULT_FORMAT]["top_margin_mm"]
+SINGLE_PAGE_HEIGHT_MM = FORMAT_SIZING[DEFAULT_FORMAT]["single_crop_mm"]
+
+
+def _resolve_format(doc):
+    """Little Champ format if the student's school (Customer) has
+    custom_is_little_champ checked, else the default ITO format."""
+    school = doc.get("school")
+    if not school:
+        return DEFAULT_FORMAT
+    try:
+        is_little_champ = frappe.db.get_value(
+            "Customer", school, "custom_is_little_champ"
+        )
+    except Exception:
+        frappe.log_error(
+            frappe.get_traceback(), "Hall Ticket: custom_is_little_champ lookup failed"
+        )
+        is_little_champ = 0
+    return LITTLE_CHAMP_FORMAT if is_little_champ else DEFAULT_FORMAT
+
+
+def _separator_html(top_mm, gap_mm):
     """Dashed cut-line with '>% ... %<' marks, positioned in a gap band."""
     return (
         '<div style="position:absolute;left:{0}mm;top:{1}mm;'
@@ -43,23 +87,73 @@ def _separator_html(top_mm):
         '<div style="display:table-cell;width:16px;'
         'font-size:9px;color:#888;text-align:right;'
         'vertical-align:middle;">%&lt;</div>'
-        '</div>'.format(LEFT_OFFSET_MM, top_mm, CARD_WIDTH_MM, GAP_MM)
+        '</div>'.format(LEFT_OFFSET_MM, top_mm, CARD_WIDTH_MM, gap_mm)
     )
+
+
+def _build_pages(card_htmls, sizing):
+    """Group card_htmls into pages of sizing['per_page'], each card placed
+    at an explicit absolute position inside a fixed-size page container.
+    Returns a list of page HTML strings (no page-break markup - that is
+    added once, across all groups, by the caller)."""
+    per_page = sizing["per_page"]
+    card_height_mm = sizing["card_height_mm"]
+    gap_mm = sizing["gap_mm"]
+
+    pages = [card_htmls[i:i + per_page] for i in range(0, len(card_htmls), per_page)]
+
+    total_content_height = per_page * card_height_mm + (per_page - 1) * gap_mm
+    if sizing["top_margin_mm"] is not None:
+        top_margin = sizing["top_margin_mm"]
+    else:
+        top_margin = (PAGE_HEIGHT_MM - total_content_height) / 2
+
+    page_blocks = []
+    for page_cards in pages:
+        positioned = []
+        for k, card_html in enumerate(page_cards):
+            top = top_margin + k * (card_height_mm + gap_mm)
+            positioned.append(
+                '<div style="position:absolute;left:{0}mm;top:{1}mm;'
+                'width:{2}mm;height:{3}mm;overflow:hidden;">{4}</div>'.format(
+                    LEFT_OFFSET_MM, top, CARD_WIDTH_MM, card_height_mm, card_html
+                )
+            )
+            if k < len(page_cards) - 1:
+                gap_top = top_margin + (k + 1) * card_height_mm + k * gap_mm
+                positioned.append(_separator_html(gap_top, gap_mm))
+
+        page_style = (
+            "position:relative;width:{0}mm;height:{1}mm;"
+            "box-sizing:border-box;overflow:hidden;"
+        ).format(PAGE_WIDTH_MM, PAGE_HEIGHT_MM)
+
+        page_blocks.append(
+            '<div class="page-container" style="{0}">{1}</div>'.format(
+                page_style, "".join(positioned)
+            )
+        )
+
+    return page_blocks
 
 
 @frappe.whitelist()
 def download_hall_ticket(name):
+    doc = frappe.get_doc("Registered Students", name)
+    fmt = _resolve_format(doc)
+    sizing = FORMAT_SIZING[fmt]
+
     pdf_content = frappe.get_print(
         "Registered Students",
         name,
-        PRINT_FORMAT,
+        fmt,
         as_pdf=True,
         no_letterhead=True,
     )
 
     reader = PdfReader(BytesIO(pdf_content))
     writer = PdfWriter()
-    target_height = SINGLE_PAGE_HEIGHT_MM * POINTS_PER_MM
+    target_height = sizing["single_crop_mm"] * POINTS_PER_MM
 
     for page in reader.pages:
         page_top = float(page.mediabox.top)
@@ -157,12 +251,12 @@ def get_registered_students_for_portal(selected_class=None):
 
 @frappe.whitelist()
 def download_hall_tickets(names=None, selected_class=None):
-    """Render the ITO Hall Ticket print format for many students,
-    exactly 3 per A3 page, and return one PDF.
+    """Render hall tickets for many students and return one PDF.
 
-    Each page is a fixed container. The 3 tickets on it are
-    placed with explicit top/left offsets (absolute positioning) rather
-    than being stacked in normal document flow.
+    Each student is routed to the ITO or Little Champ print format based
+    on their school's custom_is_little_champ flag. Tickets are grouped by
+    format (ITO: 3/page, Little Champ: 2/page - it's a taller template) so
+    every page only ever contains same-size cards.
     """
     if isinstance(names, str):
         try:
@@ -187,9 +281,16 @@ def download_hall_tickets(names=None, selected_class=None):
 
     names_list = list(names) if names is not None else []
 
-    template = frappe.db.get_value("Print Format", PRINT_FORMAT, "html")
-    if not template:
-        frappe.throw(_("Print Format {0} not found.").format(PRINT_FORMAT))
+    # Cache each print format's HTML so we only fetch it once.
+    template_cache = {}
+
+    def _get_template(fmt):
+        if fmt not in template_cache:
+            html = frappe.db.get_value("Print Format", fmt, "html")
+            if not html:
+                frappe.throw(_("Print Format {0} not found.").format(fmt))
+            template_cache[fmt] = html
+        return template_cache[fmt]
 
     # Fetch and validate student documents
     docs = []
@@ -212,50 +313,48 @@ def download_hall_tickets(names=None, selected_class=None):
 
     total = len(docs)
 
-    # Render every card's inner HTML first.
-    card_htmls = []
-    for i, doc in enumerate(docs):
-        card_htmls.append(
-            frappe.render_template(
-                template,
-                {
-                    "doc": doc,
-                    "frappe": frappe,
-                    "page_label": _("Page {0} of {1}").format(i + 1, total),
-                },
-            )
-        )
+    # Split into format groups, preserving the sorted order within each.
+    grouped = {DEFAULT_FORMAT: [], LITTLE_CHAMP_FORMAT: []}
+    for doc in docs:
+        grouped[_resolve_format(doc)].append(doc)
 
-    # Group into pages of exactly PER_PAGE cards each.
-    pages = [card_htmls[i:i + PER_PAGE] for i in range(0, len(card_htmls), PER_PAGE)]
+    printed_so_far = 0
+    all_page_blocks = []
 
-    page_blocks = []
-    for page_index, page_cards in enumerate(pages):
-        is_last_page = page_index == len(pages) - 1
+    # ITO tickets first, then Little Champ - swap this tuple's order if you
+    # want Little Champ tickets to print first.
+    for fmt in (DEFAULT_FORMAT, LITTLE_CHAMP_FORMAT):
+        fmt_docs = grouped[fmt]
+        if not fmt_docs:
+            continue
 
-        positioned = []
-        for k, card_html in enumerate(page_cards):
-            top = TOP_MARGIN_MM + k * (CARD_HEIGHT_MM + GAP_MM)
-            positioned.append(
-                '<div style="position:absolute;left:{0}mm;top:{1}mm;'
-                'width:{2}mm;height:{3}mm;overflow:hidden;">{4}</div>'.format(
-                    LEFT_OFFSET_MM, top, CARD_WIDTH_MM, CARD_HEIGHT_MM, card_html
+        template = _get_template(fmt)
+        sizing = FORMAT_SIZING[fmt]
+
+        card_htmls = []
+        for doc in fmt_docs:
+            printed_so_far += 1
+            card_htmls.append(
+                frappe.render_template(
+                    template,
+                    {
+                        "doc": doc,
+                        "frappe": frappe,
+                        "page_label": _("Page {0} of {1}").format(printed_so_far, total),
+                    },
                 )
             )
-            if k < len(page_cards) - 1:
-                gap_top = TOP_MARGIN_MM + (k + 1) * CARD_HEIGHT_MM + k * GAP_MM
-                positioned.append(_separator_html(gap_top))
 
-        page_style = (
-            "position:relative;width:{0}mm;height:{1}mm;"
-            "box-sizing:border-box;overflow:hidden;"
-        ).format(PAGE_WIDTH_MM, PAGE_HEIGHT_MM)
-        if not is_last_page:
-            page_style += "page-break-after:always;"
+        all_page_blocks.extend(_build_pages(card_htmls, sizing))
 
-        page_blocks.append(
-            '<div class="page-container" style="{0}">{1}</div>'.format(page_style, "".join(positioned))
-        )
+    # Join pages with an explicit page-break between them (not on the last).
+    # Each page div is already exactly one full physical page, so this
+    # break always lands cleanly - no flow/overflow math involved.
+    joined_pages = ""
+    for i, block in enumerate(all_page_blocks):
+        joined_pages += block
+        if i < len(all_page_blocks) - 1:
+            joined_pages += '<div style="page-break-after:always;"></div>'
 
     html = (
         "<!DOCTYPE html><html><head><meta charset='utf-8'>"
@@ -269,7 +368,7 @@ def download_hall_tickets(names=None, selected_class=None):
         "<body style='margin:0;padding:0;'>"
         "<div id='header-html' style='display:none;'></div>"
         "<div id='footer-html' style='display:none;'></div>"
-        + "".join(page_blocks) +
+        + joined_pages +
         "</body></html>"
     )
     html = scrub_urls(html)

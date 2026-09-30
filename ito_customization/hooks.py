@@ -299,5 +299,6 @@ jinja = {
     "methods": [
         "ito_customization.ito_customization.doc_events.barcode.get_barcode_base64",
         "ito_customization.ito_customization.doc_events.hall_ticket_slot.get_exam_slot_summary",
+        "ito_customization.ito_customization.doc_events.little_champ_hall_ticket.get_little_champ_exam_dates",
     ]
 }

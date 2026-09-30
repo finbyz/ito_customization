@@ -1,0 +1,85 @@
+{
+ "actions": [],
+ "allow_bulk_edit": 1,
+ "allow_rename": 1,
+ "creation": "2026-09-29 12:37:35.122145",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "school",
+  "full_name",
+  "school_code",
+  "column_break_oyqp",
+  "omr_sent",
+  "status",
+  "round"
+ ],
+ "fields": [
+  {
+   "fieldname": "school",
+   "fieldtype": "Link",
+   "label": "School",
+   "options": "Customer"
+  },
+  {
+   "fetch_from": "school.customer_name",
+   "fieldname": "full_name",
+   "fieldtype": "Data",
+   "label": "Full Name"
+  },
+  {
+   "fetch_from": "school.custom_ito_school_code",
+   "fieldname": "school_code",
+   "fieldtype": "Data",
+   "label": "School Code"
+  },
+  {
+   "fieldname": "column_break_oyqp",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "omr_sent",
+   "fieldtype": "Data",
+   "label": "OMR Sent"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "\nPending\nIn-Progress\nCompleted"
+  },
+  {
+   "fieldname": "round",
+   "fieldtype": "Select",
+   "label": "Round",
+   "options": "\n1\n2"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-29 12:42:01.736604",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "OMR",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
