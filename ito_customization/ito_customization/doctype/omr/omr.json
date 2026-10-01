@@ -2,6 +2,7 @@
  "actions": [],
  "allow_bulk_edit": 1,
  "allow_rename": 1,
+ "autoname": "{school}.-.####.",
  "creation": "2026-09-29 12:37:35.122145",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -10,7 +11,6 @@
   "full_name",
   "school_code",
   "column_break_oyqp",
-  "omr_sent",
   "status",
   "round"
  ],
@@ -38,15 +38,10 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "omr_sent",
-   "fieldtype": "Data",
-   "label": "OMR Sent"
-  },
-  {
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "\nPending\nIn-Progress\nCompleted"
+   "options": "\nOMR Sent\nOMR Recieved"
   },
   {
    "fieldname": "round",
@@ -58,10 +53,11 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-29 12:42:01.736604",
+ "modified": "2026-10-01 13:45:53.584869",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "OMR",
+ "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {
