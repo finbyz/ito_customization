@@ -6,8 +6,9 @@ from frappe.model.document import Document
 
 
 class OMR(Document):
-	def autoname(self):
-		if not self.school:
-			frappe.throw("School is required")
+	pass
+	# def autoname(self):
+	# 	if not self.school:
+	# 		frappe.throw("School is required")
 
-		self.name = self.school
+	# 	self.name = self.school
