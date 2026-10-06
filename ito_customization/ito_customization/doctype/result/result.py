@@ -13,6 +13,30 @@ class Result(Document):
 
 		self.name = self.student_name
 
+	def validate(self):
+		self.sync_round_1_values()
+
+	def sync_round_1_values(self):
+		"""Keep Round 1 score and topper in the matching Round 2 row."""
+		round_2_by_subject = {
+			row.subject_2: row
+			for row in self.round_2 or []
+			if row.subject_2
+		}
+
+		for round_1_row in self.round_1 or []:
+			if not round_1_row.subject:
+				continue
+
+			round_2_row = round_2_by_subject.get(round_1_row.subject)
+			if not round_2_row and self.qualified:
+				round_2_row = self.append("round_2", {"subject_2": round_1_row.subject})
+				round_2_by_subject[round_1_row.subject] = round_2_row
+
+			if round_2_row:
+				round_2_row.round_1_score = round_1_row.score
+				round_2_row.round_1_topper = round_1_row.topper or ""
+
 
 @frappe.whitelist()
 def upload_results(file_url):

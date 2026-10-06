@@ -9,9 +9,11 @@
  "field_order": [
   "academic_year_2",
   "subject_2",
+  "round_1_score",
   "score_2",
   "rank_2",
   "award_2",
+  "round_1_topper",
   "topper_2",
   "message_2"
  ],
@@ -62,13 +64,24 @@
    "fieldname": "message_2",
    "fieldtype": "Small Text",
    "label": "Message"
+  },
+  {
+   "fieldname": "round_1_score",
+   "fieldtype": "Data",
+   "label": "Round 1 Score",
+   "read_only": 1
+  },
+  {
+   "fieldname": "round_1_topper",
+   "fieldtype": "Data",
+   "label": "Round 1 Topper"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-09-28 10:57:16.887710",
+ "modified": "2026-10-05 18:27:20.854636",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Result Round 2",
