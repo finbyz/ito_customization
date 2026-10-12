@@ -3,6 +3,11 @@
 frappe.ui.form.on('Customer', {
 	setup(frm) {
 		frm.previous_academic_year = frm.doc.custom_current_academic_year;
+		frm.set_query("customer_type", () => ({
+			filters: {
+				name: ["in", get_customer_types(frm.doc.custom_customer_category)]
+			}
+		}));
 	},
 	onload(frm) {
 		toggle_country_state(frm);
@@ -203,16 +208,6 @@ frappe.ui.form.on('Customer', {
 	},
 
 	custom_customer_category(frm) {
-
-		let customer_type = {
-			"School Customer": ["Individual", "School"],
-			"Online Student Customer": ["Offline Student", "Online Student"]
-		};
-
-		let options = customer_type[frm.doc.custom_customer_category] || [];
-
-		frm.fields_dict.customer_type.df.options = options.join("\n");
-		frm.refresh_field("customer_type");
 		frm.set_value("customer_type", "");
 
 		// Re-evaluate State/Country visibility for the new category
@@ -244,6 +239,14 @@ frappe.ui.form.on('Customer', {
 	}
 
 });
+
+function get_customer_types(category) {
+	const types_by_category = {
+		"School Customer": ["Individual", "School"],
+		"Online Student Customer": ["Offline Student", "Online Student"]
+	};
+	return types_by_category[category] || [];
+}
 
 
 function set_coordinator_state_options(frm) {

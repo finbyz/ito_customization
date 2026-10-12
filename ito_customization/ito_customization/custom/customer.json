@@ -6331,7 +6331,7 @@
    "property": "options",
    "property_type": "Small Text",
    "row_name": null,
-   "value": "School\nCompany\nIndividual\nOffline Student\nOnline Student"
+   "value": "Customer Type"
   },
   {
    "_assign": null,
