@@ -3,7 +3,6 @@
 frappe.ui.form.on('Customer', {
 	setup(frm) {
 		frm.previous_academic_year = frm.doc.custom_current_academic_year;
-		
 	},
 	onload(frm) {
 		toggle_country_state(frm);

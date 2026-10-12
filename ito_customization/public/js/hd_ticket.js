@@ -1,7 +1,14 @@
 frappe.ui.form.on("HD Ticket", {
 	setup(frm) {
+		// frm.set_query("ticket_type", () => ({
+		// 	filters: { disabled: 0 },
+		// }));
+
 		frm.set_query("ticket_type", () => ({
-			filters: { disabled: 0 },
+			filters: {
+				disabled: 0,
+				custom_customer_type: frm.doc.custom_customer_type || "__no_customer_type__",
+			},
 		}));
 		frm.set_query("custom_sub_ticket_1", () => ({
 			filters: {
