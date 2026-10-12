@@ -3,11 +3,7 @@
 frappe.ui.form.on('Customer', {
 	setup(frm) {
 		frm.previous_academic_year = frm.doc.custom_current_academic_year;
-		frm.set_query("customer_type", () => ({
-			filters: {
-				name: ["in", get_customer_types(frm.doc.custom_customer_category)]
-			}
-		}));
+		
 	},
 	onload(frm) {
 		toggle_country_state(frm);
