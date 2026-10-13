@@ -10,6 +10,7 @@ import base64
 from frappe.utils import cint, flt
 from frappe.model.naming import make_autoname
 import io
+from frappe.model.rename_doc import rename_doc as _rename_doc
 
 # ==============================================================================
 # SECTION 1: COMMON UTILITIES & HELPERS
@@ -307,6 +308,7 @@ def save_registration_step():
 
 	except Exception as e:
 		# Reset flag but don't call rollback
+		frappe.db.rollback()
 		frappe.flags.ignore_permissions = False
 		frappe.log_error(frappe.get_traceback(), "Save Registration Step Error")
 		return {"success": False, "message": str(e)}
@@ -643,6 +645,132 @@ def create_or_update_principal(principal, customer_name):
 	return contact.name
 
 
+# def create_or_update_teachers(coordinators, customer_name):
+# 	customer = frappe.get_doc("Customer", customer_name)
+
+# 	subject_map = {
+# 		"iso": "Science Olympiad (ISO)",
+# 		"imo": "Maths Olympiad (IMO)",
+# 		"eio": "English Olympiad (EIO)",
+# 		"gkio": "General Knowledge Olympiad (GKIO)",
+# 		"ico": "Computer Olympiad (ICO)",
+# 		"ido": "Drawing Olympiad (IDO)",
+# 		"neso": "Essay Olympiad (NESO)",
+# 		"nsso": "Social Studies Olympiad (NSSO)",
+# 		"nho": "Hindi Olympiad (NHO)",
+# 		"nlro": "Logical Reasoning Olympiad (NLRO)",
+# 		"cio": "Commerce Olympiad (CIO)"
+# 	}
+
+# 	ensure_subject_exists("Principal")
+# 	for subject_name in subject_map.values():
+# 		ensure_subject_exists(subject_name)
+
+# 	# Clean existing child table rows in database for this customer
+# 	frappe.db.delete("Teachers Details", {"parent": customer.name})
+# 	customer.set("custom_school_teacher_details", [])
+
+# 	processed_teacher_names = set()
+
+# 	for role_key, coordinator in coordinators.items():
+# 		if not coordinator.get("name"):
+# 			continue
+
+# 		role_text = coordinator.get("role", "").strip()
+# 		subject = None
+
+# 		if "principal" in role_text.lower() or "principal" in role_key.lower():
+# 			subject = "Principal"
+# 		elif "overall" in role_text.lower() or "overall" in role_key.lower():
+# 			subject = "Overall Coordinator"
+# 		else:
+# 			for code, sub_name in subject_map.items():
+# 				if f"({code.upper()})" in role_text:
+# 					subject = sub_name
+# 					break
+# 			if not subject and role_text.endswith(" In-charge"):
+# 				subject = role_text[:-10].strip()
+# 			if not subject:
+# 				subject = subject_map.get(role_key)
+
+# 		if not subject:
+# 			subject = role_text or "Other"
+
+# 		ensure_subject_exists(subject)
+
+# 		teacher_email = (coordinator.get("email") or "").strip().lower()
+# 		teacher_name = None
+
+# 		# If Email ID is same then it should update the current record
+# 		# if teacher_email:
+# 		# 	teacher_name = frappe.db.get_value("Teacher", {"email_id": teacher_email})
+
+# 		if teacher_email:
+# 			teacher_name = frappe.db.get_value("Teacher", {
+# 				"email_id": teacher_email,
+# 				"customer_reference": customer.name
+# 			})
+
+# 		# Fallback: check by name1 and customer_reference if not found by email
+# 		if not teacher_name and coordinator.get("name"):
+# 			teacher_name = frappe.db.get_value("Teacher", {
+# 				"name1": coordinator.get("name"),
+# 				"customer_reference": customer.name
+# 			})
+
+# 		if teacher_name:
+# 			teacher = frappe.get_doc("Teacher", teacher_name)
+# 		else:
+# 			# If different / not found, create new one
+# 			teacher = frappe.new_doc("Teacher")
+
+# 		teacher.name1 = coordinator.get("name")
+# 		teacher.phone_number = coordinator.get("mobile")
+# 		teacher.email_id = coordinator.get("email")
+# 		teacher.date_of_birth = coordinator.get("dob") or getattr(teacher, "date_of_birth", None) or "2000-01-01"
+# 		teacher.subject = subject
+# 		teacher.status = "Active"
+# 		teacher.experience = "Experienced"
+# 		teacher.customer_reference = customer.name
+# 		teacher.school_name = customer.name
+
+# 		if teacher.is_new():
+# 			teacher.insert(ignore_permissions=True)
+# 		else:
+# 			teacher.save(ignore_permissions=True)
+		
+# 		new_docname = (teacher.name1 or "").strip()
+# 		if new_docname and teacher.name != new_docname:
+# 			if frappe.db.exists("Teacher", new_docname):
+# 				new_docname = f"{new_docname}-{teacher.name[-4:]}"
+# 			if teacher.name != new_docname:
+# 				frappe.rename_doc("Teacher", teacher.name, new_docname, force=True, ignore_permissions=True)
+# 			teacher = frappe.get_doc("Teacher", new_docname)
+
+
+# 		if teacher.name in processed_teacher_names:
+# 			continue
+# 		processed_teacher_names.add(teacher.name)
+
+# 		# Ensure no orphaned Teachers Details record exists with this name before append
+# 		# if frappe.db.exists("Teachers Details", teacher.name):
+# 		# 	frappe.db.delete("Teachers Details", {"name": teacher.name})
+
+# 		frappe.db.delete("Teachers Details", {"name1": teacher.name})
+
+# 		customer.append("custom_school_teacher_details", {
+# 			"name1": teacher.name,
+# 			"date_of_birth": teacher.date_of_birth,
+# 			"phone_number": teacher.phone_number,
+# 			"status": teacher.status,
+# 			"email_id": teacher.email_id,
+# 			"subject": teacher.subject,
+# 			"experience": teacher.experience
+# 		})
+
+# 	customer.save(ignore_permissions=True)
+
+
 def create_or_update_teachers(coordinators, customer_name):
 	customer = frappe.get_doc("Customer", customer_name)
 
@@ -664,8 +792,7 @@ def create_or_update_teachers(coordinators, customer_name):
 	for subject_name in subject_map.values():
 		ensure_subject_exists(subject_name)
 
-	# Clean existing child table rows in database for this customer
-	frappe.db.delete("Teachers Details", {"parent": customer.name})
+	# Old rows are removed when customer.save() runs
 	customer.set("custom_school_teacher_details", [])
 
 	processed_teacher_names = set()
@@ -699,12 +826,15 @@ def create_or_update_teachers(coordinators, customer_name):
 		teacher_email = (coordinator.get("email") or "").strip().lower()
 		teacher_name = None
 
-		# If Email ID is same then it should update the current record
+		# Same email within this school -> update the existing Teacher
 		if teacher_email:
-			teacher_name = frappe.db.get_value("Teacher", {"email_id": teacher_email})
+			teacher_name = frappe.db.get_value("Teacher", {
+				"email_id": teacher_email,
+				"customer_reference": customer.name
+			})
 
-		# Fallback: check by name1 and customer_reference if not found by email
-		if not teacher_name and coordinator.get("name"):
+		# Fallback: same name within this school
+		if not teacher_name:
 			teacher_name = frappe.db.get_value("Teacher", {
 				"name1": coordinator.get("name"),
 				"customer_reference": customer.name
@@ -713,7 +843,6 @@ def create_or_update_teachers(coordinators, customer_name):
 		if teacher_name:
 			teacher = frappe.get_doc("Teacher", teacher_name)
 		else:
-			# If different / not found, create new one
 			teacher = frappe.new_doc("Teacher")
 
 		teacher.name1 = coordinator.get("name")
@@ -731,13 +860,24 @@ def create_or_update_teachers(coordinators, customer_name):
 		else:
 			teacher.save(ignore_permissions=True)
 
+		# >>> CHANGE: rename via inner function, no set_user switching
+		new_docname = (teacher.name1 or "").strip()
+		if new_docname and teacher.name != new_docname:
+			if frappe.db.exists("Teacher", new_docname):
+				new_docname = f"{new_docname}-{teacher.name[-4:]}"
+			if teacher.name != new_docname:
+				_rename_doc(
+					"Teacher", teacher.name, new_docname,
+					force=True, ignore_permissions=True
+				)
+			teacher = frappe.get_doc("Teacher", new_docname)
+
 		if teacher.name in processed_teacher_names:
 			continue
 		processed_teacher_names.add(teacher.name)
 
-		# Ensure no orphaned Teachers Details record exists with this name before append
-		if frappe.db.exists("Teachers Details", teacher.name):
-			frappe.db.delete("Teachers Details", {"name": teacher.name})
+		# name1 on Teachers Details is Unique, so clear any row already linking to this teacher
+		frappe.db.delete("Teachers Details", {"name1": teacher.name})
 
 		customer.append("custom_school_teacher_details", {
 			"name1": teacher.name,
@@ -1199,7 +1339,7 @@ def create_or_update_little_champ_teachers(coordinators, customer_name):
 			teacher.insert(ignore_permissions=True)
 		else:
 			teacher.save(ignore_permissions=True)
-
+	
 		if teacher.name in processed_teacher_names:
 			continue
 		processed_teacher_names.add(teacher.name)
