@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from urllib.parse import parse_qs, urlparse
+from uuid import UUID
 import frappe
 import frappe.share
 from frappe import _
@@ -167,22 +168,27 @@ def _get_razorpay_settings(form_name=None, customer=None):
     frappe.throw(_("No enabled Razorpay settings configured in the system."))
 
 
-def _find_registration_fee_invoice(customer, company, fee_item=None, form_name=None):
+def _find_registration_fee_invoice(customer, company, fee_item=None, form_name=None, lot_id=None):
     if not fee_item:
         fee_item = _get_registration_fee_item(company=company, form_name=form_name, customer=customer)
     if not fee_item:
         return None
+    filters = {
+        "customer": customer,
+        "company": company,
+        "docstatus": ["!=", 2],
+    }
+    if lot_id:
+        filters["remarks"] = f"ITO registration lot: {lot_id}"
     rows = frappe.get_all(
         "Sales Invoice",
-        filters={
-            "customer": customer,
-            "company": company,
-            "docstatus": ["!=", 2],
-        },
-        fields=["name", "docstatus", "outstanding_amount", "grand_total"],
+        filters=filters,
+        fields=["name", "docstatus", "outstanding_amount", "grand_total", "net_total", "custom_payment_mode"],
         order_by="creation desc",
     )
     for row in rows:
+        if row.custom_payment_mode not in (None, "", "Pay Online (Razorpay)"):
+            continue
         if frappe.db.exists(
             "Sales Invoice Item", {"parent": row.name, "item_code": fee_item}
         ):
@@ -190,10 +196,49 @@ def _find_registration_fee_invoice(customer, company, fee_item=None, form_name=N
     return None
 
 
+def _get_completed_registration_payment(invoice, amount):
+    """Return a posted Razorpay payment that covers the registration fee."""
+    if invoice.docstatus != 1 or abs(flt(invoice.net_total) - amount) > 0.01:
+        return None
+
+    transactions = frappe.get_all(
+        "Razorpay Transaction",
+        filters={
+            "reference_doctype": "Sales Invoice",
+            "reference_docname": invoice.name,
+            "status": "Completed",
+        },
+        fields=["amount", "payment_entry"],
+        order_by="creation desc",
+    )
+    for transaction in transactions:
+        if flt(transaction.amount) + 0.01 < amount or not transaction.payment_entry:
+            continue
+        if frappe.db.get_value("Payment Entry", transaction.payment_entry, "docstatus") != 1:
+            continue
+        allocated_amount = frappe.db.get_value(
+            "Payment Entry Reference",
+            {
+                "parent": transaction.payment_entry,
+                "reference_doctype": "Sales Invoice",
+                "reference_name": invoice.name,
+            },
+            "allocated_amount",
+        )
+        if flt(allocated_amount) + 0.01 >= amount:
+            return transaction.payment_entry
+    return None
+
+
 @frappe.whitelist()
-def initiate_registration_fee_payment(customer=None, free_registrations=0, form_name=None, total_students=None):
+def initiate_registration_fee_payment(customer=None, free_registrations=0, form_name=None, total_students=None, new_lot_id=None):
     try:
         customer = _get_customer(customer)
+        if new_lot_id:
+            try:
+                new_lot_id = str(UUID(new_lot_id))
+            except (TypeError, ValueError):
+                frappe.throw(_("Invalid registration lot identifier."))
         if not form_name:
             if frappe.db.get_value("Customer", customer, "custom_is_wof"):
                 form_name = "WOF Olympiad"
@@ -240,7 +285,18 @@ def initiate_registration_fee_payment(customer=None, free_registrations=0, form_
             customer,
             company,
             fee_item=fee_item,
+            lot_id=new_lot_id,
         )
+
+        if existing and existing.docstatus == 1:
+            payment_entry = _get_completed_registration_payment(existing, amount)
+            if payment_entry:
+                return {
+                    "already_paid": True,
+                    "paid": True,
+                    "sales_invoice": existing.name,
+                    "payment_entry": payment_entry,
+                }
 
         # ---------------------------------------------------------
         # If submitted invoice exists but amount has changed,
@@ -256,6 +312,11 @@ def initiate_registration_fee_payment(customer=None, free_registrations=0, form_
                     "Sales Invoice",
                     existing.name,
                 )
+
+                if 0 < flt(invoice.outstanding_amount) < flt(invoice.grand_total):
+                    frappe.throw(
+                        _("Registration invoice {0} has a payment and must be corrected by Accounts before another payment.").format(invoice.name)
+                    )
 
                 if invoice.status != "Paid":
                     invoice.flags.ignore_permissions = True
@@ -342,7 +403,15 @@ def initiate_registration_fee_payment(customer=None, free_registrations=0, form_
                 invoice.flags.ignore_permissions = True
                 invoice.flags.ignore_user_permissions = True
 
-                needs_update = False
+                needs_update = invoice.custom_payment_mode != "Pay Online (Razorpay)"
+                invoice.custom_payment_mode = "Pay Online (Razorpay)"
+                payment_date = frappe.utils.nowdate()
+                if str(invoice.custom_date or "") != payment_date:
+                    invoice.custom_date = payment_date
+                    needs_update = True
+                if abs(flt(invoice.custom_amount) - amount) > 0.01:
+                    invoice.custom_amount = amount
+                    needs_update = True
 
                 # -------------------------------------------------
                 # Ensure Customer
@@ -463,22 +532,6 @@ def initiate_registration_fee_payment(customer=None, free_registrations=0, form_
                             flags={"ignore_share_permission": True},
                         )
 
-                invoice.set("taxes", [])
-                invoice.tax_category = None
-                invoice.total_taxes_and_charges = 0
-                invoice.base_total_taxes_and_charges = 0
-
-                invoice.calculate_taxes_and_totals()
-
-                invoice.total_taxes_and_charges = 0
-                invoice.base_total_taxes_and_charges = 0
-                invoice.grand_total = invoice.net_total
-                invoice.base_grand_total = invoice.base_net_total
-
-                if invoice.disable_rounded_total:
-                    invoice.rounded_total = invoice.grand_total
-                    invoice.base_rounded_total = invoice.base_grand_total
-
                 needs_update = True
 
                 # -------------------------------------------------
@@ -493,7 +546,9 @@ def initiate_registration_fee_payment(customer=None, free_registrations=0, form_
                         frappe.flags.ignore_permissions = _original
 
                 invoice_name = invoice.name
-                pay_amount = amount
+                pay_amount = flt(invoice.grand_total)
+                if abs(flt(invoice.custom_amount) - pay_amount) > 0.01:
+                    frappe.db.set_value("Sales Invoice", invoice_name, "custom_amount", pay_amount)
 
             # -----------------------------------------------------
             # No Existing Invoice
@@ -509,6 +564,11 @@ def initiate_registration_fee_payment(customer=None, free_registrations=0, form_
                 invoice.customer = customer
                 invoice.company = company
                 invoice.debit_to = debit_to
+                invoice.custom_payment_mode = "Pay Online (Razorpay)"
+                invoice.custom_date = frappe.utils.nowdate()
+                invoice.custom_amount = amount
+                if new_lot_id:
+                    invoice.remarks = f"ITO registration lot: {new_lot_id}"
                 invoice.selling_price_list = "Standard Selling"
 
                 # -------------------------------------------------
@@ -586,20 +646,6 @@ def initiate_registration_fee_payment(customer=None, free_registrations=0, form_
                     flags={"ignore_share_permission": True},
                 )
 
-                invoice.set("taxes", [])
-                invoice.tax_category = None
-
-                invoice.calculate_taxes_and_totals()
-
-                invoice.total_taxes_and_charges = 0
-                invoice.base_total_taxes_and_charges = 0
-                invoice.grand_total = invoice.net_total
-                invoice.base_grand_total = invoice.base_net_total
-
-                if invoice.disable_rounded_total:
-                    invoice.rounded_total = invoice.grand_total
-                    invoice.base_rounded_total = invoice.base_grand_total
-
                 # -------------------------------------------------
                 # Insert new Sales Invoice
                 # -------------------------------------------------
@@ -612,7 +658,9 @@ def initiate_registration_fee_payment(customer=None, free_registrations=0, form_
                     frappe.flags.ignore_permissions = _original
 
                 invoice_name = invoice.name
-                pay_amount = amount
+                pay_amount = flt(invoice.grand_total)
+                if abs(flt(invoice.custom_amount) - pay_amount) > 0.01:
+                    frappe.db.set_value("Sales Invoice", invoice_name, "custom_amount", pay_amount)
 
         # ---------------------------------------------------------
         # Create Razorpay Payment
@@ -684,6 +732,12 @@ def confirm_registration_fee_payment(
         integration = frappe.get_doc("Integration Request", integration_request)
         data = frappe.parse_json(integration.data or "{}")
         transaction = frappe.get_doc("Razorpay Transaction", data["razorpay_transaction"])
+        if transaction.status == "Completed" and transaction.reference_docname:
+            frappe.db.set_value(
+                "Sales Invoice",
+                transaction.reference_docname,
+                {"custom_date": frappe.utils.nowdate(), "custom_amount": flt(transaction.amount)},
+            )
 
         return {
             "paid": transaction.status == "Completed",
@@ -701,8 +755,13 @@ def confirm_registration_fee_payment(
 
 
 @frappe.whitelist()
-def get_registration_fee_payment_status(customer=None, form_name=None):
+def get_registration_fee_payment_status(customer=None, form_name=None, new_lot_id=None):
     customer = _get_customer(customer)
+    if new_lot_id:
+        try:
+            new_lot_id = str(UUID(new_lot_id))
+        except (TypeError, ValueError):
+            frappe.throw(_("Invalid registration lot identifier."))
     if not form_name and customer:
         if frappe.db.get_value("Customer", customer, "custom_is_wof"):
             form_name = "WOF Olympiad"
@@ -720,18 +779,20 @@ def get_registration_fee_payment_status(customer=None, form_name=None):
 
     company = settings.company
     fee_item = _get_registration_fee_item(company, form_name=form_name, customer=customer)
-    invoice = _find_registration_fee_invoice(customer, company, fee_item=fee_item)
+    invoice = _find_registration_fee_invoice(customer, company, fee_item=fee_item, lot_id=new_lot_id)
     if not invoice or invoice.docstatus != 1:
         return {"paid": False}
 
-    payment_entry = frappe.db.get_value(
-        "Payment Entry Reference",
-        {"reference_doctype": "Sales Invoice", "reference_name": invoice.name},
-        "parent",
-        order_by="creation desc",
-    )
+    payment_entry = _get_completed_registration_payment(invoice, flt(invoice.net_total))
+    if not payment_entry and flt(invoice.outstanding_amount) <= 0:
+        payment_entry = frappe.db.get_value(
+            "Payment Entry Reference",
+            {"reference_doctype": "Sales Invoice", "reference_name": invoice.name},
+            "parent",
+            order_by="creation desc",
+        )
     return {
-        "paid": flt(invoice.outstanding_amount) <= 0,
+        "paid": bool(payment_entry) or flt(invoice.outstanding_amount) <= 0,
         "sales_invoice": invoice.name,
         "payment_entry": payment_entry,
     }

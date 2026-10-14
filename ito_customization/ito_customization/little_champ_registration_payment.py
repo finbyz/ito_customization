@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from urllib.parse import parse_qs, urlparse
+from uuid import UUID
 
 import frappe
 from frappe import _
@@ -14,6 +15,7 @@ from multi_company_razorpay.api import (
     get_checkout_context,
     get_settings_for_page,
 )
+from ito_customization.ito_customization.registration_payment import _get_completed_registration_payment
 
 PAGE = "Little Champ Registration"
 
@@ -85,26 +87,36 @@ def _get_registration_fee_rate(currency="INR"):
     return flt(inr_price) if inr_price and flt(inr_price) > 0 else 0.0
 
 
-def _find_fee_invoice(customer, company):
+def _find_fee_invoice(customer, company, lot_id=None):
     fee_item = _get_registration_fee_item(company)
     if not fee_item:
         return None
+    filters = {"customer": customer, "company": company, "docstatus": ["!=", 2]}
+    if lot_id:
+        filters["remarks"] = f"Little Champ registration lot: {lot_id}"
     invoices = frappe.get_all(
         "Sales Invoice",
-        filters={"customer": customer, "company": company, "docstatus": ["!=", 2]},
-        fields=["name", "docstatus", "outstanding_amount", "grand_total"],
+        filters=filters,
+        fields=["name", "docstatus", "outstanding_amount", "grand_total", "net_total", "custom_payment_mode"],
         order_by="creation desc",
     )
     for invoice in invoices:
+        if invoice.custom_payment_mode not in (None, "", "Pay Online (Razorpay)"):
+            continue
         if frappe.db.exists("Sales Invoice Item", {"parent": invoice.name, "item_code": fee_item}):
             return invoice
     return None
 
 
 @frappe.whitelist()
-def initiate_little_champ_registration_payment(customer=None):
+def initiate_little_champ_registration_payment(customer=None, new_lot_id=None):
     try:
         customer = _get_customer(customer)
+        if new_lot_id:
+            try:
+                new_lot_id = str(UUID(new_lot_id))
+            except (TypeError, ValueError):
+                frappe.throw(_("Invalid registration lot identifier."))
 
         settings = get_settings_for_page(PAGE)
         company = settings.company
@@ -121,7 +133,18 @@ def initiate_little_champ_registration_payment(customer=None):
         existing = _find_fee_invoice(
             customer,
             company,
+            lot_id=new_lot_id,
         )
+
+        if existing and existing.docstatus == 1:
+            payment_entry = _get_completed_registration_payment(existing, amount)
+            if payment_entry:
+                return {
+                    "already_paid": True,
+                    "paid": True,
+                    "sales_invoice": existing.name,
+                    "payment_entry": payment_entry,
+                }
 
         if (
             existing
@@ -136,6 +159,9 @@ def initiate_little_champ_registration_payment(customer=None):
                     "Sales Invoice",
                     existing.name,
                 )
+
+                if 0 < flt(invoice.outstanding_amount) < flt(invoice.grand_total):
+                    frappe.throw(_("Registration invoice {0} has a payment and requires Accounts correction.").format(invoice.name))
 
                 if invoice.status != "Paid":
                     invoice.flags.ignore_permissions = True
@@ -208,7 +234,15 @@ def initiate_little_champ_registration_payment(customer=None):
                 invoice.flags.ignore_permissions = True
                 invoice.flags.ignore_user_permissions = True
 
-                needs_update = False
+                needs_update = invoice.custom_payment_mode != "Pay Online (Razorpay)"
+                invoice.custom_payment_mode = "Pay Online (Razorpay)"
+                payment_date = frappe.utils.nowdate()
+                if str(invoice.custom_date or "") != payment_date:
+                    invoice.custom_date = payment_date
+                    needs_update = True
+                if abs(flt(invoice.custom_amount) - amount) > 0.01:
+                    invoice.custom_amount = amount
+                    needs_update = True
 
                 if invoice.customer != customer:
                     invoice.customer = customer
@@ -348,7 +382,7 @@ def initiate_little_champ_registration_payment(customer=None):
                         )
 
                 invoice_name = invoice.name
-                pay_amount = amount
+                pay_amount = flt(invoice.grand_total)
 
             else:
                 invoice = frappe.new_doc("Sales Invoice")
@@ -359,6 +393,11 @@ def initiate_little_champ_registration_payment(customer=None):
                 invoice.customer = customer
                 invoice.company = company
                 invoice.debit_to = debit_to
+                invoice.custom_payment_mode = "Pay Online (Razorpay)"
+                invoice.custom_date = frappe.utils.nowdate()
+                invoice.custom_amount = amount
+                if new_lot_id:
+                    invoice.remarks = f"Little Champ registration lot: {new_lot_id}"
                 invoice.selling_price_list = "Standard Selling"
 
                 if company_address:
@@ -460,7 +499,7 @@ def initiate_little_champ_registration_payment(customer=None):
                     )
 
                 invoice_name = invoice.name
-                pay_amount = amount
+                pay_amount = flt(invoice.grand_total)
 
         if pay_amount <= 0:
             frappe.throw(
@@ -531,6 +570,12 @@ def confirm_little_champ_registration_payment(
     integration = frappe.get_doc("Integration Request", integration_request)
     data = frappe.parse_json(integration.data or "{}")
     transaction = frappe.get_doc("Razorpay Transaction", data["razorpay_transaction"])
+    if transaction.status == "Completed" and transaction.reference_docname:
+        frappe.db.set_value(
+            "Sales Invoice",
+            transaction.reference_docname,
+            {"custom_date": frappe.utils.nowdate(), "custom_amount": flt(transaction.amount)},
+        )
     return {
         "paid": transaction.status == "Completed",
         "payment_entry": transaction.payment_entry,
@@ -540,7 +585,7 @@ def confirm_little_champ_registration_payment(
 
 
 @frappe.whitelist()
-def get_little_champ_payment_status():
+def get_little_champ_payment_status(new_lot_id=None):
     """Check if the current session customer's Little Champ fee has been paid."""
     session_customer = frappe.db.get_value(
         "Portal User", {"user": frappe.session.user}, "parent"
@@ -548,44 +593,35 @@ def get_little_champ_payment_status():
     if not session_customer:
         return {"paid": False}
 
+    if new_lot_id:
+        try:
+            new_lot_id = str(UUID(new_lot_id))
+        except (TypeError, ValueError):
+            frappe.throw(_("Invalid registration lot identifier."))
+
     try:
         company = get_settings_for_page(PAGE).company
     except Exception:
         company = None
 
-    filters = {
-        "customer": session_customer,
-        "docstatus": 1,
+    if not company:
+        return {"paid": False}
+    invoice = _find_fee_invoice(session_customer, company, lot_id=new_lot_id)
+    if not invoice or invoice.docstatus != 1:
+        return {"paid": False}
+    expected_amount = flt(_get_total_students(session_customer) * _get_registration_fee_rate("INR"))
+    if expected_amount <= 0 or abs(flt(invoice.net_total) - expected_amount) > 0.01:
+        return {"paid": False}
+    payment_entry = _get_completed_registration_payment(invoice, flt(invoice.net_total))
+    if not payment_entry and flt(invoice.outstanding_amount) <= 0:
+        payment_entry = frappe.db.get_value(
+            "Payment Entry Reference",
+            {"reference_doctype": "Sales Invoice", "reference_name": invoice.name},
+            "parent",
+            order_by="creation desc",
+        )
+    return {
+        "paid": bool(payment_entry) or flt(invoice.outstanding_amount) <= 0,
+        "sales_invoice": invoice.name,
+        "payment_entry": payment_entry,
     }
-    if company:
-        filters["company"] = company
-
-    invoices = frappe.get_all(
-        "Sales Invoice",
-        filters=filters,
-        fields=["name", "outstanding_amount"],
-        order_by="creation desc",
-    )
-
-    try:
-        fee_item = _get_registration_fee_item(company or "")
-    except Exception:
-        fee_item = None
-
-    for invoice in invoices:
-        if fee_item and not frappe.db.exists("Sales Invoice Item", {"parent": invoice.name, "item_code": fee_item}):
-            continue
-        if flt(invoice.outstanding_amount) <= 0:
-            payment_entry = frappe.db.get_value(
-                "Payment Entry Reference",
-                {"reference_doctype": "Sales Invoice", "reference_name": invoice.name},
-                "parent",
-                order_by="creation desc",
-            )
-            return {
-                "paid": True,
-                "sales_invoice": invoice.name,
-                "payment_entry": payment_entry,
-            }
-
-    return {"paid": False}

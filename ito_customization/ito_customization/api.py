@@ -162,6 +162,14 @@ def save_ito_registration(registration_data):
 					# Save exams - persists to DB session
 					es_doc.save(ignore_permissions=True)
 
+			payment = data.get("payment") or {}
+			if payment.get("mode") in ("dd", "neft", "cash", "upi"):
+				from ito_customization.ito_customization.manual_registration_invoice import (
+					create_or_update_manual_registration_invoice,
+				)
+
+				create_or_update_manual_registration_invoice(customer, payment)
+
 			# NO explicit commit - let Frappe handle it
 			return {"success": True, "customer": customer}
 
@@ -169,8 +177,8 @@ def save_ito_registration(registration_data):
 			frappe.flags.ignore_permissions = original_flag
 			
 	except Exception as e:
-		# Reset flag but don't call rollback
-		frappe.flags.ignore_permissions = False        
+		frappe.db.rollback()
+		frappe.flags.ignore_permissions = False
 		frappe.log_error(frappe.get_traceback(), "ITO Registration Error")
 		return {"success": False, "message": str(e)}
 
@@ -278,6 +286,10 @@ def save_registration_step():
 						es_doc.save(ignore_permissions=True)
 
 			elif step == 4:
+				# Review has no data to save; the final submit persists the registration.
+				pass
+
+			elif step == 5:
 				customer = frappe.cache().get_value(f"ito_customer_{frappe.session.user}")
 				if not customer and frappe.session.user != "Guest":
 					customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
@@ -286,14 +298,17 @@ def save_registration_step():
 
 				payment = data.get("payment", {})
 				mode = payment.get("mode")
-				# Razorpay payments are recorded via the Sales Invoice/Payment Entry
-				# created by registration_payment.py - this is just an audit trail for
-				# the self-declared manual modes (DD/NEFT/Cash/UPI).
-				if mode and mode != "razorpay":
+				if mode in ("dd", "neft", "cash", "upi"):
+					from ito_customization.ito_customization.manual_registration_invoice import (
+						create_or_update_manual_registration_invoice,
+					)
+
+					invoice_name = create_or_update_manual_registration_invoice(customer, payment)
 					frappe.get_doc("Customer", customer).add_comment(
 						"Info",
 						f"ITO Registration fee reported as paid via {mode}: "
-						f"{frappe.as_json(payment.get('payment_details', {}))}",
+						f"{frappe.as_json(payment.get('payment_details', {}))}. "
+						f"Draft Sales Invoice: {invoice_name}",
 					)
 
 			else:
@@ -1200,6 +1215,7 @@ def get_customer_from_session_user():
 @frappe.whitelist()
 def save_little_champ_registration(registration_data):
 	original_ignore_permissions = frappe.flags.ignore_permissions
+	frappe.db.savepoint("little_champ_registration_submit")
 	try:
 		# This portal route uses Guest API access. Its Customer/contact/address
 		# persistence is scoped to the submitted Little Champ registration, so
@@ -1273,11 +1289,22 @@ def save_little_champ_registration(registration_data):
 			else:
 				es_doc.save(ignore_permissions=True)
 
+		payment = data.get("payment") or {}
+		if payment.get("mode") in ("dd", "neft", "cash", "upi"):
+			from ito_customization.ito_customization.manual_registration_invoice import (
+				create_or_update_manual_registration_invoice,
+			)
+
+			create_or_update_manual_registration_invoice(
+				customer_doc.name, payment, form_name="Little Champ Registration"
+			)
+
 		# NO explicit commit - let Frappe handle it
 		# NO explicit rollback - let Frappe handle exceptions
 		return {"success": True, "customer": customer_doc.name}
 
 	except Exception as e:
+		frappe.db.rollback(save_point="little_champ_registration_submit")
 		frappe.log_error(frappe.get_traceback(), "Little Champ Registration Error")
 		return {"success": False, "message": str(e)}
 	finally:

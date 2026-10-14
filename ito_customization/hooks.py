@@ -148,6 +148,10 @@ doctype_js = {
 # Hook on document methods and events
 
 doc_events = {
+    "Sales Invoice": {
+        "before_validate": "ito_customization.ito_customization.registration_invoice_tax.keep_registration_invoice_tax_free",
+        "validate": "ito_customization.ito_customization.registration_invoice_tax.keep_registration_invoice_tax_free",
+    },
     "Lead": {
         "on_update": "ito_customization.ito_customization.doc_events.lead.on_update",
         "validate": "ito_customization.ito_customization.doc_events.lead.validate_duplicate_lead"
