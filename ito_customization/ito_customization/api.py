@@ -11,6 +11,9 @@ from frappe.utils import cint, flt
 from frappe.model.naming import make_autoname
 import io
 from frappe.model.rename_doc import rename_doc as _rename_doc
+from ito_customization.ito_customization.book_order_delivery_charge import (
+	get_delivery_charge_rate,
+)
 
 # ==============================================================================
 # SECTION 1: COMMON UTILITIES & HELPERS
@@ -1199,6 +1202,7 @@ def get_customer_from_session_user():
 		"teachers": teachers_data,
 		"books_selection": books_selection,
 		"books_order_submitted": books_order_submitted,
+		"delivery_charge_rate": get_delivery_charge_rate(customer.name, "Olympiad Books"),
 		"custom_is_little_champ": customer.get("custom_is_little_champ") or 0,
 		"custom_registration_date": customer.get("custom_registration_date"),
 		"registration_fee": lc_reg_fee if customer.get("custom_is_little_champ") else ito_reg_fee,

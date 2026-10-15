@@ -6,6 +6,10 @@ import secrets
 import frappe
 from frappe.model.document import Document
 from frappe.utils import flt, cint
+from ito_customization.ito_customization.book_order_delivery_charge import (
+	apply_delivery_charge,
+	get_delivery_charge_rate,
+)
 
 
 # SECURITY FIX (#5): sane upper bound on any single book-order quantity so a
@@ -400,6 +404,7 @@ def get_customer_exam_details(customer=None, school_code=None, token=None, class
 		"address": address,
 		"subjects": subject_details,
 		"registration_fee_rate": registration_fee_rate,
+		"delivery_charge_rate": get_delivery_charge_rate(customer, "Olympiad Books"),
 		"is_little_champ": is_lc,
 		"custom_consent_token_expiry": expiry_str
 	}
@@ -1155,7 +1160,6 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 				for itm in items_added:
 					so.append("items", dict(itm))
 				so.delivery_date = delivery_date
-				so.save(ignore_permissions=True)
 			else:
 				so = frappe.new_doc("Sales Order")
 				so.customer = customer
@@ -1167,7 +1171,13 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 					so.append("items", dict(itm))
 				so.flags.ignore_permissions = True
 				so.flags.ignore_mandatory = True
+
+			delivery_charge_rate = get_delivery_charge_rate(customer, company)
+			apply_delivery_charge(so, delivery_charge_rate)
+			if so.is_new():
 				so.insert(ignore_permissions=True)
+			else:
+				so.save(ignore_permissions=True)
 
 			# 3. Create or Update Draft Sales Invoice (SI) referencing the Sales Order
 			for itm in items_added:
@@ -1190,7 +1200,7 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 					if not itm.gst_hsn_code:
 						itm.gst_hsn_code = "490110"
 					itm.sales_order = so.name
-				si.calculate_taxes_and_totals()
+				apply_delivery_charge(si, delivery_charge_rate)
 				si.save(ignore_permissions=True)
 			else:
 				si = frappe.new_doc("Sales Invoice")
@@ -1209,7 +1219,7 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 					if not itm.gst_hsn_code:
 						itm.gst_hsn_code = "490110"
 					itm.sales_order = so.name
-				si.calculate_taxes_and_totals()
+				apply_delivery_charge(si, delivery_charge_rate)
 				si.insert(ignore_permissions=True)
 
 			# 4. Initiate Razorpay Checkout Payload for Olympiad Books

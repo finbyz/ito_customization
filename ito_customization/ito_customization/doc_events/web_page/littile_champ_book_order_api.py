@@ -13,6 +13,10 @@ from multi_company_razorpay.api import (
 )
 from frappe.desk.form import assign_to
 from frappe.model.base_document import get_controller
+from ito_customization.ito_customization.book_order_delivery_charge import (
+    apply_delivery_charge,
+    get_delivery_charge_rate,
+)
 
 RAZORPAY_PAGE = 'Little Champ Book Order'
 
@@ -1257,7 +1261,10 @@ def get_customer_from_session_user():
         "exam_summaries": exam_summaries_data,
         "session_user": frappe.session.user,
         "teachers": teachers_data,
-        "books_selection": books_selection
+        "books_selection": books_selection,
+        "delivery_charge_rate": get_delivery_charge_rate(
+            customer.name, _lc_get_razorpay_settings().company
+        ),
     }
 
 def create_or_update_school_contact(
@@ -1677,6 +1684,13 @@ def create_sales_order_from_books_order(order_data, customer=None):
                 message=json.dumps(valid_items, indent=2, default=str))
             for item in valid_items:
                 sales_order.append("items", item)
+
+            delivery_charge_rate = get_delivery_charge_rate(
+                customer_name, payment_company
+            )
+            apply_delivery_charge(
+                sales_order, delivery_charge_rate, clear_existing_taxes=True
+            )
             frappe.log_error("Sales Order Items", frappe.as_json(sales_order))
             # -----------------------------------
             # Save Sales Order
@@ -1702,7 +1716,10 @@ def create_sales_order_from_books_order(order_data, customer=None):
                 "Sales Order Updated"
                 if is_update
                 else "Sales Order Created"
-            )
+            ),
+            "delivery_charge_rate": delivery_charge_rate,
+            "delivery_charge_amount": sales_order.total_taxes_and_charges,
+            "grand_total": sales_order.grand_total,
         }
 
 
@@ -1757,12 +1774,6 @@ def initiate_little_champ_books_order_payment(sales_order, customer=None, trans_
         if not trans_items:
             frappe.throw(_('No items selected for payment.'))
 
-        total_amount = sum(
-            flt(row.get("qty")) * flt(row.get("rate")) for row in trans_items
-        )
-        if total_amount <= 0:
-            frappe.throw(_('Total amount must be greater than zero.'))
-
         # ------------------------------------------------------------
         # Update draft Sales Order items to match frontend (DON'T submit)
         # ------------------------------------------------------------
@@ -1816,6 +1827,15 @@ def initiate_little_champ_books_order_payment(sales_order, customer=None, trans_
                     "warehouse": delivery_warehouse,
                 })
 
+        if not sales_order_doc.items:
+            frappe.throw(_('Total amount must be greater than zero.'))
+
+        delivery_charge_rate = get_delivery_charge_rate(customer, payment_company)
+        apply_delivery_charge(
+            sales_order_doc, delivery_charge_rate, clear_existing_taxes=True
+        )
+        total_amount = flt(sales_order_doc.grand_total)
+
         sales_order_doc.flags.ignore_permissions = True
         if sales_order_doc.is_new():
             sales_order_doc.insert(ignore_permissions=True)
@@ -1848,6 +1868,7 @@ def initiate_little_champ_books_order_payment(sales_order, customer=None, trans_
             "book_order_items": json.dumps(trans_items),
             "book_order_warehouse": delivery_warehouse,
             "book_order_delivery_date": str(delivery_date),
+            "book_order_delivery_charge_rate": delivery_charge_rate,
             "redirect_to": f"/portal/little-champ-book?payment=success",
         }
 
@@ -2130,26 +2151,11 @@ def confirm_little_champ_books_order_payment(
 
         sales_invoice.set_posting_time = 1
         sales_invoice.flags.ignore_permissions = True
-        # Remove all tax rows copied from Sales Order
-        sales_invoice.set("taxes", [])
+        delivery_charge_rate = flt(data.get("book_order_delivery_charge_rate"))
+        apply_delivery_charge(sales_invoice, delivery_charge_rate, clear_existing_taxes=True)
 
         # Remove tax category / tax-related configuration
         sales_invoice.tax_category = None
-
-        # Recalculate invoice totals without taxes
-        sales_invoice.calculate_taxes_and_totals()
-
-        # Explicitly ensure tax amount is zero
-        sales_invoice.total_taxes_and_charges = 0
-        sales_invoice.base_total_taxes_and_charges = 0
-
-        # Grand total = net total
-        sales_invoice.grand_total = sales_invoice.net_total
-        sales_invoice.base_grand_total = sales_invoice.base_net_total
-
-        if sales_invoice.disable_rounded_total:
-            sales_invoice.rounded_total = sales_invoice.grand_total
-            sales_invoice.base_rounded_total = sales_invoice.base_grand_total
 
         sales_invoice.set_posting_time = 1
         sales_invoice.flags.ignore_permissions = True
