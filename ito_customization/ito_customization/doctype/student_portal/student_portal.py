@@ -1173,15 +1173,16 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 				so.flags.ignore_mandatory = True
 
 			delivery_charge_rate = get_delivery_charge_rate(customer, company)
-			apply_delivery_charge(so, delivery_charge_rate)
+			apply_delivery_charge(so, delivery_charge_rate, clear_existing_taxes=True)
 			if so.is_new():
 				so.insert(ignore_permissions=True)
 			else:
 				so.save(ignore_permissions=True)
 
 			# 3. Create or Update Draft Sales Invoice (SI) referencing the Sales Order
-			for itm in items_added:
-				itm["sales_order"] = so.name
+			for sales_order_item, invoice_item in zip(so.items, items_added):
+				invoice_item["sales_order"] = so.name
+				invoice_item["so_detail"] = sales_order_item.name
 
 			draft_si_name = frappe.db.get_value("Sales Invoice", {"customer": customer, "company": company, "docstatus": 0}, "name", order_by="creation desc")
 			if draft_si_name:
@@ -1196,11 +1197,12 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 					si.set_missing_values()
 				except Exception:
 					pass
-				for itm in si.items:
+				for sales_order_item, itm in zip(so.items, si.items):
 					if not itm.gst_hsn_code:
 						itm.gst_hsn_code = "490110"
 					itm.sales_order = so.name
-				apply_delivery_charge(si, delivery_charge_rate)
+					itm.so_detail = sales_order_item.name
+				apply_delivery_charge(si, delivery_charge_rate, clear_existing_taxes=True)
 				si.save(ignore_permissions=True)
 			else:
 				si = frappe.new_doc("Sales Invoice")
@@ -1215,11 +1217,12 @@ def initiate_student_portal_book_order_payment(customer, grand_total, total_qty=
 					si.set_missing_values()
 				except Exception:
 					pass
-				for itm in si.items:
+				for sales_order_item, itm in zip(so.items, si.items):
 					if not itm.gst_hsn_code:
 						itm.gst_hsn_code = "490110"
 					itm.sales_order = so.name
-				apply_delivery_charge(si, delivery_charge_rate)
+					itm.so_detail = sales_order_item.name
+				apply_delivery_charge(si, delivery_charge_rate, clear_existing_taxes=True)
 				si.insert(ignore_permissions=True)
 
 			# 4. Initiate Razorpay Checkout Payload for Olympiad Books
