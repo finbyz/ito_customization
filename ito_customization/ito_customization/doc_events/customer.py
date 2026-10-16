@@ -189,17 +189,31 @@ def _generate_code(prefix):
 
 def autoname(doc, method):
     """
-    Runs on NEW Customers only, before validate/insert. Sets the document's
-    actual ID (doc.name) to the generated code, and mirrors it into the
-    display field (custom_school_code or custom_ito_school_code).
-
-    Only applies to School Customers — State/Country and the school code
-    they generate are irrelevant for Online Student Customers, who use
-    Frappe's default naming instead.
+    Runs on NEW Customers only. If a school code was entered (form or Data
+    Import), use it exactly as the ID. Otherwise generate prefix + next number.
     """
     if doc.custom_customer_category != "School Customer":
-        return  # fall through to default Customer naming (e.g. by Customer Name)
+        return
 
+    target_field = _target_field(doc)
+    other_field = (
+        "custom_ito_school_code"
+        if target_field == "custom_school_code"
+        else "custom_school_code"
+    )
+
+    # Prefer the field matching the Little Champ flag, fall back to the other one
+    entered_code = (doc.get(target_field) or doc.get(other_field) or "").strip()
+
+    if entered_code:
+        if frappe.db.exists("Customer", entered_code):
+            frappe.throw(f"Customer / School Code {entered_code} already exists.")
+
+        doc.name = entered_code
+        doc.set(target_field, entered_code)
+        return
+
+    # No code entered -> auto-generate as before
     prefix = get_prefix(doc)
 
     if not prefix:
@@ -211,7 +225,7 @@ def autoname(doc, method):
 
     code = _generate_code(prefix)
     doc.name = code
-    doc.set(_target_field(doc), code)
+    doc.set(target_field, code)
 
 
 def sync_school_code(doc, method):
