@@ -16,6 +16,14 @@ from frappe.model.base_document import get_controller
 
 RAZORPAY_PAGE = "WOF Book Order"
 
+WOF_PAYMENT_MODE_LABELS = {
+    "dd": "Demand Draft (DD)",
+    "neft": "NEFT/RTGS",
+    "cash": "Cash Deposit",
+    "upi": "QR Code / UPI",
+    "online": "Pay Online (Razorpay)",
+}
+
 
 def _wof_get_razorpay_settings():
     """Resolve Razorpay settings for WOF Book Order with fallback to Olympiad Books company/page."""
@@ -554,20 +562,171 @@ def create_wof_sales_order(order_data, customer=None):
         return {"success": False, "sales_order": None, "message": str(e), "alert": True}
 
 
+@frappe.whitelist()
+def submit_wof_books_order(
+    sales_order, customer=None, trans_item_json=None,
+    payment_mode=None, payment_details=None,
+):
+    """Submit a WOF book Sales Order and ensure its Sales Invoice stays draft."""
+    session_customer = frappe.db.get_value(
+        "Portal User", {"user": frappe.session.user}, "parent"
+    )
+    if session_customer and customer and session_customer != customer:
+        frappe.throw(_("You are not allowed to submit an order for this customer."), frappe.PermissionError)
+    customer = session_customer or customer
+    if not customer:
+        frappe.throw(_("Please save School Information first."))
+
+    sales_order_doc = frappe.get_doc("Sales Order", sales_order)
+    if sales_order_doc.customer != customer:
+        frappe.throw(_("You are not allowed to submit this order."), frappe.PermissionError)
+    if sales_order_doc.docstatus == 2:
+        frappe.throw(_("This Sales Order has been cancelled."))
+
+    original_ignore_permissions = frappe.flags.ignore_permissions
+    try:
+        frappe.flags.ignore_permissions = True
+        if sales_order_doc.docstatus == 0:
+            trans_items = (
+                json.loads(trans_item_json)
+                if isinstance(trans_item_json, str)
+                else trans_item_json
+            ) if trans_item_json else None
+            if trans_items:
+                delivery_warehouse = _wof_get_delivery_warehouse(sales_order_doc.company)
+                delivery_date = add_days(today(), 7)
+                sales_order_doc.set("items", [])
+                for row in trans_items:
+                    item_code = row.get("item")
+                    qty = flt(row.get("qty"))
+                    if item_code and qty > 0:
+                        sales_order_doc.append("items", {
+                            "item_code": item_code,
+                            "qty": qty,
+                            "rate": flt(row.get("rate")),
+                            "delivery_date": delivery_date,
+                            "warehouse": delivery_warehouse,
+                        })
+            if not sales_order_doc.items:
+                frappe.throw(_("Please select books before submitting the order."))
+            sales_order_doc.save(ignore_permissions=True)
+            sales_order_doc.submit()
+
+        sales_invoice = _get_or_create_draft_wof_books_order_invoice(
+            sales_order_doc, payment_mode, payment_details
+        )
+        frappe.share.add_docshare(
+            "Sales Invoice", sales_invoice.name,
+            user=frappe.session.user, read=1,
+            flags={"ignore_share_permission": True},
+        )
+        return {
+            "success": True,
+            "sales_order": sales_order_doc.name,
+            "sales_invoice": sales_invoice.name,
+            "sales_order_docstatus": sales_order_doc.docstatus,
+            "sales_invoice_docstatus": sales_invoice.docstatus,
+        }
+    finally:
+        frappe.flags.ignore_permissions = original_ignore_permissions
+
+
+def _get_or_create_draft_wof_books_order_invoice(
+    sales_order_doc, payment_mode=None, payment_details=None,
+):
+    draft_invoice = frappe.db.sql(
+        """
+        SELECT si.name
+        FROM `tabSales Invoice` si
+        INNER JOIN `tabSales Invoice Item` sii ON sii.parent = si.name
+        WHERE sii.sales_order = %s AND si.docstatus = 0
+        ORDER BY si.creation DESC
+        LIMIT 1
+        """,
+        sales_order_doc.name,
+        as_dict=True,
+    )
+    if draft_invoice:
+        sales_invoice = frappe.get_doc("Sales Invoice", draft_invoice[0].name)
+    else:
+        from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
+
+        sales_invoice = make_sales_invoice(sales_order_doc.name, ignore_permissions=True)
+        sales_invoice.set_posting_time = 1
+        sales_invoice.flags.ignore_permissions = True
+        sales_invoice.set("taxes", [])
+        sales_invoice.tax_category = None
+        sales_invoice.calculate_taxes_and_totals()
+        sales_invoice.total_taxes_and_charges = 0
+        sales_invoice.base_total_taxes_and_charges = 0
+        sales_invoice.grand_total = sales_invoice.net_total
+        sales_invoice.base_grand_total = sales_invoice.base_net_total
+
+        if sales_invoice.disable_rounded_total:
+            sales_invoice.rounded_total = sales_invoice.grand_total
+            sales_invoice.base_rounded_total = sales_invoice.base_grand_total
+
+    _set_wof_invoice_payment_details(sales_invoice, payment_mode, payment_details)
+    if sales_invoice.is_new():
+        sales_invoice.insert(ignore_permissions=True)
+    elif payment_mode:
+        sales_invoice.save(ignore_permissions=True)
+    return sales_invoice
+
+
+def _set_wof_invoice_payment_details(sales_invoice, payment_mode, payment_details):
+    """Copy the WOF checkout payment selection and references to its draft invoice."""
+    if isinstance(payment_details, str):
+        payment_details = frappe.parse_json(payment_details)
+    payment_details = payment_details or {}
+    payment_label = WOF_PAYMENT_MODE_LABELS.get(payment_mode)
+    if not payment_label:
+        return
+
+    sales_invoice.custom_payment_mode = payment_label
+    for fieldname in (
+        "custom_bank_name", "custom_dd_no", "custom_utr_no",
+        "custom_bank_deposited_in", "custom_transaction_id",
+        "custom_upi_transaction_id__ref_no", "custom_date", "custom_amount",
+    ):
+        setattr(sales_invoice, fieldname, None)
+
+    detail_fields = {
+        "bank_name": "custom_bank_name",
+        "dd_no": "custom_dd_no",
+        "utr_no": "custom_utr_no",
+        "transaction_id": "custom_transaction_id",
+        "upi_ref": "custom_upi_transaction_id__ref_no",
+        "date": "custom_date",
+        "amount": "custom_amount",
+    }
+    if payment_mode == "cash":
+        detail_fields["bank_name"] = "custom_bank_deposited_in"
+        if not payment_details.get("bank_name"):
+            sales_invoice.custom_bank_deposited_in = "SBI"
+
+    for source, target in detail_fields.items():
+        value = payment_details.get(source)
+        if value not in (None, ""):
+            setattr(sales_invoice, target, value)
+
+
 # ══════════════════════════════════════════════════════════════════════
 # 4. INITIATE WOF BOOKS ORDER PAYMENT
 # ══════════════════════════════════════════════════════════════════════
 
 @frappe.whitelist()
-def initiate_wof_books_order_payment(sales_order, customer=None, trans_item_json=None):
+def initiate_wof_books_order_payment(
+    sales_order, customer=None, trans_item_json=None,
+    payment_mode=None, payment_details=None,
+):
     """Initiate Razorpay payment for WOF book order without submitting the SO."""
     session_customer = frappe.db.get_value(
         "Portal User", {"user": frappe.session.user}, "parent"
     )
-    customer = session_customer or customer
-
     if session_customer and customer and session_customer != customer:
         frappe.throw(_("You are not allowed to pay for this customer."), frappe.PermissionError)
+    customer = session_customer or customer
     if not customer:
         frappe.throw(_("Please save School Information first."))
 
@@ -592,6 +751,10 @@ def initiate_wof_books_order_payment(sales_order, customer=None, trans_item_json
             frappe.throw(_("You are not allowed to pay for this order."), frappe.PermissionError)
         if sales_order_doc.docstatus == 2:
             frappe.throw(_("This Sales Order has been cancelled."))
+
+        paid_order = _get_paid_wof_order_payment(sales_order_doc.name)
+        if paid_order:
+            return {"already_paid": True, **paid_order}
 
         # Check already paid
         existing_invoice = frappe.db.sql(
@@ -642,6 +805,11 @@ def initiate_wof_books_order_payment(sales_order, customer=None, trans_item_json
         # Create Razorpay order
         settings = _wof_get_razorpay_settings()
         gateway_account = settings.get_payment_gateway_account()
+        payment_details_data = (
+            json.loads(payment_details)
+            if isinstance(payment_details, str)
+            else payment_details or {}
+        )
 
         kwargs = {
             "amount": total_amount,
@@ -659,6 +827,8 @@ def initiate_wof_books_order_payment(sales_order, customer=None, trans_item_json
             "book_order_items": json.dumps(trans_items),
             "book_order_warehouse": delivery_warehouse,
             "book_order_delivery_date": str(delivery_date),
+            "book_order_payment_mode": payment_mode,
+            "book_order_payment_details": payment_details_data,
             "redirect_to": "/portal/wof-books-order?payment=success",
         }
 
@@ -706,8 +876,8 @@ def confirm_wof_books_order_payment(
     Called after Razorpay checkout completes.
     1. Verify signature & capture payment
     2. Submit Sales Order
-    3. Create & submit Sales Invoice
-    4. Create & submit Payment Entry
+    3. Create a draft Sales Invoice
+    4. Create & submit Payment Entry against the Sales Order
     5. Update Razorpay Transaction
     """
     original_ignore_permissions = frappe.flags.ignore_permissions
@@ -741,6 +911,15 @@ def confirm_wof_books_order_payment(
         # Verify Order ID
         if razorpay_order_id != transaction.razorpay_order_id:
             frappe.throw(_("Razorpay Order ID mismatch."), frappe.PermissionError)
+
+        if transaction.status == "Completed":
+            return {
+                "paid": True,
+                "sales_invoice": transaction.sales_invoice,
+                "payment_entry": transaction.payment_entry,
+                "sales_order": data.get("reference_docname"),
+                "redirect_to": "/portal/wof-books-order?payment=success",
+            }
 
         # Verify Signature
         settings.verify_checkout_signature(razorpay_order_id, razorpay_payment_id, razorpay_signature)
@@ -819,28 +998,13 @@ def confirm_wof_books_order_payment(
             so_doc.flags.ignore_permissions = True
             so_doc.submit()
 
-        # Create & Submit Sales Invoice
-        from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
-
-        sales_invoice = make_sales_invoice(so_doc.name, ignore_permissions=True)
-        sales_invoice.set_posting_time = 1
-        sales_invoice.flags.ignore_permissions = True
-        sales_invoice.set("taxes", [])
-        sales_invoice.tax_category = None
-        sales_invoice.calculate_taxes_and_totals()
-        sales_invoice.total_taxes_and_charges = 0
-        sales_invoice.base_total_taxes_and_charges = 0
-        sales_invoice.grand_total = sales_invoice.net_total
-        sales_invoice.base_grand_total = sales_invoice.base_net_total
-
-        if sales_invoice.disable_rounded_total:
-            sales_invoice.rounded_total = sales_invoice.grand_total
-            sales_invoice.base_rounded_total = sales_invoice.base_grand_total
-
-        sales_invoice.set_posting_time = 1
-        sales_invoice.flags.ignore_permissions = True
-        sales_invoice.insert(ignore_permissions=True)
-        sales_invoice.submit()
+        # Keep the Sales Invoice in draft; the payment is recorded as an
+        # advance against the submitted Sales Order.
+        sales_invoice = _get_or_create_draft_wof_books_order_invoice(
+            so_doc,
+            data.get("book_order_payment_mode"),
+            data.get("book_order_payment_details"),
+        )
 
         # Create Payment Entry
         actual_pe_class.set_missing_ref_details = fake_set_missing_ref_details
@@ -848,8 +1012,8 @@ def confirm_wof_books_order_payment(
         from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
 
         payment_entry = get_payment_entry(
-            "Sales Invoice",
-            sales_invoice.name,
+            "Sales Order",
+            so_doc.name,
             party_amount=transaction.amount,
             bank_account=settings.payment_account,
         )
@@ -900,8 +1064,8 @@ def confirm_wof_books_order_payment(
         transaction.db_set({
             "status": "Completed",
             "sales_invoice": sales_invoice.name,
-            "reference_doctype": "Sales Invoice",
-            "reference_docname": sales_invoice.name,
+            "reference_doctype": "Sales Order",
+            "reference_docname": so_doc.name,
             "payment_entry": payment_entry.name,
             "gateway_response": json.dumps(payment, default=str),
             "processed_on": frappe.utils.now_datetime(),
@@ -1024,6 +1188,10 @@ def get_wof_books_order_payment_status(sales_order=None):
 
         sales_order = sales_order_doc[0].name
 
+    paid_order = _get_paid_wof_order_payment(sales_order)
+    if paid_order:
+        return {"paid": True, **paid_order}
+
     existing_invoice = frappe.db.sql(
         """
         SELECT si.name, si.docstatus, si.outstanding_amount
@@ -1049,6 +1217,45 @@ def get_wof_books_order_payment_status(sales_order=None):
                 "paid": True,
                 "sales_invoice": invoice.name,
                 "payment_entry": payment_entry,
+                "sales_order": sales_order,
             }
 
     return {"paid": False}
+
+
+def _get_paid_wof_order_payment(sales_order):
+    """Find a submitted WOF book-order payment recorded against its Sales Order."""
+    payment = frappe.db.sql(
+        """
+        SELECT pe.name AS payment_entry
+        FROM `tabPayment Entry Reference` per
+        INNER JOIN `tabPayment Entry` pe ON pe.name = per.parent
+        WHERE per.reference_doctype = 'Sales Order'
+            AND per.reference_name = %s
+            AND pe.docstatus = 1
+        ORDER BY pe.creation DESC
+        LIMIT 1
+        """,
+        sales_order,
+        as_dict=True,
+    )
+    if not payment:
+        return None
+
+    invoice = frappe.db.sql(
+        """
+        SELECT si.name
+        FROM `tabSales Invoice` si
+        INNER JOIN `tabSales Invoice Item` sii ON sii.parent = si.name
+        WHERE sii.sales_order = %s AND si.docstatus = 0
+        ORDER BY si.creation DESC
+        LIMIT 1
+        """,
+        sales_order,
+        as_dict=True,
+    )
+    return {
+        "sales_invoice": invoice[0].name if invoice else None,
+        "payment_entry": payment[0].payment_entry,
+        "sales_order": sales_order,
+    }
