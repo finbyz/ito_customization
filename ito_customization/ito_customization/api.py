@@ -1538,12 +1538,21 @@ def save_wof_registration(registration_data):
 			save_competition_entry_matrix_record(customer, entry_matrix, is_submitted=True)
 			sync_wof_entry_matrix_to_exams_summary(customer, entry_matrix)
 
-		payment = data.get("payment", {})
+		payment = dict(data.get("payment") or {})
+		from ito_customization.ito_customization import wof_registration_payment as wof
+		payment["total_students"] = wof._count_matrix_students(entry_matrix)
 		mode = payment.get("mode")
-		if mode and mode != "razorpay":
+		if mode in ("dd", "neft", "cash", "upi"):
+			from ito_customization.ito_customization.manual_registration_invoice import (
+				create_or_update_manual_registration_invoice,
+			)
+
+			invoice_name = create_or_update_manual_registration_invoice(
+				customer, payment, form_name="WOF Registration"
+			)
 			customer_doc.add_comment(
 				"Info",
-				f"WOF Registration fee reported as paid via {mode}: {frappe.as_json(payment.get('payment_details', {}))}",
+				f"WOF Registration fee reported as paid via {mode}: {frappe.as_json(payment.get('payment_details', {}))}. Draft Sales Invoice: {invoice_name}",
 			)
 
 		return {"success": True, "customer": customer}
@@ -1680,6 +1689,22 @@ def sync_wof_entry_matrix_to_exams_summary(customer, entry_matrix):
 			"group_d": "Group D",
 			"group_e": "Group E",
 		}
+		chitrakala_subject_aliases = {
+			"colouring": "Colouring Competition",
+			"colouring_competition": "Colouring Competition",
+			"handwriting": "Handwriting Competition",
+			"handwriting_competition": "Handwriting Competition",
+			"sketching": "Sketching Competition",
+			"sketching_competition": "Sketching Competition",
+			"cartoon": "Cartoon Making",
+			"cartoon_making": "Cartoon Making",
+			"caricature": "Caricature (Cartoon)",
+			"caricature_cartoon": "Caricature (Cartoon)",
+			"greeting": "Greeting Card Making",
+			"greeting_card_making": "Greeting Card Making",
+		}
+		school_subjects = frappe.get_all("School Subject", pluck="name")
+		subject_lookup = {frappe.scrub(subject): subject for subject in school_subjects}
 
 		for group_key, comp_dict in entry_matrix.items():
 			if not isinstance(comp_dict, dict):
@@ -1688,7 +1713,9 @@ def sync_wof_entry_matrix_to_exams_summary(customer, entry_matrix):
 			for comp_key, count in comp_dict.items():
 				if count and cint(count) > 0:
 					es_doc.append("exam_summary", {
-						"subject": comp_key,
+						"subject": chitrakala_subject_aliases.get(
+							frappe.scrub(comp_key), subject_lookup.get(frappe.scrub(comp_key), comp_key)
+						),
 						"class": group_label,
 						"no_of_students": cint(count),
 						"form_type": "WOF Registration"
@@ -1760,10 +1787,17 @@ def save_wof_step():
 
 				payment = data.get("payment", {})
 				mode = payment.get("mode")
-				if mode and mode != "razorpay":
+				if mode in ("dd", "neft", "cash", "upi"):
+					from ito_customization.ito_customization.manual_registration_invoice import (
+						create_or_update_manual_registration_invoice,
+					)
+
+					invoice_name = create_or_update_manual_registration_invoice(
+						customer, payment, form_name="WOF Registration"
+					)
 					frappe.get_doc("Customer", customer).add_comment(
 						"Info",
-						f"WOF Registration fee reported as paid via {mode}: {frappe.as_json(payment.get('payment_details', {}))}",
+						f"WOF Registration fee reported as paid via {mode}: {frappe.as_json(payment.get('payment_details', {}))}. Draft Sales Invoice: {invoice_name}",
 					)
 				return {"success": True, "step": step}
 
@@ -5556,12 +5590,20 @@ def save_wof_school_registration(registration_data=None):
 			save_wof_exams_summary(customer, exams_data)
 
 		# Payment comment
-		payment = data.get("payment", {})
+		payment = dict(data.get("payment") or {})
+		payment["total_students"] = _count_wof_registration_students(exams_data)
 		mode = payment.get("mode")
-		if mode and mode != "razorpay":
+		if mode in ("dd", "neft", "cash", "upi"):
+			from ito_customization.ito_customization.manual_registration_invoice import (
+				create_or_update_manual_registration_invoice,
+			)
+
+			invoice_name = create_or_update_manual_registration_invoice(
+				customer, payment, form_name="WOF Olympiad"
+			)
 			customer_doc.add_comment(
 				"Info",
-				f"WOF School Registration fee reported via {mode}: Total Students: {payment.get('total_students')}, Workbooks: {payment.get('total_workbooks')}, Grand Total: ₹{payment.get('grand_total_payable')}."
+				f"WOF School Registration fee reported via {mode}: Total Students: {payment.get('total_students')}, Workbooks: {payment.get('total_workbooks')}, Grand Total: {payment.get('grand_total_payable')}. Draft Sales Invoice: {invoice_name}"
 			)
 
 		# Clear cache
@@ -5665,6 +5707,19 @@ def create_or_update_wof_coordinators(coordinators, customer_name):
 		})
 
 	customer.save(ignore_permissions=True)
+
+
+def _count_wof_registration_students(exams_data):
+	total_students = 0
+	for subject_data in (exams_data or {}).values():
+		if isinstance(subject_data, list):
+			total_students += sum(cint(row.get("students") or 0) for row in subject_data)
+		elif isinstance(subject_data, dict):
+			rows = subject_data.get("rows") or {}
+			total_students += sum(
+				cint(row.get("students") or 0) for row in rows.values() if isinstance(row, dict)
+			)
+	return total_students
 
 
 def save_wof_exams_summary(customer, exams_data):
@@ -5790,13 +5845,23 @@ def save_wof_school_registration_step(step=None, data=None):
 			if not customer:
 				customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
 			if customer:
-				payment = payload.get("payment", {})
+				payment = dict(payload.get("payment") or {})
+				payment["total_students"] = _count_wof_registration_students(
+					payload.get("exams", {})
+				)
 				mode = payment.get("mode")
-				if mode and mode != "razorpay":
+				if mode in ("dd", "neft", "cash", "upi"):
+					from ito_customization.ito_customization.manual_registration_invoice import (
+						create_or_update_manual_registration_invoice,
+					)
+
+					invoice_name = create_or_update_manual_registration_invoice(
+						customer, payment, form_name="WOF Olympiad"
+					)
 					customer_doc = frappe.get_doc("Customer", customer)
 					customer_doc.add_comment(
 						"Info",
-						f"WOF School Registration fee reported via {mode}: Total Students: {payment.get('total_students')}, Workbooks: {payment.get('total_workbooks')}, Grand Total: ₹{payment.get('grand_total_payable')}."
+						f"WOF School Registration fee reported via {mode}: Total Students: {payment.get('total_students')}, Workbooks: {payment.get('total_workbooks')}, Grand Total: {payment.get('grand_total_payable')}. Draft Sales Invoice: {invoice_name}"
 					)
 
 		# Also update the draft cache in background

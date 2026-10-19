@@ -1,10 +1,16 @@
-"""Tax policy for ITO and Little Champ registration invoices."""
+"""Tax policy for registration invoices."""
 
 import frappe
 
 from ito_customization.ito_customization.registration_payment import PAGE
 
-REGISTRATION_FORMS = {PAGE, "Little Champ Registration"}
+REGISTRATION_FORMS = {
+    PAGE,
+    "Little Champ Registration",
+    "WOF Olympiad",
+    "WOF Registration",
+    "Chitrakala Registration",
+}
 
 PAYMENT_MODES = {
     "Demand Draft (DD)",

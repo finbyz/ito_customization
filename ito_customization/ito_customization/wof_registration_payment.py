@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from urllib.parse import parse_qs, urlparse
+from uuid import UUID
 
 import frappe
 import frappe.share
@@ -233,13 +234,16 @@ def _get_retention_rate(customer=None, item_code=None):
     return 0.0
 
 
-def _find_fee_invoice(customer, company):
+def _find_fee_invoice(customer, company, lot_id=None):
     fee_item = _get_registration_fee_item(company)
     if not fee_item:
         return None
+    filters = {"customer": customer, "company": company, "docstatus": ["!=", 2]}
+    if lot_id:
+        filters["remarks"] = f"WOF registration lot: {lot_id}"
     invoices = frappe.get_all(
         "Sales Invoice",
-        filters={"customer": customer, "company": company, "docstatus": ["!=", 2]},
+        filters=filters,
         fields=["name", "docstatus", "outstanding_amount", "grand_total"],
         order_by="creation desc",
     )
@@ -250,9 +254,16 @@ def _find_fee_invoice(customer, company):
 
 
 @frappe.whitelist()
-def initiate_wof_registration_payment(customer=None, entry_matrix=None, currency="INR", total_students=None):
+def initiate_wof_registration_payment(
+	customer=None, entry_matrix=None, currency="INR", total_students=None, new_lot_id=None
+):
     try:
         customer = _get_customer(customer)
+        if new_lot_id:
+            try:
+                new_lot_id = str(UUID(new_lot_id))
+            except (TypeError, ValueError):
+                frappe.throw(_("Invalid registration lot identifier."))
 
         settings = _get_razorpay_settings()
         company = settings.company
@@ -276,7 +287,7 @@ def initiate_wof_registration_payment(customer=None, entry_matrix=None, currency
         if net_payable_amount <= 0:
             frappe.throw(_("No outstanding registration fee to pay."))
 
-        existing = _find_fee_invoice(customer, company)
+        existing = _find_fee_invoice(customer, company, lot_id=new_lot_id)
 
         if (
             existing
@@ -331,6 +342,8 @@ def initiate_wof_registration_payment(customer=None, entry_matrix=None, currency
                 invoice = frappe.get_doc("Sales Invoice", existing.name)
                 invoice.flags.ignore_permissions = True
                 invoice.flags.ignore_user_permissions = True
+                if new_lot_id:
+                    invoice.remarks = f"WOF registration lot: {new_lot_id}"
 
                 needs_update = False
                 if invoice.customer != customer:
@@ -413,6 +426,8 @@ def initiate_wof_registration_payment(customer=None, entry_matrix=None, currency
 
                 invoice.due_date = nowdate()
                 invoice.currency = currency
+                if new_lot_id:
+                    invoice.remarks = f"WOF registration lot: {new_lot_id}"
 
                 invoice.append("items", {
                     "item_code": item,
@@ -504,11 +519,17 @@ def confirm_wof_registration_fee_payment(
 
 
 @frappe.whitelist()
-def get_wof_registration_fee_payment_status(customer=None):
+def get_wof_registration_fee_payment_status(customer=None, new_lot_id=None):
     try:
         customer = _get_customer(customer)
     except Exception:
         return {"paid": False}
+
+    if new_lot_id:
+        try:
+            new_lot_id = str(UUID(new_lot_id))
+        except (TypeError, ValueError):
+            frappe.throw(_("Invalid registration lot identifier."))
 
     try:
         settings = _get_razorpay_settings()
@@ -522,6 +543,8 @@ def get_wof_registration_fee_payment_status(customer=None):
     }
     if company:
         filters["company"] = company
+    if new_lot_id:
+        filters["remarks"] = f"WOF registration lot: {new_lot_id}"
 
     invoices = frappe.get_all(
         "Sales Invoice",

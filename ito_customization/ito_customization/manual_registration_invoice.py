@@ -32,12 +32,38 @@ def create_or_update_manual_registration_invoice(
     if not isinstance(details, dict):
         frappe.throw(_("Invalid payment details."))
 
-    currency = "INR" if payment.get("region", "india") == "india" else "USD"
+    currency = payment.get("currency") or (
+        "INR" if payment.get("region", "india") == "india" else "USD"
+    )
     if form_name == ITO_PAGE:
         settings, _ = _get_razorpay_settings(form_name=form_name, customer=customer)
         item_code = _get_registration_fee_item(company=settings.company, form_name=form_name, customer=customer)
         rate = _get_registration_fee_rate(currency, form_name=form_name, customer=customer)
         total_students = _get_total_students(customer)
+    elif form_name == "WOF Olympiad":
+        settings, _ = _get_razorpay_settings(form_name=form_name, customer=customer)
+        from ito_customization.ito_customization import api
+
+        fee_info = api.get_registration_fee(form_name=form_name)
+        rate_key = "rate_usd" if currency == "USD" else "rate_inr"
+        if not fee_info or flt(fee_info.get(rate_key)) <= 0:
+            fee_info = api.get_registration_fee(form_name="WOF Registration")
+        item_code = fee_info.get("item_code") if fee_info else None
+        rate = flt(fee_info.get(rate_key)) if fee_info else 0
+        if "total_students" in payment:
+            total_students = cint(payment.get("total_students"))
+        else:
+            total_students = _get_total_students(customer)
+    elif form_name == "WOF Registration":
+        from ito_customization.ito_customization import wof_registration_payment as wof
+
+        settings = wof._get_razorpay_settings()
+        item_code = wof._get_registration_fee_item(settings.company)
+        rate = wof._get_registration_fee_rate(currency)
+        if "total_students" in payment:
+            total_students = cint(payment.get("total_students"))
+        else:
+            total_students = wof._get_total_students(customer)
     elif form_name == "Little Champ Registration":
         from ito_customization.ito_customization import little_champ_registration_payment as lc
 
@@ -51,7 +77,11 @@ def create_or_update_manual_registration_invoice(
     if not item_code or rate <= 0:
         frappe.throw(_("Registration fee item and rate must be configured."))
 
-    free_registrations = cint(payment.get("free_registrations")) if form_name == ITO_PAGE else 0
+    free_registrations = (
+        cint(payment.get("free_registrations"))
+        if form_name in (ITO_PAGE, "WOF Olympiad")
+        else 0
+    )
     if free_registrations < 0 or free_registrations > total_students:
         frappe.throw(_("Invalid number of free registrations."))
     paid_students = total_students - free_registrations
@@ -59,6 +89,10 @@ def create_or_update_manual_registration_invoice(
         frappe.throw(_("No registration fee is due."))
 
     amount = flt(paid_students * rate, 2)
+    if form_name == "WOF Registration":
+        retention_rate = wof._get_retention_rate(customer, item_code)
+        amount = flt(amount * (1 - retention_rate), 2)
+        rate = amount / paid_students
     _validate_payment(details, mode, amount)
     invoice = _find_manual_invoice(customer, company, item_code, mode, details)
     if not invoice:
