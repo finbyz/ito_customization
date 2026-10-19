@@ -19,6 +19,14 @@ from ito_customization.ito_customization.book_order_delivery_charge import (
 )
 
 RAZORPAY_PAGE = 'Little Champ Book Order'
+BOOK_ORDER_PAYMENT_MODE_LABELS = {
+    "dd": "Demand Draft (DD)",
+    "neft": "NEFT/RTGS",
+    "cash": "Cash Deposit",
+    "upi": "QR Code / UPI",
+    "razorpay": "Pay Online (Razorpay)",
+    "online": "Pay Online (Razorpay)",
+}
 
 
 def _lc_get_razorpay_settings():
@@ -1742,7 +1750,200 @@ def create_sales_order_from_books_order(order_data, customer=None):
         }
         
 @frappe.whitelist()
-def initiate_little_champ_books_order_payment(sales_order, customer=None, trans_item_json=None):
+def submit_little_champ_books_order(
+    sales_order, customer=None, trans_item_json=None,
+    payment_mode=None, payment_details=None,
+):
+    """Submit the Little Champ Sales Order and keep its invoice in draft."""
+    session_customer = frappe.db.get_value(
+        "Portal User", {"user": frappe.session.user}, "parent"
+    )
+    if session_customer and customer and session_customer != customer:
+        frappe.throw(_("You are not allowed to submit an order for this customer."), frappe.PermissionError)
+    customer = session_customer or customer
+    sales_order_doc = frappe.get_doc("Sales Order", sales_order)
+    if not customer or sales_order_doc.customer != customer:
+        frappe.throw(_("You are not allowed to submit this order."), frappe.PermissionError)
+    if sales_order_doc.docstatus == 2:
+        frappe.throw(_("This Sales Order has been cancelled."))
+
+    original_ignore_permissions = frappe.flags.ignore_permissions
+    try:
+        frappe.flags.ignore_permissions = True
+        trans_items = json.loads(trans_item_json) if isinstance(trans_item_json, str) else trans_item_json
+        if sales_order_doc.docstatus == 0:
+            if not isinstance(trans_items, list) or not trans_items:
+                frappe.throw(_("Please select books before submitting the order."))
+
+            warehouse = _get_delivery_warehouse(sales_order_doc.company)
+            sales_order_doc.set("items", [])
+            for row in trans_items:
+                if row.get("item") and flt(row.get("qty")) > 0:
+                    sales_order_doc.append("items", {
+                        "item_code": row.get("item"), "qty": flt(row.get("qty")),
+                        "rate": flt(row.get("rate")), "delivery_date": add_days(today(), 7),
+                        "warehouse": warehouse,
+                    })
+            if not sales_order_doc.items:
+                frappe.throw(_("Please select books before submitting the order."))
+            delivery_charge_rate = get_delivery_charge_rate(customer, sales_order_doc.company)
+            apply_delivery_charge(sales_order_doc, delivery_charge_rate, clear_existing_taxes=True)
+            sales_order_doc.save(ignore_permissions=True)
+            sales_order_doc.submit()
+        else:
+            if not sales_order_doc.items:
+                frappe.throw(_("The Sales Order has no book items. Please create the order again."))
+            delivery_charge_rate = get_delivery_charge_rate(customer, sales_order_doc.company)
+
+        invoice = _get_or_create_draft_lc_books_invoice(
+            sales_order_doc, payment_mode, payment_details,
+            delivery_charge_rate,
+        )
+        return {"success": True, "sales_order": sales_order_doc.name, "sales_invoice": invoice.name}
+    finally:
+        frappe.flags.ignore_permissions = original_ignore_permissions
+
+
+def _get_or_create_draft_lc_books_invoice(
+    sales_order_doc, payment_mode=None, payment_details=None, delivery_charge_rate=0,
+):
+    invoice_name = frappe.db.sql(
+        """SELECT si.name FROM `tabSales Invoice` si
+        INNER JOIN `tabSales Invoice Item` sii ON sii.parent = si.name
+        WHERE sii.sales_order = %s AND si.docstatus = 0
+        ORDER BY si.creation DESC LIMIT 1""",
+        sales_order_doc.name, as_dict=True,
+    )
+    if invoice_name:
+        invoice = frappe.get_doc("Sales Invoice", invoice_name[0].name)
+    else:
+        from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
+        invoice = make_sales_invoice(sales_order_doc.name, ignore_permissions=True)
+        invoice.flags.ignore_permissions = True
+        invoice.set_posting_time = 1
+        if not invoice.get("items"):
+            billed_rows = frappe.db.sql(
+                """SELECT sii.so_detail, SUM(sii.qty) AS billed_qty
+                FROM `tabSales Invoice Item` sii
+                INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
+                WHERE sii.sales_order = %s AND si.docstatus = 1
+                GROUP BY sii.so_detail""",
+                sales_order_doc.name,
+                as_dict=True,
+            )
+            billed_qty_by_order_item = {
+                row.so_detail: flt(row.billed_qty) for row in billed_rows
+            }
+
+            # Preserve any unbilled order quantities if ERPNext's mapper
+            # returns an empty invoice.
+            for order_item in sales_order_doc.items:
+                remaining_qty = flt(order_item.qty) - billed_qty_by_order_item.get(order_item.name, 0)
+                if remaining_qty <= 0:
+                    continue
+                invoice.append("items", {
+                    "item_code": order_item.item_code,
+                    "item_name": order_item.item_name,
+                    "description": order_item.description,
+                    "qty": remaining_qty,
+                    "uom": order_item.uom,
+                    "rate": flt(order_item.rate),
+                    "warehouse": order_item.warehouse,
+                    "sales_order": sales_order_doc.name,
+                    "so_detail": order_item.name,
+                })
+        if not invoice.get("items"):
+            submitted_invoice = frappe.db.sql(
+                """SELECT si.name FROM `tabSales Invoice` si
+                INNER JOIN `tabSales Invoice Item` sii ON sii.parent = si.name
+                WHERE sii.sales_order = %s AND si.docstatus = 1
+                ORDER BY si.creation DESC LIMIT 1""",
+                sales_order_doc.name,
+                as_dict=True,
+            )
+            if submitted_invoice:
+                # Older Little Champ orders may already have a submitted
+                # invoice. Reuse it without changing a submitted document.
+                return frappe.get_doc("Sales Invoice", submitted_invoice[0].name)
+
+            frappe.throw(_(
+                "Sales Order {0} has no items available for its draft invoice."
+            ).format(sales_order_doc.name))
+
+    invoice.tax_category = None
+    apply_delivery_charge(invoice, delivery_charge_rate, clear_existing_taxes=True)
+    _set_lc_invoice_payment_details(invoice, payment_mode, payment_details)
+    if invoice.is_new():
+        invoice.insert(ignore_permissions=True)
+    elif payment_mode or delivery_charge_rate:
+        invoice.save(ignore_permissions=True)
+    return invoice
+
+
+def _set_lc_invoice_payment_details(invoice, payment_mode, payment_details):
+    if isinstance(payment_details, str):
+        payment_details = frappe.parse_json(payment_details)
+    payment_details = payment_details or {}
+    nested_details = payment_details.get("payment_details")
+    if isinstance(nested_details, dict):
+        payment_details = {**payment_details, **nested_details}
+    label = BOOK_ORDER_PAYMENT_MODE_LABELS.get(payment_mode)
+    if not label:
+        return
+
+    invoice.custom_payment_mode = label
+    for fieldname in (
+        "custom_bank_name", "custom_dd_no", "custom_utr_no", "custom_bank_deposited_in",
+        "custom_transaction_id", "custom_branch_code", "custom_upi_transaction_id__ref_no",
+        "custom_date", "custom_amount",
+    ):
+        setattr(invoice, fieldname, None)
+
+    if payment_mode == "dd":
+        values = {
+            "custom_bank_name": payment_details.get("bank_name"),
+            "custom_dd_no": payment_details.get("dd_no"),
+            "custom_date": payment_details.get("date"),
+            "custom_amount": payment_details.get("amount"),
+        }
+    elif payment_mode == "neft":
+        values = {
+            "custom_bank_name": payment_details.get("bank_name") or payment_details.get("beneficiary_bank"),
+            "custom_utr_no": payment_details.get("utr_no"),
+            "custom_date": payment_details.get("date") or payment_details.get("transfer_date"),
+            "custom_amount": payment_details.get("amount") or payment_details.get("amount_remitted"),
+        }
+    elif payment_mode == "cash":
+        bank = payment_details.get("bank_name") or payment_details.get("deposited_bank") or "SBI"
+        bank = {
+            "State Bank of India": "SBI",
+            "HDFC Bank": "HDFC",
+        }.get(bank, bank)
+        values = {
+            "custom_bank_deposited_in": bank,
+            "custom_transaction_id": payment_details.get("transaction_id"),
+            "custom_branch_code": payment_details.get("branch_code"),
+            "custom_date": payment_details.get("date") or payment_details.get("deposit_date"),
+            "custom_amount": payment_details.get("amount"),
+        }
+    elif payment_mode == "upi":
+        values = {
+            "custom_upi_transaction_id__ref_no": payment_details.get("upi_transaction_id") or payment_details.get("upi_ref"),
+            "custom_date": payment_details.get("date") or payment_details.get("upi_date"),
+            "custom_amount": payment_details.get("amount") or payment_details.get("upi_amount"),
+        }
+    else:
+        values = {}
+    for fieldname, value in values.items():
+        if value not in (None, ""):
+            setattr(invoice, fieldname, value)
+
+
+@frappe.whitelist()
+def initiate_little_champ_books_order_payment(
+    sales_order, customer=None, trans_item_json=None,
+    payment_mode=None, payment_details=None,
+):
     """Initiate Razorpay payment WITHOUT submitting the Sales Order or creating
     a Sales Invoice.  Accounting documents (SO submit → SI → Payment Entry) are
     created ONLY after payment succeeds in the *confirm* handler.
@@ -1786,6 +1987,28 @@ def initiate_little_champ_books_order_payment(sales_order, customer=None, trans_
             frappe.throw(_('You are not allowed to pay for this order.'), frappe.PermissionError)
         if sales_order_doc.docstatus == 2:
             frappe.throw(_('This Sales Order has been cancelled.'))
+
+        existing_payment = frappe.db.sql(
+            """SELECT per.parent FROM `tabPayment Entry Reference` per
+            INNER JOIN `tabPayment Entry` pe ON pe.name = per.parent
+            WHERE per.reference_doctype = 'Sales Order' AND per.reference_name = %s
+            AND pe.docstatus = 1 ORDER BY pe.creation DESC LIMIT 1""",
+            sales_order_doc.name, as_dict=True,
+        )
+        if existing_payment:
+            invoice = frappe.db.sql(
+                """SELECT si.name FROM `tabSales Invoice` si
+                INNER JOIN `tabSales Invoice Item` sii ON sii.parent = si.name
+                WHERE sii.sales_order = %s AND si.docstatus = 0
+                ORDER BY si.creation DESC LIMIT 1""",
+                sales_order_doc.name, as_dict=True,
+            )
+            return {
+                "already_paid": True,
+                "sales_invoice": invoice[0].name if invoice else None,
+                "payment_entry": existing_payment[0].parent,
+                "sales_order": sales_order_doc.name,
+            }
 
         # Check for already-paid status
         existing_invoice = frappe.db.sql(
@@ -1869,6 +2092,8 @@ def initiate_little_champ_books_order_payment(sales_order, customer=None, trans_
             "book_order_warehouse": delivery_warehouse,
             "book_order_delivery_date": str(delivery_date),
             "book_order_delivery_charge_rate": delivery_charge_rate,
+            "book_order_payment_mode": payment_mode,
+            "book_order_payment_details": json.loads(payment_details) if isinstance(payment_details, str) else (payment_details or {}),
             "redirect_to": f"/portal/little-champ-book?payment=success",
         }
 
@@ -1922,8 +2147,8 @@ def confirm_little_champ_books_order_payment(
     Flow:
     1. Verify Razorpay signature & capture payment
     2. Submit the draft Sales Order
-    3. Create & submit Sales Invoice
-    4. Create & submit Payment Entry
+    3. Create a draft Sales Invoice
+    4. Create & submit Payment Entry as an advance against the Sales Order
     5. Update Razorpay Transaction
     """
 
@@ -2137,33 +2362,13 @@ def confirm_little_champ_books_order_payment(
             so_doc.flags.ignore_permissions = True
             so_doc.submit()
 
-        # =========================================================
-        # Step 4: Create & Submit Sales Invoice
-        # =========================================================
-        from erpnext.selling.doctype.sales_order.sales_order import (
-            make_sales_invoice,
-        )
-
-        sales_invoice = make_sales_invoice(
-            so_doc.name,
-            ignore_permissions=True,
-        )
-
-        sales_invoice.set_posting_time = 1
-        sales_invoice.flags.ignore_permissions = True
         delivery_charge_rate = flt(data.get("book_order_delivery_charge_rate"))
-        apply_delivery_charge(sales_invoice, delivery_charge_rate, clear_existing_taxes=True)
-
-        # Remove tax category / tax-related configuration
-        sales_invoice.tax_category = None
-
-        sales_invoice.set_posting_time = 1
-        sales_invoice.flags.ignore_permissions = True
-        sales_invoice.insert(
-            ignore_permissions=True
+        sales_invoice = _get_or_create_draft_lc_books_invoice(
+            so_doc,
+            data.get("book_order_payment_mode"),
+            data.get("book_order_payment_details"),
+            delivery_charge_rate,
         )
-
-        sales_invoice.submit()
 
         # =========================================================
         # Step 5: Create Payment Entry
@@ -2180,8 +2385,8 @@ def confirm_little_champ_books_order_payment(
         )
 
         payment_entry = get_payment_entry(
-            "Sales Invoice",
-            sales_invoice.name,
+            "Sales Order",
+            so_doc.name,
             party_amount=transaction.amount,
             bank_account=settings.payment_account,
         )
@@ -2285,8 +2490,8 @@ def confirm_little_champ_books_order_payment(
         transaction.db_set({
             "status": "Completed",
             "sales_invoice": sales_invoice.name,
-            "reference_doctype": "Sales Invoice",
-            "reference_docname": sales_invoice.name,
+            "reference_doctype": "Sales Order",
+            "reference_docname": so_doc.name,
             "payment_entry": payment_entry.name,
             "gateway_response": json.dumps(
                 payment,
@@ -2496,31 +2701,49 @@ def get_little_champ_books_order_payment_status(sales_order=None):
             
         sales_order = sales_order_doc[0].name
 
-    existing_invoice = frappe.db.sql(
-        """
-        select si.name, si.docstatus, si.outstanding_amount
-        from `tabSales Invoice` si
-        inner join `tabSales Invoice Item` sii on sii.parent = si.name
-        where sii.sales_order = %s and si.docstatus = 1
-        order by si.creation desc limit 1
-        """,
-        sales_order,
-        as_dict=True,
+    payment_entry = frappe.db.sql(
+        """SELECT per.parent AS payment_entry FROM `tabPayment Entry Reference` per
+        INNER JOIN `tabPayment Entry` pe ON pe.name = per.parent
+        WHERE per.reference_doctype = 'Sales Order' AND per.reference_name = %s
+        AND pe.docstatus = 1 ORDER BY pe.creation DESC LIMIT 1""",
+        sales_order, as_dict=True,
     )
-    
-    if existing_invoice:
-        invoice = existing_invoice[0]
-        if flt(invoice.outstanding_amount) <= 0:
-            payment_entry = frappe.db.get_value(
-                "Payment Entry Reference",
-                {"reference_doctype": "Sales Invoice", "reference_name": invoice.name},
-                "parent",
-                order_by="creation desc",
-            )
-            return {
-                "paid": True,
-                "sales_invoice": invoice.name,
-                "payment_entry": payment_entry,
-            }
-            
+    if payment_entry:
+        invoice = frappe.db.sql(
+            """SELECT si.name FROM `tabSales Invoice` si
+            INNER JOIN `tabSales Invoice Item` sii ON sii.parent = si.name
+            WHERE sii.sales_order = %s AND si.docstatus = 0
+            ORDER BY si.creation DESC LIMIT 1""",
+            sales_order, as_dict=True,
+        )
+        return {
+            "paid": True,
+            "sales_invoice": invoice[0].name if invoice else None,
+            "payment_entry": payment_entry[0].payment_entry,
+            "sales_order": sales_order,
+        }
+
+    # Continue recognizing payments created before payments were recorded
+    # against the Sales Order.
+    old_paid_invoice = frappe.db.sql(
+        """SELECT si.name FROM `tabSales Invoice` si
+        INNER JOIN `tabSales Invoice Item` sii ON sii.parent = si.name
+        WHERE sii.sales_order = %s AND si.docstatus = 1
+        AND si.outstanding_amount <= 0
+        ORDER BY si.creation DESC LIMIT 1""",
+        sales_order, as_dict=True,
+    )
+    if old_paid_invoice:
+        old_payment = frappe.db.get_value(
+            "Payment Entry Reference",
+            {"reference_doctype": "Sales Invoice", "reference_name": old_paid_invoice[0].name},
+            "parent", order_by="creation desc",
+        )
+        return {
+            "paid": True,
+            "sales_invoice": old_paid_invoice[0].name,
+            "payment_entry": old_payment,
+            "sales_order": sales_order,
+        }
+
     return {"paid": False}
