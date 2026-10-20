@@ -254,13 +254,6 @@ def sync_school_code(doc, method):
 
 
 def validate(doc, method):
-    """
-    Server-side guarantee that custom_country stays consistent with
-    gst_category — but only for School Customers, since State/Country
-    are irrelevant and hidden for Online Student Customers (who store
-    location on the Address instead). No manual commit here — Frappe
-    commits automatically at the end of the request/transaction.
-    """
     if doc.custom_customer_category != "School Customer":
         return
 

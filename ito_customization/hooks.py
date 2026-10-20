@@ -166,6 +166,7 @@ doc_events = {
         "validate": "ito_customization.ito_customization.doc_events.delivery_note.validate"
     },
     "HD Customer": {
+        "before_naming": "ito_customization.ito_customization.doc_events.hd_customer.set_school_code",
         "validate": "ito_customization.ito_customization.doc_events.hd_customer.set_school_code"
     },
     "Issue": {
@@ -176,7 +177,7 @@ doc_events = {
         "on_update": [
             "ito_customization.ito_customization.doc_events.customer.sync_teachers",
             "ito_customization.ito_customization.doc_events.customer.sync_school_code",
-            "ito_customization.ito_customization.doc_events.hd_customer.sync_school_code_to_hd",
+            # "ito_customization.ito_customization.doc_events.hd_customer.sync_school_code_to_hd",
         ],
         "autoname": "ito_customization.ito_customization.doc_events.customer.autoname",
         "validate": "ito_customization.ito_customization.doc_events.customer.validate"
