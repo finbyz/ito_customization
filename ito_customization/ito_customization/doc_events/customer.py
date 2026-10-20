@@ -111,37 +111,6 @@ def get_prefix(doc):
 def _target_field(doc):
     return "custom_school_code" if doc.custom_is_little_champ else "custom_ito_school_code"
 
-
-# def _get_next_number(prefix):
-#     """
-#     Look at existing Customer names for this prefix and return the next
-#     number in sequence (max + 1). This works regardless of whether the
-#     previous record was created via the form, autoname(), or Data Import
-#     with an explicit ID — because it reads the actual data, not a
-#     separate naming-series counter. `for update` locks matching rows so
-#     concurrent inserts for the same prefix don't generate the same number.
-#     """
-#     existing = frappe.db.sql(
-#         """
-#         select name from `tabCustomer`
-#         where name like %s
-#         for update
-#         """,
-#         (f"{prefix}-%",),
-#     )
-
-#     pattern = re.compile(rf"^{re.escape(prefix)}-(\d+)$")
-#     max_num = 0
-
-#     for (name,) in existing:
-#         m = pattern.match(name)
-#         if m:
-#             num = int(m.group(1))
-#             if num > max_num:
-#                 max_num = num
-
-#     return max_num + 1
-
 def _get_next_number(prefix):
     """
     Look at existing Customer names for this prefix and return the next

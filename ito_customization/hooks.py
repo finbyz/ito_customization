@@ -168,6 +168,10 @@ doc_events = {
     "HD Customer": {
         "validate": "ito_customization.ito_customization.doc_events.hd_customer.set_school_code"
     },
+    "Issue": {
+        "after_insert": "ito_customization.ito_customization.doc_events.issue.link_to_hd_ticket",
+        "on_trash": "ito_customization.ito_customization.doc_events.issue.unlink_from_hd_ticket",
+    },
     "Customer": {
         "on_update": [
             "ito_customization.ito_customization.doc_events.customer.sync_teachers",

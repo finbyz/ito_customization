@@ -1,4 +1,15 @@
 frappe.ui.form.on("HD Ticket", {
+	refresh(frm) {
+		if (frm.is_new()) return;
+
+		frm.add_custom_button(__("Issue"), () => {
+			frappe.model.open_mapped_doc({
+				method: "ito_customization.ito_customization.doc_events.hd_ticket.make_issue",
+				frm,
+			});
+		}, __("Create"));
+	},
+
 	setup(frm) {
 		// frm.set_query("ticket_type", () => ({
 		// 	filters: { disabled: 0 },
