@@ -411,18 +411,28 @@ def get_customer_exam_details(customer=None, school_code=None, token=None, class
 
 
 @frappe.whitelist(allow_guest=True)
-def check_student_already_registered(email_id):
+def check_student_already_registered(email_id, token=None):
 	if not email_id or not str(email_id).strip():
 		return {"registered": False}
 
 	clean_email = str(email_id).strip().lower()
-	exists = frappe.db.sql(
-		"SELECT name FROM `tabStudent Portal` WHERE LOWER(email_id) = %s LIMIT 1",
-		(clean_email,)
+	filters = {"email_id": ["like", clean_email]}
+	if token:
+		customer, error = _resolve_customer_via_token(token=token)
+		if error:
+			return {"registered": False}
+		filters["school_name"] = customer
+
+	exists = frappe.get_all(
+		"Student Portal",
+		filters=filters,
+		fields=["name"],
+		limit_page_length=1,
 	)
 
 	return {
 		"registered": bool(exists),
+		"name": exists[0].name if exists else None,
 		"message": "Registration is only allowed once! You can order books. Contact support if you have any queries." if exists else ""
 	}
 
@@ -850,10 +860,23 @@ def create_student_portal_entry(data):
 				return {
 					"success": False,
 					"already_registered": True,
+					"name": exists[0][0],
 					"message": "Registration is only allowed once! You can order books. Contact support if you have any queries."
 				}
 
 		valid_class = _get_valid_class_name(data.get("class") or data.get("class_grade")) or ""
+		roll_no = (data.get("roll_no") or "").strip()
+		if not roll_no:
+			return {"success": False, "message": "Student roll number is required."}
+
+		registered_student = _find_registered_student(
+			customer, roll_no, student_name, valid_class
+		)
+		if not registered_student:
+			return {
+				"success": False,
+				"message": "No active student matches this roll number, student name, and class.",
+			}
 
 		exam_list = []
 		exam_count = 0
@@ -884,6 +907,7 @@ def create_student_portal_entry(data):
 			"email_id": data.get("email_id"),
 			"mobile_number": data.get("mobile_number"),
 			"class": valid_class,
+			"roll_no": roll_no,
 			"exam_list": exam_list,
 		}
 
@@ -914,6 +938,92 @@ def create_student_portal_entry(data):
 			"sales_invoice": si_name,
 			"checkout": checkout_context
 		}
+
+
+def _normalize_student_value(value):
+	return " ".join(str(value or "").casefold().split())
+
+
+def _find_registered_student(school: str, roll_no: str, student_name: str, class_name: str):
+	students = frappe.get_all(
+		"Registered Students",
+		filters={"roll_no": roll_no, "school": school, "not_registered": ("!=", 1)},
+		fields=["name", "roll_no", "student_name", "class"],
+		limit_page_length=2,
+	)
+	return next(
+		(
+			row for row in students
+			if _normalize_student_value(row.student_name) == _normalize_student_value(student_name)
+			and str(row.get("class") or "") == str(class_name or "")
+		),
+		None,
+	)
+
+
+def _get_public_student_hall_ticket_student(token: str, roll_no: str, student_portal: str):
+	"""Match a public registration to its active Registered Students record."""
+	if not all(isinstance(value, str) for value in (token, roll_no, student_portal)):
+		return None, {"success": False, "message": "Invalid hall-ticket lookup details."}
+
+	customer, error = _resolve_customer_via_token(token=token)
+	if error:
+		return None, error
+
+	roll_no = str(roll_no or "").strip()
+	if not roll_no:
+		return None, {"success": False, "message": "Enter the student's roll number."}
+	if not student_portal or not frappe.db.exists("Student Portal", student_portal):
+		return None, {"success": False, "message": "Submit the student registration before looking up a hall ticket."}
+
+	registration = frappe.get_doc("Student Portal", student_portal)
+	if registration.school_name != customer:
+		return None, {"success": False, "message": "This registration does not belong to the school in this link."}
+
+	student = _find_registered_student(
+		customer, roll_no, registration.student_full_name, registration.get("class")
+	)
+	if not student:
+		return None, {
+			"success": False,
+			"message": "No hall ticket matches this roll number, student, and class.",
+		}
+
+	return student, None
+
+
+@frappe.whitelist(allow_guest=True)
+def get_public_student_hall_ticket(roll_no: str, token: str, student_portal: str):
+	"""Validate a roll number against the current public registration and school."""
+	student, error = _get_public_student_hall_ticket_student(token, roll_no, student_portal)
+	if error:
+		return error
+
+	return {
+		"success": True,
+		"roll_no": student.roll_no,
+		"student_name": student.student_name,
+		"class": student.get("class"),
+	}
+
+
+@frappe.whitelist(allow_guest=True)
+def download_public_student_hall_ticket(roll_no: str, token: str, student_portal: str):
+	"""Render the matched public student's hall ticket as a PDF."""
+	student, error = _get_public_student_hall_ticket_student(token, roll_no, student_portal)
+	if error:
+		frappe.throw(error.get("message") or "Unable to find this hall ticket.")
+
+	from ito_customization.ito_customization.doc_events.hall_ticket import download_hall_ticket
+
+	original_user = frappe.session.user
+	try:
+		# The record has already been matched to this token, school, and
+		# registration. Render it with print permission for this request only.
+		frappe.set_user("Administrator")
+		download_hall_ticket(student.name)
+	finally:
+		frappe.set_user(original_user)
 
 
 
