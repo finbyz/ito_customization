@@ -93,19 +93,18 @@ STATE_NAME_TO_CODE = {
 
 
 def get_prefix(doc):
-    """Resolve the naming prefix: country code for Overseas, state code otherwise."""
+    """Resolve the state or country prefix, with LC for Little Champ schools."""
 
     if doc.gst_category == "Overseas":
         if not doc.custom_country:
             return None
 
         country_code = frappe.db.get_value("Country", doc.custom_country, "code")
-        return country_code.upper() if country_code else None
+        prefix = country_code.upper() if country_code else None
+    else:
+        prefix = STATE_NAME_TO_CODE.get(doc.custom_state)
 
-    if not doc.custom_state:
-        return None
-
-    return STATE_NAME_TO_CODE.get(doc.custom_state)
+    return f"LC{prefix}" if prefix and doc.custom_is_little_champ else prefix
 
 
 def _target_field(doc):
@@ -159,7 +158,7 @@ def _generate_code(prefix):
 def autoname(doc, method):
     """
     Runs on NEW Customers only. If a school code was entered (form or Data
-    Import), use it exactly as the ID. Otherwise generate prefix + next number.
+    Import), use it as the ID. Otherwise generate prefix + next number.
     """
     if doc.custom_customer_category != "School Customer":
         return
@@ -175,6 +174,11 @@ def autoname(doc, method):
     entered_code = (doc.get(target_field) or doc.get(other_field) or "").strip()
 
     if entered_code:
+        if doc.custom_is_little_champ:
+            entered_code = "LC" + (
+                entered_code[2:] if entered_code.upper().startswith("LC") else entered_code
+            )
+
         if frappe.db.exists("Customer", entered_code):
             frappe.throw(f"Customer / School Code {entered_code} already exists.")
 
