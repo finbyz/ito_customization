@@ -1542,6 +1542,7 @@ def save_wof_registration(registration_data):
 		from ito_customization.ito_customization import wof_registration_payment as wof
 		payment["total_students"] = wof._count_matrix_students(entry_matrix)
 		mode = payment.get("mode")
+		invoice_name = None
 		if mode in ("dd", "neft", "cash", "upi"):
 			from ito_customization.ito_customization.manual_registration_invoice import (
 				create_or_update_manual_registration_invoice,
@@ -1555,7 +1556,7 @@ def save_wof_registration(registration_data):
 				f"WOF Registration fee reported as paid via {mode}: {frappe.as_json(payment.get('payment_details', {}))}. Draft Sales Invoice: {invoice_name}",
 			)
 
-		return {"success": True, "customer": customer}
+		return {"success": True, "customer": customer, "sales_invoice": invoice_name}
 
 	except Exception as e:
 		frappe.log_error(frappe.get_traceback(), "WOF Registration Error")
