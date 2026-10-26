@@ -11,16 +11,21 @@
   "school",
   "full_name",
   "ito_school_code",
+  "parent_name",
+  "email_id",
   "column_break_zmsj",
   "student_name",
   "serial_number",
   "mobile_number",
   "class",
   "roll_no",
+  "from_student_portal",
   "not_registered",
   "academic_year",
   "section_break_mxtf",
-  "subjects_registered"
+  "subjects_registered",
+  "books_order_tab",
+  "books_selected"
  ],
  "fields": [
   {
@@ -103,6 +108,17 @@
    "options": "Registered Students CT"
   },
   {
+   "fieldname": "books_order_tab",
+   "fieldtype": "Tab Break",
+   "label": "Books Order"
+  },
+  {
+   "fieldname": "books_selected",
+   "fieldtype": "Table",
+   "label": "Books Selected",
+   "options": "Books Selection CT"
+  },
+  {
    "default": "0",
    "fieldname": "not_registered",
    "fieldtype": "Check",
@@ -121,12 +137,29 @@
    "in_standard_filter": 1,
    "label": "Academic Year",
    "options": "School Academic Year"
+  },
+  {
+   "fieldname": "parent_name",
+   "fieldtype": "Data",
+   "label": "Parent Name"
+  },
+  {
+   "fieldname": "email_id",
+   "fieldtype": "Data",
+   "label": "Email ID",
+   "options": "Email"
+  },
+  {
+   "default": "0",
+   "fieldname": "from_student_portal",
+   "fieldtype": "Check",
+   "label": "From Student Portal"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-28 10:59:53.407485",
+ "modified": "2026-10-26 10:35:42.465823",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Registered Students",

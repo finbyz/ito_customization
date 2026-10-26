@@ -416,23 +416,29 @@ def check_student_already_registered(email_id, token=None):
 		return {"registered": False}
 
 	clean_email = str(email_id).strip().lower()
-	filters = {"email_id": ["like", clean_email]}
+	school = None
 	if token:
-		customer, error = _resolve_customer_via_token(token=token)
+		school, error = _resolve_customer_via_token(token=token)
 		if error:
 			return {"registered": False}
-		filters["school_name"] = customer
 
-	exists = frappe.get_all(
-		"Student Portal",
-		filters=filters,
-		fields=["name"],
-		limit_page_length=1,
-	)
+	exists = _get_student_portal_registered_student_by_email(clean_email, school)
+	roll_no = exists[0].get("roll_no") if exists else None
+	if not exists:
+		filters = {"email_id": ["like", clean_email]}
+		if school:
+			filters["school_name"] = school
+		exists = frappe.get_all(
+			"Student Portal",
+			filters=filters,
+			fields=["name"],
+			limit_page_length=1,
+		)
 
 	return {
 		"registered": bool(exists),
 		"name": exists[0].name if exists else None,
+		"roll_no": roll_no,
 		"message": "Registration is only allowed once! You can order books. Contact support if you have any queries." if exists else ""
 	}
 
@@ -445,12 +451,12 @@ class IgnorePermissionsContext:
 		self.orig_ignore_account = getattr(frappe.flags, "ignore_account_permission", False)
 
 		def custom_has_permission(doctype=None, ptype="read", doc=None, user=None, *args, **kwargs):
-			if doctype in ("Account", "Sales Invoice", "Payment Entry", "Customer", "Item", "Company", "Student Portal", "Books Selection", "Item Price"):
+			if doctype in ("Account", "Sales Invoice", "Payment Entry", "Customer", "Item", "Company", "Student Portal", "Registered Students", "Books Selection", "Item Price"):
 				return True
 			return self.orig_has_permission(doctype, ptype=ptype, doc=doc, user=user, *args, **kwargs)
 
 		def custom_perm_has_permission(doctype=None, ptype="read", doc=None, user=None, throw=False, *args, **kwargs):
-			if doctype in ("Account", "Sales Invoice", "Payment Entry", "Customer", "Item", "Company", "Student Portal", "Books Selection", "Item Price"):
+			if doctype in ("Account", "Sales Invoice", "Payment Entry", "Customer", "Item", "Company", "Student Portal", "Registered Students", "Books Selection", "Item Price"):
 				return True
 			if self.orig_permissions_has_permission:
 				return self.orig_permissions_has_permission(doctype, ptype=ptype, doc=doc, user=user, throw=throw, *args, **kwargs)
@@ -646,36 +652,18 @@ def confirm_student_portal_payment(integration_request, razorpay_payment_id, raz
 		transaction = frappe.get_doc("Razorpay Transaction", data["razorpay_transaction"])
 
 		sp_name = None
+		roll_no = None
 		if transaction.status == "Completed" and data.get("registration_payload"):
 			reg_data = frappe.parse_json(data["registration_payload"])
-			email = (reg_data.get("email_id") or "").strip().lower()
-			existing_sp = frappe.db.sql(
-				"SELECT name FROM `tabStudent Portal` WHERE LOWER(email_id) = %s LIMIT 1",
-				(email,),
-				as_dict=True
-			) if email else None
-
-			if existing_sp:
-				sp_name = existing_sp[0].name
-			else:
-				sp_doc = frappe.new_doc("Student Portal")
-				sp_doc.school_name = reg_data.get("school_name")
-				sp_doc.school_code = reg_data.get("school_code")
-				sp_doc.student_full_name = reg_data.get("student_full_name")
-				sp_doc.parent_full_name = reg_data.get("parent_full_name")
-				sp_doc.email_id = reg_data.get("email_id")
-				sp_doc.mobile_number = reg_data.get("mobile_number")
-				sp_doc.set("class", reg_data.get("class") or "")
-				for ex in reg_data.get("exam_list", []):
-					sp_doc.append("exam_list", ex)
-				sp_doc.flags.ignore_permissions = True
-				sp_doc.insert(ignore_permissions=True)
-				sp_name = sp_doc.name
+			registered_student = _save_student_portal_registered_student(reg_data)
+			sp_name = registered_student.name
+			roll_no = registered_student.roll_no
 
 		return {
 			"success": True,
 			"paid": transaction.status == "Completed",
 			"name": sp_name,
+			"roll_no": roll_no,
 			"payment_entry": transaction.payment_entry,
 			"sales_invoice": transaction.reference_docname,
 			"redirect_to": result.get("redirect_to"),
@@ -851,27 +839,22 @@ def create_student_portal_entry(data):
 		if not email or "@" not in email:
 			return {"success": False, "message": "A valid email address is required."}
 
-		if email:
-			exists = frappe.db.sql(
-				"SELECT name FROM `tabStudent Portal` WHERE LOWER(email_id) = %s LIMIT 1",
-				(email,)
-			)
-			if exists:
-				return {
-					"success": False,
-					"already_registered": True,
-					"name": exists[0][0],
-					"message": "Registration is only allowed once! You can order books. Contact support if you have any queries."
-				}
-
 		valid_class = _get_valid_class_name(data.get("class") or data.get("class_grade")) or ""
-		roll_no = str(data.get("roll_no") or "").strip()
-		if roll_no and not _find_registered_student(
-			customer, roll_no, student_name, valid_class
-		):
+
+		existing_student = _get_student_portal_registered_student_by_email(email)
+		if not existing_student:
+			existing_student = frappe.db.sql(
+				"SELECT name FROM `tabStudent Portal` WHERE LOWER(email_id) = %s LIMIT 1",
+				(email,),
+				as_dict=True
+			)
+		if existing_student:
 			return {
 				"success": False,
-				"message": "No active student matches this roll number, student name, and class.",
+				"already_registered": True,
+				"name": existing_student[0].name,
+				"roll_no": existing_student[0].get("roll_no"),
+				"message": "Registration is only allowed once! You can order books. Contact support if you have any queries."
 			}
 
 		exam_list = []
@@ -903,34 +886,25 @@ def create_student_portal_entry(data):
 			"email_id": data.get("email_id"),
 			"mobile_number": data.get("mobile_number"),
 			"class": valid_class,
-			"roll_no": roll_no,
 			"exam_list": exam_list,
 		}
 
 		si_name = None
 		checkout_context = None
 		doc_name = None
+		roll_no = None
 
 		if exam_count > 0:
 			si_name, checkout_context = initiate_student_portal_registration_payment(registration_payload, exam_count)
 		else:
-			doc = frappe.new_doc("Student Portal")
-			doc.school_name = customer
-			doc.school_code = school_code
-			doc.student_full_name = data.get("student_full_name")
-			doc.parent_full_name = data.get("parent_full_name")
-			doc.email_id = data.get("email_id")
-			doc.mobile_number = data.get("mobile_number")
-			doc.set("class", valid_class)
-			for ex in exam_list:
-				doc.append("exam_list", ex)
-			doc.flags.ignore_permissions = True
-			doc.insert(ignore_permissions=True)
+			doc = _save_student_portal_registered_student(registration_payload)
 			doc_name = doc.name
+			roll_no = doc.roll_no
 
 		return {
 			"success": True,
 			"name": doc_name,
+			"roll_no": roll_no,
 			"sales_invoice": si_name,
 			"checkout": checkout_context
 		}
@@ -938,6 +912,79 @@ def create_student_portal_entry(data):
 
 def _normalize_student_value(value):
 	return " ".join(str(value or "").casefold().split())
+
+
+def _get_student_portal_registered_student_by_email(email, school=None):
+	if not email:
+		return None
+
+	query = """
+		SELECT name, roll_no
+		FROM `tabRegistered Students`
+		WHERE from_student_portal = 1 AND LOWER(email_id) = %s
+	"""
+	values = [email.strip().lower()]
+	if school:
+		query += " AND school = %s"
+		values.append(school)
+
+	return frappe.db.sql(query + " ORDER BY creation DESC LIMIT 1", values, as_dict=True)
+
+
+def _save_student_portal_registered_student(registration_payload):
+	school = registration_payload.get("school_name")
+	student_name = registration_payload.get("student_full_name")
+	class_name = registration_payload.get("class")
+	email = str(registration_payload.get("email_id") or "").strip().lower()
+
+	student = None
+	if not student and email:
+		existing = _get_student_portal_registered_student_by_email(email, school)
+		if existing:
+			student = frappe.get_doc("Registered Students", existing[0].name)
+
+	if not student:
+		student = frappe.new_doc("Registered Students")
+
+	student.school = school
+	student.student_name = student_name
+	student.parent_name = registration_payload.get("parent_full_name")
+	student.email_id = registration_payload.get("email_id")
+	student.mobile_number = registration_payload.get("mobile_number")
+	student.set("class", class_name)
+	student.from_student_portal = 1
+
+	for exam in registration_payload.get("exam_list") or []:
+		subject = exam.get("school_subject")
+		if not subject or not (exam.get("check_ptxn") or exam.get("selected")):
+			continue
+		if not any(row.subject == subject for row in student.get("subjects_registered") or []):
+			student.append("subjects_registered", {
+				"subject": subject,
+				"abbr": exam.get("abbr"),
+			})
+
+	student.flags.ignore_permissions = True
+	if student.is_new():
+		if not class_name:
+			frappe.throw("Class is required to create a registered student.")
+
+		school_doc = frappe.get_doc("Customer", school)
+		ito_code = (
+			school_doc.get("custom_ito_school_code")
+			or school_doc.get("custom_school_code")
+			or school_doc.name
+		).strip().upper()
+		from ito_customization.ito_customization.api import allocate_roll_number
+		from ito_customization.ito_customization.doctype.registered_students.student_import import class_code
+
+		student.roll_no = allocate_roll_number(ito_code, class_code(class_name))
+		student.ito_school_code = ito_code
+		student.full_name = school_doc.customer_name
+		student.insert(ignore_permissions=True)
+	else:
+		student.save(ignore_permissions=True)
+	return student
 
 
 def _find_registered_student(school: str, roll_no: str, student_name: str, class_name: str):
@@ -969,23 +1016,36 @@ def _get_public_student_hall_ticket_student(token: str, roll_no: str, student_po
 	roll_no = str(roll_no or "").strip()
 	if not roll_no:
 		return None, {"success": False, "message": "Enter the student's roll number."}
-	if not student_portal or not frappe.db.exists("Student Portal", student_portal):
+	if not student_portal:
+		return None, {"success": False, "message": "Submit the student registration before looking up a hall ticket."}
+
+	if frappe.db.exists("Registered Students", student_portal):
+		student = frappe.get_doc("Registered Students", student_portal)
+		if not student.from_student_portal:
+			return None, {"success": False, "message": "This registration does not belong to the school in this link."}
+		if student.school != customer:
+			return None, {"success": False, "message": "This registration does not belong to the school in this link."}
+		if student.roll_no != roll_no:
+			return None, {"success": False, "message": "No hall ticket matches this roll number, student, and class."}
+		return student, None
+
+	if not frappe.db.exists("Student Portal", student_portal):
 		return None, {"success": False, "message": "Submit the student registration before looking up a hall ticket."}
 
 	registration = frappe.get_doc("Student Portal", student_portal)
 	if registration.school_name != customer:
 		return None, {"success": False, "message": "This registration does not belong to the school in this link."}
 
-	student = _find_registered_student(
+	student_row = _find_registered_student(
 		customer, roll_no, registration.student_full_name, registration.get("class")
 	)
-	if not student:
+	if not student_row:
 		return None, {
 			"success": False,
 			"message": "No hall ticket matches this roll number, student, and class.",
 		}
 
-	return student, None
+	return frappe.get_doc("Registered Students", student_row.name), None
 
 
 @frappe.whitelist(allow_guest=True)
