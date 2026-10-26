@@ -1,0 +1,85 @@
+/* Google-Forms look for the Award Ceremony web form */
+body, .web-form-wrapper, .page-content-wrapper { background: #def0ee !important; }
+.web-form-container {
+  max-width: 640px; margin: 24px auto; background: transparent !important;
+  border: 0 !important; box-shadow: none !important; padding: 0 12px;
+  font-family: Roboto, Arial, sans-serif; color: #202124;
+}
+/* header card */
+.web-form-head {
+  background: #fff; border: 1px solid #dadce0; border-top: 10px solid #3d9185;
+  border-radius: 8px; padding: 22px 24px; margin-bottom: 12px;
+}
+.web-form-title h1, .web-form-title h2, .web-form-title .title { font-size: 28px; font-weight: 600; line-height: 1.25; margin: 0 0 12px; }
+.web-form-introduction { font-size: 14px; line-height: 1.55; }
+.web-form-introduction p { margin-bottom: 10px; }
+.web-form-introduction .required-note { color: #d93025; font-size: 12px; border-top: 1px solid #dadce0; margin-top: 14px; padding-top: 12px; }
+/* each question = a card */
+.web-form-container .form-section {
+  background: #fff; border: 1px solid #dadce0; border-radius: 8px;
+  padding: 22px 24px !important; margin: 0 0 12px !important;
+}
+.web-form-container .form-column { padding: 0 !important; }
+.web-form-container .control-label { font-size: 15px; font-weight: 600; color: #202124; margin-bottom: 14px; }
+.web-form-container .reqd .control-label::after,
+.web-form-container .control-label.reqd::after { content: " *"; color: #d93025; }
+.web-form-container .form-group.frappe-control[data-fieldtype] .control-label { white-space: normal; }
+.web-form-container .help-box, .web-form-container .description { font-size: 12px; color: #5f6368; margin-top: -8px; margin-bottom: 10px; }
+/* underline inputs */
+.web-form-container input.form-control, .web-form-container textarea.form-control {
+  background: transparent !important; border: 0 !important; border-bottom: 1px solid #dadce0 !important;
+  border-radius: 0 !important; box-shadow: none !important; padding-left: 0; width: 60%;
+}
+.web-form-container input.form-control:focus { border-bottom: 2px solid #3d9185 !important; }
+@media (max-width: 576px) { .web-form-container input.form-control { width: 100%; } }
+/* radio groups (injected by JS) */
+.ito-radio-group { display: flex; flex-direction: column; gap: 12px; }
+.ito-radio-group label { display: flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 400; cursor: pointer; margin: 0; }
+.ito-radio-group input[type=radio] { accent-color: #3d9185; width: 18px; height: 18px; margin: 0; }
+/* guidelines block */
+.ito-guidelines { font-size: 14px; line-height: 1.55; }
+.ito-guidelines p { margin-bottom: 12px; }
+/* declaration checkbox */
+.web-form-container .checkbox label { font-size: 12.5px; font-weight: 400; display: flex; gap: 12px; align-items: flex-start; }
+.web-form-container input[type=checkbox] { accent-color: #3d9185; width: 18px; height: 18px; margin-top: 2px; }
+/* submit button */
+.web-form-container .web-form-footer { margin-top: 8px; }
+.web-form-container .btn-primary, .web-form-container .submit-btn {
+  background: #3d9185 !important; border: 0 !important; border-radius: 4px; padding: 8px 22px; font-weight: 500;
+}
+
+/* heading inside header card (default title hidden to avoid duplicate) */
+.web-form-head .web-form-title { display: none !important; }
+.ito-form-title { font-size: 28px; font-weight: 600; line-height: 1.25; margin: 0 0 14px; color: #202124; }
+.ito-q-title { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+.ito-q-title .req { color: #d93025; }
+/* footer bits */
+.ito-copy-note { font-size: 13px; color: #5f6368; margin: 18px 0 10px; }
+.ito-footer-row { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
+.ito-progress { display: flex; align-items: center; gap: 14px; font-size: 12.5px; color: #5f6368; }
+.ito-progress .bar { width: 112px; height: 8px; border-radius: 4px; background: #4caf50; }
+.ito-clear { color: #3d9185; font-weight: 500; font-size: 14px; cursor: pointer; margin-left: auto; }
+.ito-pw { font-size: 11px; color: #5f6368; margin-top: 16px; }
+
+/* ---- layout fixes: strip Frappe's default white wrappers, keep only the cards ---- */
+html body, html body .page-content-wrapper, html body .web-form-wrapper, html body main { background: #def0ee !important; }
+html body .web-form-container,
+html body .web-form-container .web-form,
+html body .web-form-container .web-form-body,
+html body .web-form-container form,
+html body .web-form-container .form-layout,
+html body .web-form-container .page-content-wrapper {
+  background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important;
+}
+html body .web-form-container { padding: 0 12px !important; }
+html body .web-form-container .web-form-head {
+  background: #fff !important; border: 1px solid #dadce0 !important; border-top: 10px solid #3d9185 !important;
+  border-radius: 8px !important; padding: 22px 24px !important; margin: 0 0 12px !important;
+}
+html body .web-form-container .form-section {
+  background: #fff !important; border: 1px solid #dadce0 !important; border-radius: 8px !important;
+  padding: 22px 24px !important; margin: 0 0 12px !important;
+}
+
+.ito-check { display: flex; gap: 12px; align-items: flex-start; font-size: 12.5px; font-weight: 400; cursor: pointer; margin: 14px 0 0; }
+.ito-check input { accent-color: #3d9185; width: 18px; height: 18px; margin-top: 2px; flex: none; }

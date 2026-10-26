@@ -1,0 +1,62 @@
+{% extends "templates/web.html" %}
+{% block title %}E-Pass{% endblock %}
+{% block navbar %}{% endblock %}
+{% block header %}{% endblock %}
+{% block footer %}{% endblock %}
+
+{% block page_content %}
+<meta name="robots" content="noindex,nofollow">
+<style>
+	body { background: #def0ee !important; }
+	.page-content-wrapper, .page_content, main.container { background: transparent !important; padding: 0 !important; }
+	.ep-wrap { max-width: 420px; margin: 24px auto; padding: 0 14px; font-family: Roboto, Arial, sans-serif; color: #202124; }
+	.ep-card { background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 14px rgba(0,0,0,.12); }
+	.ep-head { background: #2f7f73; color: #fff; padding: 20px 22px 18px; }
+	.ep-org { font-size: 11px; letter-spacing: 2.4px; text-transform: uppercase; opacity: .85; }
+	.ep-event { font-size: 18px; font-weight: 700; line-height: 1.3; margin-top: 4px; }
+	.ep-tag { display: inline-block; margin-top: 10px; background: rgba(255,255,255,.18); padding: 3px 12px; border-radius: 20px; font-size: 12px; letter-spacing: 2px; font-weight: 600; }
+	.ep-status { text-align: center; padding: 12px; font-weight: 600; font-size: 14px; }
+	.ep-ok { background: #e6f4ea; color: #137333; }
+	.ep-bad { background: #fce8e6; color: #c5221f; padding: 26px 22px; font-size: 15px; line-height: 1.5; }
+	.ep-body { padding: 22px; text-align: center; }
+	.ep-photo { width: 132px; height: 165px; object-fit: cover; border-radius: 10px; border: 3px solid #def0ee; background: #f1f3f4; }
+	.ep-name { font-size: 22px; font-weight: 700; margin: 14px 0 2px; }
+	.ep-desig { display: inline-block; background: #def0ee; color: #1f5f55; font-weight: 600; font-size: 13px; padding: 3px 14px; border-radius: 20px; }
+	.ep-rows { margin-top: 18px; text-align: left; border-top: 1px solid #e8eaed; }
+	.ep-row { display: flex; justify-content: space-between; gap: 12px; padding: 11px 2px; border-bottom: 1px solid #e8eaed; font-size: 14px; }
+	.ep-row span { color: #5f6368; }
+	.ep-row b { text-align: right; }
+	.ep-foot { padding: 14px 22px 20px; font-size: 12px; color: #5f6368; text-align: center; line-height: 1.5; }
+</style>
+
+<div class="ep-wrap">
+	<div class="ep-card">
+		<div class="ep-head">
+			<div class="ep-org">Indian Talent Olympiad</div>
+			<div class="ep-event">{{ event_name }}</div>
+			<div class="ep-tag">E-PASS</div>
+		</div>
+
+		{% if valid %}
+		<div class="ep-status ep-ok">&#10004; Valid E-Pass</div>
+		<div class="ep-body">
+			{% if photo %}<img class="ep-photo" src="{{ photo }}" alt="Photo">{% endif %}
+			<div class="ep-name">{{ d.full_name }}</div>
+			<div class="ep-desig">{{ d.designation }}</div>
+			<div class="ep-rows">
+				<div class="ep-row"><span>School</span><b>{{ d.school_name }}</b></div>
+				<div class="ep-row"><span>School Code</span><b>{{ d.school_code }}</b></div>
+				<div class="ep-row"><span>City</span><b>{{ d.school_city }}</b></div>
+				<div class="ep-row"><span>State</span><b>{{ d.school_state }}</b></div>
+				<div class="ep-row"><span>Date</span><b>23 Nov 2026, 10:00 AM &ndash; 1:00 PM</b></div>
+				<div class="ep-row"><span>Venue</span><b>Bangalore</b></div>
+				<div class="ep-row"><span>Pass No.</span><b>{{ d.name }}</b></div>
+			</div>
+		</div>
+		<div class="ep-foot">Entry is strictly for the invited individual and is subject to verification at the venue. No accompanying persons are permitted.</div>
+		{% else %}
+		<div class="ep-bad">&#10006; {{ reason }}<br>Please contact the event organisers if you think this is a mistake.</div>
+		{% endif %}
+	</div>
+</div>
+{% endblock %}
