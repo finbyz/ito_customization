@@ -1,0 +1,126 @@
+{
+ "actions": [],
+ "allow_bulk_edit": 1,
+ "allow_rename": 1,
+ "creation": "2026-10-26 11:55:21.915598",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "full_name",
+  "school_name",
+  "school_code",
+  "attendance_confirmation",
+  "column_break_euev",
+  "mobile_number",
+  "school_city",
+  "email",
+  "epass_token",
+  "column_break_qzdi",
+  "designation",
+  "school_state",
+  "photo",
+  "epass_email_sent"
+ ],
+ "fields": [
+  {
+   "fieldname": "full_name",
+   "fieldtype": "Data",
+   "label": "Full Name"
+  },
+  {
+   "fieldname": "designation",
+   "fieldtype": "Select",
+   "label": "Designation",
+   "options": "\nPrincipal\nVice Principal\nCoordinator\nTeacher"
+  },
+  {
+   "fieldname": "school_name",
+   "fieldtype": "Data",
+   "label": "School Name",
+   "options": "Customer"
+  },
+  {
+   "fieldname": "school_code",
+   "fieldtype": "Data",
+   "label": "School Code"
+  },
+  {
+   "fieldname": "column_break_euev",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "school_city",
+   "fieldtype": "Data",
+   "label": "School City"
+  },
+  {
+   "fieldname": "school_state",
+   "fieldtype": "Data",
+   "label": "School State"
+  },
+  {
+   "fieldname": "mobile_number",
+   "fieldtype": "Data",
+   "label": "Mobile Number"
+  },
+  {
+   "fieldname": "email",
+   "fieldtype": "Data",
+   "label": "Email"
+  },
+  {
+   "fieldname": "column_break_qzdi",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "photo",
+   "fieldtype": "Attach Image",
+   "label": "Photo"
+  },
+  {
+   "fieldname": "attendance_confirmation",
+   "fieldtype": "Select",
+   "label": "Attendance Confirmation",
+   "options": "\nYes, I confirm my attendance\nNo, I will not be able to attend"
+  },
+  {
+   "fieldname": "epass_token",
+   "fieldtype": "Data",
+   "label": "Epass Token",
+   "read_only": 1
+  },
+  {
+   "fieldname": "epass_email_sent",
+   "fieldtype": "Data",
+   "label": "Epass Email Sent",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-26 16:51:06.356429",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "Web Forms Registration",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -1065,21 +1065,17 @@ def get_public_student_hall_ticket(roll_no: str, token: str, student_portal: str
 
 @frappe.whitelist(allow_guest=True)
 def download_public_student_hall_ticket(roll_no: str, token: str, student_portal: str):
-	"""Render the matched public student's hall ticket as a PDF."""
-	student, error = _get_public_student_hall_ticket_student(token, roll_no, student_portal)
-	if error:
-		frappe.throw(error.get("message") or "Unable to find this hall ticket.")
+    """Render the matched public student's hall ticket as a PDF."""
+    student, error = _get_public_student_hall_ticket_student(
+        token, roll_no, student_portal
+    )
 
-	from ito_customization.ito_customization.doc_events.hall_ticket import download_hall_ticket
+    if error:
+        frappe.throw(error.get("message") or "Unable to find this hall ticket.")
 
-	original_user = frappe.session.user
-	try:
-		# The record has already been matched to this token, school, and
-		# registration. Render it with print permission for this request only.
-		frappe.set_user("Administrator")
-		download_hall_ticket(student.name)
-	finally:
-		frappe.set_user(original_user)
+    from ito_customization.ito_customization.doc_events.hall_ticket import download_hall_ticket
+
+    download_hall_ticket(student.name)
 
 
 
