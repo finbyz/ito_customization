@@ -13,6 +13,7 @@
   "ito_school_code",
   "column_break_zmsj",
   "student_name",
+  "serial_number",
   "mobile_number",
   "class",
   "roll_no",
@@ -69,6 +70,12 @@
    "label": "Student Name"
   },
   {
+   "fieldname": "serial_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Sheet Serial Number"
+  },
+  {
    "fieldname": "class",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -108,6 +115,7 @@
   },
   {
    "fetch_from": "school.custom_current_academic_year",
+   "fetch_if_empty": 1,
    "fieldname": "academic_year",
    "fieldtype": "Link",
    "in_standard_filter": 1,

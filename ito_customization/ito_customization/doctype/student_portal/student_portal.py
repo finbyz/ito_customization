@@ -865,14 +865,10 @@ def create_student_portal_entry(data):
 				}
 
 		valid_class = _get_valid_class_name(data.get("class") or data.get("class_grade")) or ""
-		roll_no = (data.get("roll_no") or "").strip()
-		if not roll_no:
-			return {"success": False, "message": "Student roll number is required."}
-
-		registered_student = _find_registered_student(
+		roll_no = str(data.get("roll_no") or "").strip()
+		if roll_no and not _find_registered_student(
 			customer, roll_no, student_name, valid_class
-		)
-		if not registered_student:
+		):
 			return {
 				"success": False,
 				"message": "No active student matches this roll number, student name, and class.",

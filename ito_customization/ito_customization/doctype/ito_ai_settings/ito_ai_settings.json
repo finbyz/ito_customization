@@ -1,0 +1,22 @@
+{
+ "doctype": "DocType",
+ "name": "ITO AI Settings",
+ "module": "ITO Customization",
+ "issingle": 1,
+ "fields": [
+  {
+   "fieldname": "student_list_agent",
+   "fieldtype": "Link",
+   "label": "Student List Agent",
+   "options": "AI Agent",
+   "reqd": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1
+  }
+ ]
+}
