@@ -10,11 +10,13 @@
   "school_name",
   "school_code",
   "attendance_confirmation",
+  "status",
   "column_break_euev",
   "mobile_number",
   "school_city",
   "email",
   "epass_token",
+  "mail_sent",
   "column_break_qzdi",
   "designation",
   "school_state",
@@ -86,20 +88,35 @@
   {
    "fieldname": "epass_token",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Epass Token",
    "read_only": 1
   },
   {
    "fieldname": "epass_email_sent",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Epass Email Sent",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "\nApprove\nReject"
+  },
+  {
+   "default": "0",
+   "fieldname": "mail_sent",
+   "fieldtype": "Check",
+   "label": "Mail Sent",
    "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-26 16:51:06.356429",
+ "modified": "2026-10-27 15:49:53.394773",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Web Forms Registration",

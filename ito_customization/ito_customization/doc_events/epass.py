@@ -3,6 +3,7 @@ import io
 
 import frappe
 from frappe.utils import get_url
+from frappe.utils.data import cint
 
 DOCTYPE = "Web Forms Registration"
 PRINT_FORMAT = "ITO E-Pass"
@@ -90,13 +91,18 @@ def photo_data_uri(file_url, max_px=500):
 		return ""
 
 
-def is_attending(doc):
-	return str(doc.attendance_confirmation or "").strip().lower().startswith("yes")
+def is_approved(doc):
+	return str(doc.status or "").strip().lower() == "approve"
 
 
 def queue_epass(doc):
-	"""Called from after_insert. Only people who confirmed attendance get a pass."""
-	if not doc.email or not doc.epass_token or not is_attending(doc):
+	if (
+		not is_approved(doc)
+		or not doc.email
+		or not doc.epass_token
+		or cint(doc.epass_email_sent)
+		or cint(doc.mail_sent)
+	):
 		return
 	frappe.enqueue(
 		"ito_customization.ito_customization.doc_events.epass.send_epass_email",
@@ -108,7 +114,13 @@ def queue_epass(doc):
 
 def send_epass_email(docname):
 	doc = frappe.get_doc(DOCTYPE, docname)
-	if doc.epass_email_sent or not doc.epass_token:
+	if (
+		not is_approved(doc)
+		or not doc.email
+		or not doc.epass_token
+		or cint(doc.epass_email_sent)
+		or cint(doc.mail_sent)
+	):
 		return
 
 	page_url = epass_url(doc.epass_token)
@@ -138,7 +150,12 @@ def send_epass_email(docname):
 		reference_doctype=DOCTYPE,
 		reference_name=doc.name,
 	)
-	frappe.db.set_value(DOCTYPE, doc.name, "epass_email_sent", 1, update_modified=False)
+	frappe.db.set_value(
+		DOCTYPE,
+		doc.name,
+		{"epass_email_sent": 1, "mail_sent": 1},
+		update_modified=False,
+	)
 
 
 @frappe.whitelist(allow_guest=True)

@@ -18,9 +18,15 @@ class WebFormsRegistration(Document):
 		if not self.epass_token:
 			self.epass_token = frappe.generate_hash(length=24)
 
-	def after_insert(self):
-		from ito_customization.ito_customization.doc_events.epass import queue_epass
+	def on_update(self):
+		previous = self.get_doc_before_save()
+		if not previous:
+			return
 
+		from ito_customization.ito_customization.doc_events.epass import is_approved, queue_epass
+
+		if is_approved(previous) or not is_approved(self):
+			return
 		queue_epass(self)
 
 

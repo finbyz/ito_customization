@@ -3,7 +3,7 @@ import frappe
 from ito_customization.ito_customization.doc_events.epass import (
 	EVENT_NAME,
 	DOCTYPE,
-	is_attending,
+	is_approved,
 	photo_data_uri,
 )
 
@@ -25,8 +25,8 @@ def get_context(context):
 		return context
 
 	registration = frappe.get_doc(DOCTYPE, name)
-	if not is_attending(registration):
-		context.reason = "This registration does not have an active E-Pass."
+	if not is_approved(registration):
+		context.reason = "This registration has not been approved for an E-Pass."
 		return context
 
 	context.valid = True

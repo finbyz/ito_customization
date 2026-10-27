@@ -28,7 +28,7 @@
  "list_columns": [],
  "login_required": 0,
  "max_attachment_size": 10,
- "modified": "2026-10-26 12:52:13.634552",
+ "modified": "2026-10-27 17:18:11.803551",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "award-ceremony-registration",
@@ -39,7 +39,7 @@
  "show_attachments": 0,
  "show_list": 0,
  "show_sidebar": 0,
- "success_message": "Your response has been recorded. Your E-Pass details will be shared on your registered email and mobile number.",
+ "success_message": "Your response has been recorded. Your E-Pass details will be shared on your registered email.",
  "success_title": "Thank you!",
  "title": "ITO Excellence Award Felicitation Ceremony 2026\u201327",
  "web_form_fields": [
