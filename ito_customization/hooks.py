@@ -25,7 +25,7 @@ fixtures = [
     {"dt": "Property Setter", "filters": [["module", "in", ["ITO Customization"]]]},
 ]
 
-# after_migrate = "ito_customization.ito_customization.student_agent_setup.ensure_student_list_agent"
+after_migrate = "ito_customization.ito_customization.student_agent_setup.ensure_student_list_agent"
 
 # Includes in <head>
 # ------------------
