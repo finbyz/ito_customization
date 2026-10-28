@@ -8,7 +8,6 @@ import json
 import csv
 import base64
 from frappe.utils import cint, flt
-from frappe.model.naming import make_autoname
 import io
 from frappe.model.rename_doc import rename_doc as _rename_doc
 from ito_customization.ito_customization.book_order_delivery_charge import (
@@ -18,11 +17,6 @@ from ito_customization.ito_customization.book_order_delivery_charge import (
 # ==============================================================================
 # SECTION 1: COMMON UTILITIES & HELPERS
 # ==============================================================================
-
-def allocate_roll_number(ito_code: str, class_code: str) -> str:
-	prefix = f"{ito_code}{class_code}"
-	return make_autoname(f"{prefix}.###")
-
 
 def ensure_subject_exists(subject_name):
 	"""Create a School Subject if it doesn't exist"""
@@ -2556,7 +2550,6 @@ def save_bulk_student_list():
 
 			has_registered_students_doctype = frappe.db.exists("DocType", "Registered Students")
 
-			padded_class = clean_class.zfill(2) if clean_class.isdigit() else clean_class
 			submitted_students = []
 
 			for student in students:
@@ -2667,7 +2660,6 @@ def save_bulk_student_list():
 						old_rec = proc["old_rec"]
 
 						replacement = frappe.new_doc("Registered Students")
-						replacement.roll_no = allocate_roll_number(ito_code, padded_class)
 						replacement.student_name = sname
 						replacement.mobile_number = smobile
 						replacement.school = customer_name
@@ -2685,8 +2677,6 @@ def save_bulk_student_list():
 						old_doc = frappe.get_doc("Registered Students", old_rec["name"])
 						old_doc.not_registered = 1
 						old_doc.save(ignore_permissions=True)
-
-						saved_roll_numbers[item["row_id"]] = replacement.roll_no
 
 					elif itype == "update":
 						rec = proc["rec"]
@@ -2709,7 +2699,8 @@ def save_bulk_student_list():
 
 					else:  # "new"
 						rs_doc = frappe.new_doc("Registered Students")
-						rs_doc.roll_no = allocate_roll_number(ito_code, padded_class)
+						if item["roll_no"]:
+							rs_doc.roll_no = item["roll_no"]
 						rs_doc.student_name = sname
 						rs_doc.mobile_number = smobile
 						rs_doc.school = customer_name
@@ -2723,7 +2714,8 @@ def save_bulk_student_list():
 								"abbr": sub["abbr"],
 							})
 						rs_doc.insert(ignore_permissions=True)
-						saved_roll_numbers[item["row_id"]] = rs_doc.roll_no
+						if rs_doc.roll_no:
+							saved_roll_numbers[item["row_id"]] = rs_doc.roll_no
 
 				for r in active_records:
 					if r["name"] not in matched_existing_names:
@@ -2898,34 +2890,6 @@ def get_bulk_student_list(academic_year=None, selected_class=None):
 
 # ==================== 8. SAVE & GET LITTLE CHAMP BULK ====================
 
-def get_little_champ_class_code(class_str):
-	"""
-	Convert a Little Champ class to its letter code for roll numbers:
-	- Nursery -> A
-	- Junior KG -> B
-	- Senior KG -> C
-	"""
-	if not class_str:
-		return "A"
-	c_clean = str(class_str).lower().replace("class", "").strip()
-	if c_clean in ("nursery", "a"):
-		return "A"
-	elif c_clean in ("junior kg", "lkg", "junior", "pre-kg", "b"):
-		return "B"
-	elif c_clean in ("senior kg", "ukg", "senior", "kg", "c"):
-		return "C"
-
-	erp_class = map_class_to_erp(c_clean) if callable(globals().get("map_class_to_erp")) else c_clean
-	erp_lower = str(erp_class or "").lower()
-	if erp_lower == "nursery":
-		return "A"
-	elif erp_lower in ("junior kg", "lkg"):
-		return "B"
-	elif erp_lower in ("senior kg", "ukg"):
-		return "C"
-
-	return c_clean.zfill(2) if c_clean.isdigit() else c_clean.upper()
-
 
 @frappe.whitelist()
 def save_little_champ_bulk():
@@ -3045,7 +3009,6 @@ def save_little_champ_bulk():
 			has_registered_students_doctype = frappe.db.exists("DocType", "Registered Students")
 
 			# ── Parse submitted students list ──────────────────────────────────────────
-			lc_class_code = get_little_champ_class_code(selected_class or target_class)
 			submitted_students = []
 
 			for student in students:
@@ -3118,22 +3081,9 @@ def save_little_champ_bulk():
 						if sn and sn not in existing_by_name:
 							existing_by_name[sn] = r
 
-					# Find max serial already assigned
-					max_serial = 0
-					for r in existing_records:
-						rno = r.get("roll_no") or ""
-						if rno and len(rno) >= 3:
-							try:
-								serial_part = int(rno[-3:])
-								if serial_part > max_serial:
-									max_serial = serial_part
-							except (ValueError, TypeError):
-								pass
-
 					# Match submitted students with existing records
 					matched_existing_names = set()
 					items_to_process = []
-					needs_new_roll_names = []
 
 					for item in submitted_students:
 						sname = item["student_name"]
@@ -3152,24 +3102,10 @@ def save_little_champ_bulk():
 							# Trigger replacement ONLY when BOTH mobiles exist and differ
 							if stored_mobile and smobile and stored_mobile != smobile:
 								items_to_process.append({"type": "mobile_changed", "item": item, "old_rec": rec})
-								needs_new_roll_names.append(sname)
 							else:
 								items_to_process.append({"type": "update", "item": item, "rec": rec})
 						else:
 							items_to_process.append({"type": "new", "item": item})
-							needs_new_roll_names.append(sname)
-
-					# Assign new roll numbers A→Z for new/changed students
-					needs_new_roll_names_sorted = sorted(needs_new_roll_names)
-					new_roll_map: dict = {}
-					for sname in needs_new_roll_names_sorted:
-						max_serial += 1
-						serial_str = str(max_serial).zfill(3)
-						new_roll_map[sname] = (
-							f"{ito_code}{lc_class_code}{serial_str}"
-							if ito_code
-							else f"{lc_class_code}{serial_str}"
-						)
 
 					# Process each item
 					for proc in items_to_process:
@@ -3187,7 +3123,6 @@ def save_little_champ_bulk():
 								old_doc.save(ignore_permissions=True)
 
 								rs_doc = frappe.new_doc("Registered Students")
-								rs_doc.roll_no = new_roll_map[sname]
 								rs_doc.student_name = sname
 								rs_doc.mobile_number = smobile
 								rs_doc.school = customer_name
@@ -3208,7 +3143,8 @@ def save_little_champ_bulk():
 
 							else:  # "new"
 								rs_doc = frappe.new_doc("Registered Students")
-								rs_doc.roll_no = new_roll_map[sname]
+								if item["roll_no"]:
+									rs_doc.roll_no = item["roll_no"]
 								rs_doc.student_name = sname
 								rs_doc.mobile_number = smobile
 								rs_doc.school = customer_name
@@ -3229,7 +3165,8 @@ def save_little_champ_bulk():
 							else:
 								rs_doc.save(ignore_permissions=True)
 
-							saved_roll_numbers[sname] = rs_doc.roll_no
+							if itype != "mobile_changed" and rs_doc.roll_no:
+								saved_roll_numbers[sname] = rs_doc.roll_no
 
 						except Exception:
 							frappe.log_error(frappe.get_traceback(), "Registered Students Sync Error (Little Champ)")
@@ -3660,39 +3597,6 @@ def map_class_to_erp(class_grade):
 	return class_grade.strip()
 
 
-def get_wof_class_code(class_str):
-	"""Convert a WOF class to its code for roll numbers (Nursery->A, LKG->B, UKG->C, 1st->01, 12th->12)."""
-	if not class_str:
-		return "01"
-	c_clean = str(class_str).lower().replace("class", "").strip()
-	if c_clean in ("nursery", "a"):
-		return "A"
-	elif c_clean in ("junior kg", "lkg", "junior", "pre-kg", "b"):
-		return "B"
-	elif c_clean in ("senior kg", "ukg", "senior", "kg", "c"):
-		return "C"
-
-	erp_c = map_class_to_erp(c_clean) if callable(globals().get("map_class_to_erp")) else c_clean
-	erp_str = str(erp_c or "").strip()
-	erp_lower = erp_str.lower()
-	if erp_lower == "nursery":
-		return "A"
-	elif erp_lower in ("junior kg", "lkg"):
-		return "B"
-	elif erp_lower in ("senior kg", "ukg"):
-		return "C"
-
-	if erp_str.isdigit():
-		return erp_str.zfill(2)
-
-	import re
-	m = re.match(r"^(\d+)", erp_str)
-	if m:
-		return m.group(1).zfill(2)
-
-	return erp_str.upper()[:2]
-
-
 @frappe.whitelist()
 def save_wof_student_list():
 	original_flag = frappe.flags.ignore_permissions
@@ -3800,7 +3704,6 @@ def save_wof_student_list():
 				raw_class = batch_key.split('_')[0]
 
 			target_class = map_class_to_erp(raw_class)
-			class_code = get_wof_class_code(raw_class or target_class)
 
 			# Gather submitted students for this batch
 			batch_submitted_students = []
@@ -3854,7 +3757,6 @@ def save_wof_student_list():
 						"mobile": submitted_mobile,
 						"subjects": student_registered_subjects,
 						"target_class": target_class,
-						"class_code": class_code,
 					})
 
 			# Synchronize with Registered Students for this batch's class
@@ -3911,13 +3813,11 @@ def save_wof_student_list():
 					smobile = item["mobile"]
 					ssubjects = item["subjects"]
 					item_cls = item["target_class"]
-					item_code = item["class_code"]
 
 					if itype == "mobile_changed":
 						old_rec = proc["old_rec"]
 
 						replacement = frappe.new_doc("Registered Students")
-						replacement.roll_no = allocate_roll_number(ito_code, item_code)
 						replacement.student_name = sname
 						replacement.mobile_number = smobile
 						replacement.school = customer_name
@@ -3935,8 +3835,6 @@ def save_wof_student_list():
 						old_doc = frappe.get_doc("Registered Students", old_rec["name"])
 						old_doc.not_registered = 1
 						old_doc.save(ignore_permissions=True)
-
-						saved_roll_numbers[item["row_id"]] = replacement.roll_no
 
 					elif itype == "update":
 						rec = proc["rec"]
@@ -3959,7 +3857,8 @@ def save_wof_student_list():
 
 					else:  # "new"
 						rs_doc = frappe.new_doc("Registered Students")
-						rs_doc.roll_no = allocate_roll_number(ito_code, item_code)
+						if item["roll_no"]:
+							rs_doc.roll_no = item["roll_no"]
 						rs_doc.student_name = sname
 						rs_doc.mobile_number = smobile
 						rs_doc.school = customer_name
@@ -3973,14 +3872,15 @@ def save_wof_student_list():
 								"abbr": sub["abbr"],
 							})
 						rs_doc.insert(ignore_permissions=True)
-						saved_roll_numbers[item["row_id"]] = rs_doc.roll_no
+						if rs_doc.roll_no:
+							saved_roll_numbers[item["row_id"]] = rs_doc.roll_no
 
 		if bsl.is_new():
 			bsl.insert(ignore_permissions=True)
 		else:
 			bsl.save(ignore_permissions=True)
 
-		# Cache the updated payload with allocated roll numbers so drafts and future views have roll numbers preserved
+		# Cache the submitted payload while preserving any existing roll numbers.
 		for b_key, b_val in rosters.items():
 			b_students = b_val.get("students", []) if isinstance(b_val, dict) else b_val
 			for st in b_students:
@@ -4369,7 +4269,6 @@ def save_wof_olympiad_student_list():
 				raw_class = batch_key.split('_')[0]
 
 			target_class = map_class_to_erp(raw_class)
-			class_code = get_wof_class_code(raw_class or target_class)
 
 			# Gather submitted students for this batch
 			batch_submitted_students = []
@@ -4423,7 +4322,6 @@ def save_wof_olympiad_student_list():
 						"mobile": submitted_mobile,
 						"subjects": student_registered_subjects,
 						"target_class": target_class,
-						"class_code": class_code,
 					})
 
 			# Synchronize with Registered Students for this batch's class
@@ -4478,13 +4376,11 @@ def save_wof_olympiad_student_list():
 					smobile = item["mobile"]
 					ssubjects = item["subjects"]
 					item_cls = item["target_class"]
-					item_code = item["class_code"]
 
 					if itype == "mobile_changed":
 						old_rec = proc["old_rec"]
 
 						replacement = frappe.new_doc("Registered Students")
-						replacement.roll_no = allocate_roll_number(ito_code, item_code)
 						replacement.student_name = sname
 						replacement.mobile_number = smobile
 						replacement.school = customer_name
@@ -4502,8 +4398,6 @@ def save_wof_olympiad_student_list():
 						old_doc = frappe.get_doc("Registered Students", old_rec["name"])
 						old_doc.not_registered = 1
 						old_doc.save(ignore_permissions=True)
-
-						saved_roll_numbers[item["row_id"]] = replacement.roll_no
 
 					elif itype == "update":
 						rec = proc["rec"]
@@ -4526,7 +4420,8 @@ def save_wof_olympiad_student_list():
 
 					else:  # "new"
 						rs_doc = frappe.new_doc("Registered Students")
-						rs_doc.roll_no = allocate_roll_number(ito_code, item_code)
+						if item["roll_no"]:
+							rs_doc.roll_no = item["roll_no"]
 						rs_doc.student_name = sname
 						rs_doc.mobile_number = smobile
 						rs_doc.school = customer_name
@@ -4540,14 +4435,15 @@ def save_wof_olympiad_student_list():
 								"abbr": sub["abbr"],
 							})
 						rs_doc.insert(ignore_permissions=True)
-						saved_roll_numbers[item["row_id"]] = rs_doc.roll_no
+						if rs_doc.roll_no:
+							saved_roll_numbers[item["row_id"]] = rs_doc.roll_no
 
 		if bsl.is_new():
 			bsl.insert(ignore_permissions=True)
 		else:
 			bsl.save(ignore_permissions=True)
 
-		# Cache the updated payload with allocated roll numbers
+		# Cache the submitted payload while preserving any existing roll numbers.
 		for b_key, b_val in rosters.items():
 			b_students = b_val.get("students", []) if isinstance(b_val, dict) else b_val
 			for st in b_students:

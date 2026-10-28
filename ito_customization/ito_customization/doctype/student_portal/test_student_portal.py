@@ -58,9 +58,49 @@ class UnitTestStudentPortal(UnitTestCase):
 		initiate_payment.assert_called_once()
 		self.assertNotIn("roll_no", initiate_payment.call_args.args[0])
 
+	def test_registered_student_can_be_named_without_roll_number(self):
+		doc = student_portal.frappe.new_doc("Registered Students")
+		doc.roll_no = None
+		doc.student_name = "Student Without Roll Number"
+
+		doc.set_new_name()
+
+		self.assertEqual(doc.name, doc.student_name)
+		self.assertFalse(doc.roll_no)
+
+	def test_public_hall_ticket_download_scopes_print_permission_bypass(self):
+		flag = student_portal.frappe.flags
+		previous_ignore = getattr(flag, "ignore_print_permissions", False)
+
+		def download(name):
+			self.assertEqual(name, "STUDENT-001")
+			self.assertTrue(flag.ignore_print_permissions)
+
+		with patch(
+			"ito_customization.ito_customization.doc_events.hall_ticket.download_hall_ticket",
+			side_effect=download,
+		):
+			student_portal._download_validated_hall_ticket("STUDENT-001")
+
+		self.assertEqual(getattr(flag, "ignore_print_permissions", False), previous_ignore)
+
+	def test_public_hall_ticket_download_restores_print_permissions_on_error(self):
+		flag = student_portal.frappe.flags
+		previous_ignore = getattr(flag, "ignore_print_permissions", False)
+
+		with patch(
+			"ito_customization.ito_customization.doc_events.hall_ticket.download_hall_ticket",
+			side_effect=RuntimeError("PDF failed"),
+		):
+			with self.assertRaises(RuntimeError):
+				student_portal._download_validated_hall_ticket("STUDENT-001")
+
+		self.assertEqual(getattr(flag, "ignore_print_permissions", False), previous_ignore)
+
 	def test_registration_saves_registered_student_and_selected_subjects(self):
 		doc = MagicMock()
 		doc.doctype = "Registered Students"
+		doc.roll_no = None
 		doc.get.return_value = []
 		doc.is_new.return_value = True
 		payload = {
@@ -87,7 +127,6 @@ class UnitTestStudentPortal(UnitTestCase):
 			patch.object(student_portal, "_get_student_portal_registered_student_by_email", return_value=None),
 			patch.object(student_portal.frappe, "new_doc", return_value=doc),
 			patch.object(student_portal.frappe, "get_doc", return_value=school_doc),
-			patch("ito_customization.ito_customization.api.allocate_roll_number", return_value="ITO0101.001") as allocate_roll_number,
 		):
 			result = student_portal._save_student_portal_registered_student(payload)
 
@@ -98,11 +137,10 @@ class UnitTestStudentPortal(UnitTestCase):
 		self.assertEqual(doc.parent_name, "Test Parent")
 		self.assertEqual(doc.email_id, "student@example.com")
 		self.assertEqual(doc.mobile_number, "1234567890")
-		self.assertEqual(doc.roll_no, "ITO0101.001")
+		self.assertIsNone(doc.roll_no)
 		self.assertEqual(doc.ito_school_code, "ITO01")
 		self.assertEqual(doc.full_name, "Test School Name")
 		self.assertEqual(doc.from_student_portal, 1)
-		allocate_roll_number.assert_called_once_with("ITO01", "01")
 		doc.append.assert_called_once_with(
 			"subjects_registered",
 			{"subject": "Math", "abbr": "M"},

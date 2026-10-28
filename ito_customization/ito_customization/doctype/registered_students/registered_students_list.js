@@ -14,23 +14,14 @@ frappe.listview_settings["Registered Students"] = {
             // --------------------------------------------------------
             const filters = listview.filter_area.get();
 
-            const has_school = filters.some(
-                (f) => f[1] === "school" && f[3]
-            );
+            const school = filters.find((f) => f[1] === "school" && f[3])?.[3];
+            const studentClass = filters.find((f) => f[1] === "class" && f[3])?.[3];
 
-            const has_class = filters.some(
-                (f) => f[1] === "class" && f[3]
-            );
-
-            const has_academic_year = filters.some(
-                (f) => f[1] === "academic_year" && f[3]
-            );
-
-            if (!has_school || !has_class || !has_academic_year) {
+            if (!school || !studentClass) {
                 frappe.msgprint({
                     title: __("Filters Required"),
                     message: __(
-                        "Please filter the list by <b>School</b>, <b>Class</b>, and <b>Academic Year</b> before generating hall tickets."
+                        "Please filter the list by <b>School</b> and <b>Class</b> before generating roll numbers and hall tickets."
                     ),
                     indicator: "red",
                 });
@@ -49,31 +40,51 @@ frappe.listview_settings["Registered Students"] = {
                 return;
             }
 
-            // Sort selected students in ascending natural order
-            // e.g. 001, 002, 003...
-            names.sort((a, b) =>
-                a.localeCompare(b, undefined, {
-                    numeric: true,
-                    sensitivity: "base",
-                })
-            );
+            const ticketWindow = window.open("about:blank", "_blank");
+            if (!ticketWindow) {
+                frappe.msgprint(__("Please enable pop-ups to generate hall tickets."));
+                return;
+            }
 
-            // --------------------------------------------------------
-            // Generate Hall Tickets
-            // --------------------------------------------------------
-            const url =
-                "/api/method/ito_customization.ito_customization.doc_events.hall_ticket.download_hall_tickets" +
-                "?names=" +
-                encodeURIComponent(JSON.stringify(names));
+            frappe.call({
+                method: "ito_customization.ito_customization.doctype.registered_students.registered_students.generate_roll_numbers_for_hall_tickets",
+                args: {
+                    school,
+                    student_class: studentClass,
+                    names,
+                },
+                freeze: true,
+                freeze_message: __("Generating roll numbers..."),
+            }).then((response) => {
+                const generatedNames = response.message?.names;
+                if (!generatedNames?.length) {
+                    ticketWindow.close();
+                    frappe.msgprint(__("No selected students were available for hall-ticket generation."));
+                    return;
+                }
 
-            window.open(url, "_blank");
+                listview.refresh();
+                const url =
+                    "/api/method/ito_customization.ito_customization.doc_events.hall_ticket.download_hall_tickets" +
+                    "?names=" +
+                    encodeURIComponent(JSON.stringify(generatedNames));
+                ticketWindow.location.replace(url);
+            }).catch((error) => {
+                ticketWindow.close();
+                console.error("Unable to generate roll numbers for hall tickets", error);
+                frappe.msgprint({
+                    title: __("Roll Number Generation Failed"),
+                    message: error.message || __("Could not generate roll numbers. Please try again."),
+                    indicator: "red",
+                });
+            });
         };
 
         // ------------------------------------------------------------
         // Add button to toolbar
         // ------------------------------------------------------------
         listview.page.add_inner_button(
-            __("Generate Hall Tickets"),
+            __("Generate Roll Nos & Hall Tickets"),
             generate
         );
 
@@ -82,12 +93,12 @@ frappe.listview_settings["Registered Students"] = {
         // ------------------------------------------------------------
         if (listview.page.add_actions_menu_item) {
             listview.page.add_actions_menu_item(
-                __("Generate Hall Tickets"),
+                __("Generate Roll Nos & Hall Tickets"),
                 generate
             );
         } else {
             listview.page.add_menu_item(
-                __("Generate Hall Tickets"),
+                __("Generate Roll Nos & Hall Tickets"),
                 generate
             );
         }

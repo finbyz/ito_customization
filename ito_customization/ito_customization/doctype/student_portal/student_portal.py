@@ -966,20 +966,12 @@ def _save_student_portal_registered_student(registration_payload):
 
 	student.flags.ignore_permissions = True
 	if student.is_new():
-		if not class_name:
-			frappe.throw("Class is required to create a registered student.")
-
 		school_doc = frappe.get_doc("Customer", school)
-		ito_code = (
+		student.ito_school_code = (
 			school_doc.get("custom_ito_school_code")
 			or school_doc.get("custom_school_code")
 			or school_doc.name
 		).strip().upper()
-		from ito_customization.ito_customization.api import allocate_roll_number
-		from ito_customization.ito_customization.doctype.registered_students.student_import import class_code
-
-		student.roll_no = allocate_roll_number(ito_code, class_code(class_name))
-		student.ito_school_code = ito_code
 		student.full_name = school_doc.customer_name
 		student.insert(ignore_permissions=True)
 	else:
@@ -1073,9 +1065,19 @@ def download_public_student_hall_ticket(roll_no: str, token: str, student_portal
     if error:
         frappe.throw(error.get("message") or "Unable to find this hall ticket.")
 
+    _download_validated_hall_ticket(student.name)
+
+
+def _download_validated_hall_ticket(student_name):
     from ito_customization.ito_customization.doc_events.hall_ticket import download_hall_ticket
 
-    download_hall_ticket(student.name)
+    previous_ignore = getattr(frappe.flags, "ignore_print_permissions", False)
+    # Token and school ownership were validated before this public PDF render.
+    frappe.flags.ignore_print_permissions = True
+    try:
+        download_hall_ticket(student_name)
+    finally:
+        frappe.flags.ignore_print_permissions = previous_ignore
 
 
 
