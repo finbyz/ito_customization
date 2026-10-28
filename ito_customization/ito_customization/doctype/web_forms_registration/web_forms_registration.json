@@ -2,6 +2,7 @@
  "actions": [],
  "allow_bulk_edit": 1,
  "allow_rename": 1,
+ "autoname": "WF-.####",
  "creation": "2026-10-26 11:55:21.915598",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -116,10 +117,11 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-27 15:49:53.394773",
+ "modified": "2026-10-27 18:10:12.014820",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Web Forms Registration",
+ "naming_rule": "Autoincrement",
  "owner": "Administrator",
  "permissions": [
   {
