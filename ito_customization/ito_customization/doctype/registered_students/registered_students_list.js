@@ -55,6 +55,7 @@ frappe.listview_settings["Registered Students"] = {
                 },
                 freeze: true,
                 freeze_message: __("Generating roll numbers..."),
+                silent: true,
             }).then((response) => {
                 const generatedNames = response.message?.names;
                 if (!generatedNames?.length) {
@@ -74,7 +75,7 @@ frappe.listview_settings["Registered Students"] = {
                 console.error("Unable to generate roll numbers for hall tickets", error);
                 frappe.msgprint({
                     title: __("Roll Number Generation Failed"),
-                    message: error.message || __("Could not generate roll numbers. Please try again."),
+                    message: getServerErrorMessage(error),
                     indicator: "red",
                 });
             });
@@ -137,7 +138,7 @@ function openStudentImport(listview) {
                     return;
                 }
                 dialog.hide();
-                openStudentReview(listview, rows, values, fileName);
+                openStudentReview(listview, rows, values, fileName, response.message?.file_url);
             } finally {
                 dialog.enable_primary_action();
             }
@@ -164,17 +165,27 @@ function openStudentImport(listview) {
     });
 }
 
-function openStudentReview(listview, rows, context, fileName) {
+function openStudentReview(listview, rows, context, fileName, fileUrl) {
+    rows.forEach((row) => {
+        row.initial_review = row.subject_review_required
+            ? __("Check subjects")
+            : row.issues ? __("Check details") : __("OK");
+    });
+
+    // `columns` must be whole numbers; the visible ones below add up to 10.
     const fields = [
+        // { fieldtype: "Data", fieldname: "initial_review", label: __("Initial Review"), in_list_view: 1, read_only: 1, columns: 1 },
         { fieldtype: "Link", fieldname: "class", label: __("Class"), options: "Class", in_list_view: 1, columns: 1 },
-        { fieldtype: "Data", fieldname: "serial_no", label: __("Sheet Serial No"), in_list_view: 1, columns: 1 },
+        { fieldtype: "Data", fieldname: "serial_no", label: __("Serial"), in_list_view: 1, columns: 1 },
         { fieldtype: "Data", fieldname: "student_name", label: __("Student Name"), in_list_view: 1, columns: 2 },
-        { fieldtype: "Data", fieldname: "mobile", label: __("Mobile"), in_list_view: 1, columns: 1 },
-        { fieldtype: "Small Text", fieldname: "subjects", label: __("Subjects, comma separated"), in_list_view: 1, columns: 3 },
-        { fieldtype: "Check", fieldname: "confirm_subjects", label: __("Subjects Checked"), in_list_view: 1, columns: 1 },
+        { fieldtype: "Data", fieldname: "mobile", label: __("Mobile") },   // editable in the row form, not shown in the grid
+        { fieldtype: "Small Text", fieldname: "subjects", label: __("Subjects"), in_list_view: 1, columns: 2 },
+        // { fieldtype: "Check", fieldname: "confirm_subjects", label: __("Checked"), in_list_view: 1, columns: 1,
+        //   read_only_depends_on: "eval:!doc.subject_review_required" },
         { fieldtype: "Check", fieldname: "subject_review_required", hidden: 1 },
-        { fieldtype: "Small Text", fieldname: "issues", label: __("Review Notes"), in_list_view: 1, read_only: 1, columns: 3 },
+        { fieldtype: "Small Text", fieldname: "issues", label: __("Review Notes"), in_list_view: 1, read_only: 1, columns: 2 },
     ];
+
     const dialog = new frappe.ui.Dialog({
         title: __("Review Extracted Students"),
         size: "extra-large",
@@ -191,6 +202,14 @@ function openStudentReview(listview, rows, context, fileName) {
             const selectedRows = dialog.fields_dict.students.grid.get_data();
             if (!selectedRows.length) {
                 frappe.msgprint(__("Keep at least one student row to import."));
+                return;
+            }
+            const unchecked = selectedRows.filter((row) => row.subject_review_required && !row.confirm_subjects);
+            if (unchecked.length) {
+                frappe.msgprint(__(
+                    "{0} row(s) need their subjects checked against the image. Tick Checked once confirmed.",
+                    [unchecked.length]
+                ));
                 return;
             }
             dialog.disable_primary_action();
@@ -222,7 +241,50 @@ function openStudentReview(listview, rows, context, fileName) {
         },
     });
     dialog.show();
+
+    const flagged = rows.filter((row) => row.issues || row.subject_review_required).length;
+    const toConfirm = rows.filter((row) => row.subject_review_required).length;
+    const sourceLink = fileUrl
+        ? `<a class="btn btn-default btn-xs" href="${frappe.utils.escape_html(frappe.utils.get_file_link(fileUrl))}" target="_blank" rel="noopener">${__("Open original file")}</a>`
+        : "";
     dialog.fields_dict.instructions.$wrapper.html(
-        `<p class="text-muted">${__("Review each student's class and subjects. For rows marked 'Subject grid could not be verified', compare subjects with the image and tick Subjects Checked. Roll numbers are assigned alphabetically by student name within each class; sheet serial numbers are saved separately. Existing students are not changed.")}</p>`
+        `<style>
+            .student-import-review { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+            .student-import-review__summary { display:flex; flex-wrap:wrap; gap:8px; }
+            .student-import-review__stat { padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; background:var(--card-bg); }
+            .student-import-review__stat strong { display:block; font-size:16px; }
+            .student-import-review__hint { flex-basis:100%; margin:0; }
+        </style>
+        <div class="student-import-review">
+            <div class="student-import-review__summary">
+                <div class="student-import-review__stat"><strong>${rows.length}</strong>${__("Students found")}</div>
+                <div class="student-import-review__stat"><strong>${flagged}</strong>${__("Rows flagged")}</div>
+                <div class="student-import-review__stat"><strong>${toConfirm}</strong>${__("Subjects to confirm")}</div>
+            </div>
+            ${sourceLink}
+            <p class="student-import-review__hint text-muted">${__("Compare names, classes, serial numbers and subjects with the original file. Flags are from extraction and do not update as you edit. Rows marked Check subjects must be ticked Checked before import. Click a row to edit Mobile. Roll numbers are assigned alphabetically within each class.")}</p>
+        </div>`
+    );
+}
+
+function getServerErrorMessage(error) {
+    const serverMessages = error?._server_messages || error?.responseJSON?._server_messages;
+    if (serverMessages) {
+        const messages = [
+            ...new Set(
+                JSON.parse(serverMessages)
+                    .map((message) => JSON.parse(message).message)
+                    .filter(Boolean)
+            ),
+        ];
+        if (messages.length) {
+            return messages.join("<br>");
+        }
+    }
+
+    return (
+        error?.message ||
+        (typeof error === "string" && error) ||
+        __("Could not generate roll numbers. Please try again.")
     );
 }

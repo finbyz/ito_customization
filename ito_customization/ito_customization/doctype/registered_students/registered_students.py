@@ -5,6 +5,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.model.naming import make_autoname
+from frappe.utils import format_date, getdate, today
 
 
 class RegisteredStudents(Document):
@@ -46,6 +47,20 @@ def generate_roll_numbers_for_hall_tickets(school, student_class, names):
 
     school_doc = frappe.get_doc("Customer", school)
     school_doc.check_permission("read")
+
+    application_deadline = school_doc.get("custom_application_deadline")
+    if not application_deadline:
+        frappe.throw(
+            _("Set an Application Deadline on the selected Customer before generating roll numbers.")
+        )
+
+    if getdate(today()) <= getdate(application_deadline):
+        frappe.throw(
+            _(
+                "Registration is ongoing. Application deadline: {0}. "
+                "Roll numbers can only be generated after this date."
+            ).format(format_date(application_deadline))
+        )
 
     ito_code = (school_doc.get("custom_ito_school_code") or "").strip().upper()
     if not ito_code:
