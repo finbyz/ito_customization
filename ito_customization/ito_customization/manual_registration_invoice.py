@@ -93,7 +93,7 @@ def create_or_update_manual_registration_invoice(
         retention_rate = wof._get_retention_rate(customer, item_code)
         amount = flt(amount * (1 - retention_rate), 2)
         rate = amount / paid_students
-    _validate_payment(details, mode, amount)
+    amount_paid = _validate_payment(details, mode, amount)
     invoice = _find_manual_invoice(customer, company, item_code, mode, details)
     if not invoice:
         invoice = frappe.new_doc("Sales Invoice")
@@ -116,7 +116,7 @@ def create_or_update_manual_registration_invoice(
         "expense_account": frappe.db.get_value("Company", company, "default_expense_account"),
         "cost_center": frappe.db.get_value("Company", company, "cost_center"),
     })
-    _set_payment_fields(invoice, mode, details, amount)
+    _set_payment_fields(invoice, mode, details, amount_paid)
     invoice.flags.ignore_user_permissions = True
     if invoice.is_new():
         invoice.insert(ignore_permissions=True)
@@ -125,7 +125,7 @@ def create_or_update_manual_registration_invoice(
     return invoice.name
 
 
-def _validate_payment(details: dict, mode: str, amount: float) -> None:
+def _validate_payment(details: dict, mode: str, amount: float) -> float:
     reference_field = PAYMENT_MODES[mode][1]
     if not str(details.get(reference_field) or "").strip():
         frappe.throw(_("Payment reference is required."))
@@ -135,11 +135,16 @@ def _validate_payment(details: dict, mode: str, amount: float) -> None:
         frappe.throw(_("Payment date is required."))
     try:
         getdate(details["date"])
-        reported_amount = flt(details.get("amount"))
+        reported_amount = flt(details.get("amount"), 2)
     except (TypeError, ValueError):
         frappe.throw(_("Invalid payment date or amount."))
-    if abs(reported_amount - amount) > 0.01:
-        frappe.throw(_("Payment amount must match the registration fee of {0}.").format(amount))
+    if reported_amount <= 0:
+        frappe.throw(_("Payment amount must be greater than zero."))
+    if reported_amount > amount:
+        frappe.throw(
+            _("Payment amount cannot exceed the registration fee of {0}.").format(amount)
+        )
+    return reported_amount
 
 
 def _find_manual_invoice(customer: str, company: str, item_code: str, mode: str, details: dict):
@@ -183,7 +188,7 @@ def _get_receivable_account(customer: str, company: str) -> str:
     return account
 
 
-def _set_payment_fields(invoice, mode: str, details: dict, amount: float) -> None:
+def _set_payment_fields(invoice, mode: str, details: dict, amount_paid: float) -> None:
     invoice.custom_payment_mode = PAYMENT_MODES[mode][0]
     invoice.custom_bank_name = details.get("bank_name") if mode in ("dd", "neft") else None
     invoice.custom_dd_no = str(details["dd_no"]).strip() if mode == "dd" else None
@@ -192,4 +197,4 @@ def _set_payment_fields(invoice, mode: str, details: dict, amount: float) -> Non
     invoice.custom_transaction_id = str(details["transaction_id"]).strip() if mode == "cash" else None
     invoice.custom_upi_transaction_id__ref_no = str(details["upi_ref"]).strip() if mode == "upi" else None
     invoice.custom_date = getdate(details["date"])
-    invoice.custom_amount = amount
+    invoice.custom_amount = amount_paid
