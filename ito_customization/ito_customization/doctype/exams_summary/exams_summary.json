@@ -14,7 +14,8 @@
   "column_break_whmk",
   "exam_detail",
   "section_break_lprx",
-  "exam_summary"
+  "exam_summary",
+  "is_wof"
  ],
  "fields": [
   {
@@ -58,6 +59,12 @@
    "fieldname": "is_little_champ",
    "fieldtype": "Check",
    "label": "Is Little Champ"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_wof",
+   "fieldtype": "Check",
+   "label": "Is WOF Olympiad"
   },
   {
    "fetch_from": "customer.customer_name",

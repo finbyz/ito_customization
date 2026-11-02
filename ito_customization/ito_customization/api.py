@@ -7,6 +7,7 @@ from frappe import _, scrub
 import json
 import csv
 import base64
+import re
 from frappe.utils import cint, flt
 import io
 from frappe.model.rename_doc import rename_doc as _rename_doc
@@ -125,38 +126,63 @@ def save_ito_registration(registration_data):
 			# Save exams data
 			exams_data = data.get("exams", {})
 			if exams_data:
-				es_name = frappe.db.get_value("Exams Summary", {"customer": customer})
+				es_name = frappe.db.get_value(
+					"Exams Summary",
+					{"customer": customer, "is_little_champ": 0, "is_wof": 0},
+				)
 				if es_name:
 					es_doc = frappe.get_doc("Exams Summary", es_name)
-					es_doc.exam_summary = []
+				else:
+					academic_year = frappe.db.get_value(
+						"Customer", customer, "custom_current_academic_year"
+					)
+					if academic_year and not academic_year.startswith("AY-"):
+						parts = academic_year.replace("-", "/").split("/")
+						academic_year = (
+							f"AY-{parts[0]}/{parts[1]}" if len(parts) == 2 else f"AY-{academic_year}"
+						)
+					yed_filters = {"docstatus": 1, "is_little_champ": 0}
+					if academic_year:
+						yed_filters["academic_year"] = academic_year
+					yed_name = frappe.db.get_value(
+						"Yearly Exam Date", yed_filters, "name", order_by="creation desc"
+					)
+					if not yed_name:
+						frappe.throw(_("No submitted exam schedule is available for this customer."))
+					es_doc = frappe.new_doc("Exams Summary")
+					es_doc.customer = customer
+					es_doc.exam_detail = yed_name
 
-					subject_map = {
-						"IDO": "Drawing Olympiad (IDO)",
-						"NESO": "Essay Olympiad (NESO)",
-						"EIO": "English Olympiad (EIO)",
-						"IMO": "Maths Olympiad (IMO)",
-						"ISO": "Science Olympiad (ISO)",
-						"GKIO": "General Knowledge (GKIO)",
-						"ICO": "Computer Olympiad (ICO)",
-						"NSSO": "Social Studies (NSSO)",
-						"NHO": "Hindi Olympiad (NHO)",
-						"NLRO": "Logical Reasoning (NLRO)",
-						"CIO": "Commerce Olympiad (CIO)"
-					}
-
-					for subject_code, rows in exams_data.items():
-						subject_name = subject_map.get(subject_code, subject_code)
-						for row in rows:
-							es_doc.append("exam_summary", {
-								"subject": subject_name,
-								"class": row.get("class"),
-								"teacher_name": row.get("teacher_name"),
-								"whatsapp_no": row.get("whatsapp"),
-								"no_of_students": row.get("students"),
-								"slot_date": row.get("slot_date") or None
-							})
-
-					# Save exams - persists to DB session
+				es_doc.exam_summary = []
+				subject_map = {
+					"IDO": "Drawing Olympiad (IDO)",
+					"NESO": "Essay Olympiad (NESO)",
+					"EIO": "English Olympiad (EIO)",
+					"IMO": "Maths Olympiad (IMO)",
+					"ISO": "Science Olympiad (ISO)",
+					"GKIO": "General Knowledge (GKIO)",
+					"ICO": "Computer Olympiad (ICO)",
+					"NSSO": "Social Studies (NSSO)",
+					"NHO": "Hindi Olympiad (NHO)",
+					"NLRO": "Logical Reasoning (NLRO)",
+					"CIO": "Commerce Olympiad (CIO)",
+				}
+				for subject_code, rows in exams_data.items():
+					subject_name = subject_map.get(subject_code, subject_code)
+					for row in rows:
+						es_doc.append("exam_summary", {
+							"subject": subject_name,
+							"class": row.get("class"),
+							"teacher_name": row.get("teacher_name"),
+							"whatsapp_no": row.get("whatsapp"),
+							"no_of_students": row.get("students"),
+							"slot_date": row.get("slot_date") or None,
+						})
+				es_doc.is_little_champ = 0
+				es_doc.is_wof = 0
+				if es_doc.is_new():
+					es_doc.insert(ignore_permissions=True)
+				else:
 					es_doc.save(ignore_permissions=True)
 
 			payment = data.get("payment") or {}
@@ -248,7 +274,10 @@ def save_registration_step():
 				frappe.log_error(title="STEP 3 EXAMS DATA", message=frappe.as_json(exams_data))
 
 				if exams_data:
-					es_name = frappe.db.get_value("Exams Summary", {"customer": customer})
+					es_name = frappe.db.get_value(
+						"Exams Summary",
+						{"customer": customer, "is_little_champ": 0, "is_wof": 0},
+					)
 					if es_name:
 						es_doc = frappe.get_doc("Exams Summary", es_name)
 						es_doc.exam_summary = []
@@ -1013,7 +1042,57 @@ def get_customer_from_session_user():
 
 	# Exam Summaries
 	exam_summaries_data = []
-	exams = frappe.get_all("Exams Summary", filters={"customer": customer.name}, pluck="name")
+	is_little_champ = cint(customer.get("custom_is_little_champ") or 0)
+	exam_documents = frappe.get_all(
+		"Exams Summary",
+		filters={"customer": customer.name},
+		fields=["name", "is_little_champ", "exam_detail"],
+		order_by="creation desc",
+	)
+	if is_little_champ:
+		academic_year = customer.get("custom_current_academic_year") or ""
+		if academic_year and not academic_year.startswith("AY-"):
+			parts = academic_year.replace("-", "/").split("/")
+			if len(parts) == 2:
+				academic_year = f"AY-{parts[0]}/{parts[1]}"
+		yearly_exam_dates = frappe.get_all(
+			"Yearly Exam Date",
+			filters={
+				"academic_year": academic_year,
+				"is_little_champ": 1,
+				"docstatus": 1,
+			},
+			pluck="name",
+		) if academic_year else []
+		little_champ_subjects = [
+			subject for subject in frappe.get_all(
+				"Yearly Exam Date CT",
+				filters={
+					"parent": ["in", yearly_exam_dates],
+					"parenttype": "Yearly Exam Date",
+				},
+				pluck="subject",
+			) if subject
+		] if yearly_exam_dates else []
+		legacy_parents = set()
+		if little_champ_subjects and exam_documents:
+			legacy_rows = frappe.get_all(
+				"Exam Summary CT",
+				filters={
+					"parent": ["in", [doc.name for doc in exam_documents]],
+					"parenttype": "Exams Summary",
+					"subject": ["in", little_champ_subjects],
+				},
+				fields=["parent"],
+			)
+			legacy_parents = {row.parent for row in legacy_rows}
+		exams = [
+			doc.name for doc in exam_documents
+			if (doc.is_little_champ and doc.exam_detail in yearly_exam_dates)
+			or doc.name in legacy_parents
+		]
+	else:
+		exams = [doc.name for doc in exam_documents if not doc.is_little_champ]
 
 	for exam_name in exams:
 		es_doc = frappe.get_doc("Exams Summary", exam_name)
@@ -1028,6 +1107,7 @@ def get_customer_from_session_user():
 						"yearly_exam_date": "",
 						"academic_year": "",
 						"subject": subject,
+						"is_wof": cint(es_doc.get("is_wof") or 0),
 						"target_dates": [],
 						"rows": []
 					}
@@ -1050,6 +1130,7 @@ def get_customer_from_session_user():
 				"yearly_exam_date": yearly_exam.name,
 				"academic_year": yearly_exam.academic_year,
 				"subject": row.subject,
+				"is_wof": cint(es_doc.get("is_wof") or 0),
 				"for_chitrakala": getattr(row, "for_chitrakala", 0),
 				"target_dates": [row.tg_date_1, row.tg_date_2, row.tg_date_3],
 				"rows": []
@@ -1072,7 +1153,7 @@ def get_customer_from_session_user():
 	# If no specific Exams Summary assigned yet, fetch from active Yearly Exam Date
 	if not exam_summaries_data:
 		ay = customer.get("custom_current_academic_year")
-		yed_filters = {"docstatus": 1}
+		yed_filters = {"docstatus": 1, "is_little_champ": is_little_champ}
 		if ay:
 			normalized_ay = ay
 			if not normalized_ay.startswith("AY-"):
@@ -1210,6 +1291,51 @@ def get_customer_from_session_user():
 # SECTION 3: LITTLE CHAMP REGISTRATION FORM APIS
 # ==============================================================================
 
+def _get_little_champ_exam_summary(customer_name):
+	academic_year = (
+		frappe.db.get_value("Customer", customer_name, "custom_current_academic_year")
+		or "AY-2026/27"
+	)
+	if not academic_year.startswith("AY-"):
+		parts = academic_year.replace("-", "/").split("/")
+		academic_year = f"AY-{parts[0]}/{parts[1]}" if len(parts) == 2 else f"AY-{academic_year}"
+
+	exam_dates = frappe.get_all(
+		"Yearly Exam Date",
+		filters={
+			"academic_year": academic_year,
+			"is_little_champ": 1,
+			"docstatus": 1,
+		},
+		fields=["name"],
+		order_by="creation desc",
+		limit_page_length=1,
+	)
+	if not exam_dates:
+		frappe.throw(f"No submitted Little Champ exam schedule found for {academic_year}.")
+
+	exam_detail = exam_dates[0].name
+	summary_names = frappe.get_all(
+		"Exams Summary",
+		filters={
+			"customer": customer_name,
+			"exam_detail": exam_detail,
+			"is_little_champ": 1,
+		},
+		fields=["name"],
+		order_by="creation desc",
+		limit_page_length=1,
+	)
+	if summary_names:
+		return frappe.get_doc("Exams Summary", summary_names[0].name)
+
+	summary = frappe.new_doc("Exams Summary")
+	summary.customer = customer_name
+	summary.exam_detail = exam_detail
+	summary.is_little_champ = 1
+	return summary
+
+
 @frappe.whitelist()
 def save_little_champ_registration(registration_data):
 	original_ignore_permissions = frappe.flags.ignore_permissions
@@ -1261,12 +1387,7 @@ def save_little_champ_registration(registration_data):
 		# Save exams data
 		exams_data = data.get("exams", {})
 		if exams_data:
-			es_name = frappe.db.get_value("Exams Summary", {"customer": customer_doc.name})
-			if es_name:
-				es_doc = frappe.get_doc("Exams Summary", es_name)
-			else:
-				es_doc = frappe.new_doc("Exams Summary")
-				es_doc.customer = customer_doc.name
+			es_doc = _get_little_champ_exam_summary(customer_doc.name)
 
 			es_doc.exam_summary = []
 			for subject_key, subject_data in exams_data.items():
@@ -1282,10 +1403,7 @@ def save_little_champ_registration(registration_data):
 						"slot_date": row.get("slot_date") or None
 					})
 
-			if es_doc.is_new():
-				es_doc.insert(ignore_permissions=True)
-			else:
-				es_doc.save(ignore_permissions=True)
+			es_doc.save(ignore_permissions=True)
 
 		payment = data.get("payment") or {}
 		if payment.get("mode") in ("dd", "neft", "cash", "upi"):
@@ -1449,12 +1567,7 @@ def save_little_champ_step():
 
 				exams_data = data.get("exams", {})
 				if exams_data:
-					es_name = frappe.db.get_value("Exams Summary", {"customer": customer})
-					if es_name:
-						es_doc = frappe.get_doc("Exams Summary", es_name)
-					else:
-						es_doc = frappe.new_doc("Exams Summary")
-						es_doc.customer = customer
+					es_doc = _get_little_champ_exam_summary(customer)
 
 					es_doc.exam_summary = []
 					for subject_key, subject_data in exams_data.items():
@@ -1470,10 +1583,7 @@ def save_little_champ_step():
 								"slot_date": row.get("slot_date")
 							})
 
-					if es_doc.is_new():
-						es_doc.insert(ignore_permissions=True)
-					else:
-						es_doc.save(ignore_permissions=True)
+					es_doc.save(ignore_permissions=True)
 
 				# NO explicit commit - let Frappe handle it
 				return {"success": True, "step": 3}
@@ -1663,18 +1773,25 @@ def sync_wof_entry_matrix_to_exams_summary(customer, entry_matrix):
 	if not customer or not entry_matrix:
 		return
 
-	es_name = frappe.db.get_value("Exams Summary", {"customer": customer})
+	es_name = frappe.db.get_value(
+		"Exams Summary",
+		{"customer": customer, "is_little_champ": 0, "is_wof": 0},
+	)
 	if not es_name:
 		yed_name = frappe.db.get_value("Yearly Exam Date", {"docstatus": 1}, "name", order_by="creation desc")
 		if yed_name:
 			es_doc = frappe.new_doc("Exams Summary")
 			es_doc.customer = customer
 			es_doc.exam_detail = yed_name
+			es_doc.is_little_champ = 0
+			es_doc.is_wof = 0
 			es_doc.insert(ignore_permissions=True)
 			es_name = es_doc.name
 
 	if es_name:
 		es_doc = frappe.get_doc("Exams Summary", es_name)
+		es_doc.is_little_champ = 0
+		es_doc.is_wof = 0
 		es_doc.exam_summary = []
 
 		group_labels = {
@@ -1811,13 +1928,20 @@ def save_wof_step():
 # SECTION 5: DYNAMIC SUBJECT RESOLUTION & TEMPLATE APIS
 # ==============================================================================
 
-def get_subjects_for_year(academic_year=None, is_little_champ=0, customer_name=None, for_chitrakala=0):
+def get_subjects_for_year(
+	academic_year=None,
+	is_little_champ=0,
+	customer_name=None,
+	for_chitrakala=0,
+	for_wof_olympiad=0,
+):
 	"""
 	Fetch subjects from Yearly Exam Date.
 	Primary source: If customer has a linked Exams Summary -> exam_detail (Yearly Exam Date).
 	Fallback: Query Yearly Exam Date by academic year and is_little_champ flag.
 	Filter by for_chitrakala flag: if for_chitrakala=1, returns only subjects marked for Chitrakala;
 	if for_chitrakala=0, excludes subjects marked for Chitrakala.
+	Use for_wof_olympiad=1 to load the separate WOF Olympiad schedule.
 	"""
 	yed_name = None
 
@@ -1826,8 +1950,14 @@ def get_subjects_for_year(academic_year=None, is_little_champ=0, customer_name=N
 		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
 
 	if customer_name:
+		summary_filters = {
+			"customer": customer_name,
+			"is_little_champ": cint(is_little_champ or 0),
+		}
+		if frappe.db.has_column("Exams Summary", "is_wof"):
+			summary_filters["is_wof"] = cint(for_wof_olympiad or 0)
 		es_list = frappe.get_all("Exams Summary",
-			filters={"customer": customer_name},
+			filters=summary_filters,
 			fields=["name", "exam_detail"],
 			order_by="creation desc")
 
@@ -1959,7 +2089,12 @@ def derive_short_name(subject_name):
 # ==================== 1. FETCH SUBJECTS API (Regular) ====================
 
 @frappe.whitelist()
-def get_bulk_subjects_for_year(academic_year=None, is_little_champ=0, for_chitrakala=0):
+def get_bulk_subjects_for_year(
+	academic_year=None,
+	is_little_champ=0,
+	for_chitrakala=0,
+	for_wof_olympiad=0,
+):
 	try:
 		customer_name = frappe.db.get_value("Portal User",
 			{"user": frappe.session.user}, "parent")
@@ -1975,7 +2110,8 @@ def get_bulk_subjects_for_year(academic_year=None, is_little_champ=0, for_chitra
 			academic_year,
 			is_little_champ=is_little_champ,
 			customer_name=customer_name,
-			for_chitrakala=for_chitrakala
+			for_chitrakala=for_chitrakala,
+			for_wof_olympiad=for_wof_olympiad,
 		)
 
 		return {
@@ -2744,6 +2880,304 @@ def save_bulk_student_list():
 		raise
 
 
+def _get_little_champ_registration_subject_counts(customer_name, academic_year):
+	exam_dates = frappe.get_all(
+		"Yearly Exam Date",
+		filters={
+			"academic_year": academic_year,
+			"is_little_champ": 1,
+			"docstatus": 1,
+		},
+		fields=["name"],
+	)
+	if not exam_dates:
+		return {}
+
+	exam_date_names = [row.name for row in exam_dates]
+	yearly_subject_codes = {
+		row.subject: row.school_subject
+		for row in frappe.get_all(
+			"Yearly Exam Date CT",
+			filters={"parent": ["in", exam_date_names], "parenttype": "Yearly Exam Date"},
+			fields=["subject", "school_subject"],
+		)
+		if row.subject
+	}
+	if not yearly_subject_codes:
+		return {}
+
+	summaries = frappe.get_all(
+		"Exams Summary",
+		filters={"customer": customer_name, "exam_detail": ["in", exam_date_names]},
+		fields=["name"],
+		order_by="creation desc",
+		limit_page_length=1,
+	)
+	if summaries:
+		summary_names = [summaries[0].name]
+	else:
+		legacy_summaries = frappe.get_all(
+			"Exams Summary",
+			filters={"customer": customer_name},
+			fields=["name"],
+			order_by="creation desc",
+		)
+		if not legacy_summaries:
+			return {}
+		candidate_names = [summary.name for summary in legacy_summaries]
+		legacy_rows = frappe.get_all(
+			"Exam Summary CT",
+			filters={
+				"parent": ["in", candidate_names],
+				"parenttype": "Exams Summary",
+				"subject": ["in", list(yearly_subject_codes)],
+			},
+			fields=["parent"],
+		)
+		if not legacy_rows:
+			return {}
+		legacy_parent_names = {row.parent for row in legacy_rows}
+		summary_names = [
+			name for name in candidate_names if name in legacy_parent_names
+		][:1]
+
+	rows = frappe.get_all(
+		"Exam Summary CT",
+		filters={"parent": summary_names[0], "parenttype": "Exams Summary"},
+		fields=["class", "subject", "no_of_students"],
+	)
+	subject_names = list({row.subject for row in rows if row.subject})
+	subject_abbreviations = {}
+	if subject_names:
+		subject_abbreviations = {
+			subject.name: subject.abbr
+			for subject in frappe.get_all(
+				"School Subject",
+				filters={"name": ["in", subject_names]},
+				fields=["name", "abbr"],
+			)
+		}
+
+	counts_by_class = {}
+	for row in rows:
+		if row.subject not in yearly_subject_codes:
+			continue
+		class_name = str(row.get("class") or "").strip()
+		class_match = re.search(r"\d+", class_name)
+		class_key = class_match.group(0) if class_match else class_name.lower()
+		if not class_key or not row.subject:
+			continue
+
+		abbreviation = (
+			subject_abbreviations.get(row.subject)
+			or yearly_subject_codes.get(row.subject)
+			or derive_short_name(row.subject)
+			or row.subject
+		).strip()
+		subject_code = (
+			abbreviation.lower()
+			.replace(" ", "_")
+			.replace("-", "_")
+			.replace("(", "")
+			.replace(")", "")[:20]
+		)
+		student_count = max(cint(row.no_of_students), 0)
+		if not subject_code or not student_count:
+			continue
+
+		class_counts = counts_by_class.setdefault(class_key, {})
+		class_counts[subject_code] = class_counts.get(subject_code, 0) + student_count
+
+	return counts_by_class
+
+
+def _get_ito_registration_subject_counts(customer_name, academic_year):
+	if cint(frappe.db.get_value("Customer", customer_name, "custom_is_wof")):
+		return {}
+
+	exam_dates = frappe.get_all(
+		"Yearly Exam Date",
+		filters={
+			"academic_year": academic_year,
+			"is_little_champ": 0,
+			"docstatus": 1,
+		},
+		pluck="name",
+	)
+	if not exam_dates:
+		return {}
+
+	summaries = frappe.get_all(
+		"Exams Summary",
+		filters={
+			"customer": customer_name,
+			"exam_detail": ["in", exam_dates],
+			"is_little_champ": 0,
+			"is_wof": 0,
+		},
+		fields=["name", "exam_detail"],
+		order_by="creation desc",
+		limit_page_length=1,
+	)
+	if not summaries:
+		return {}
+
+	summary = summaries[0]
+	yearly_subject_codes = {
+		row.subject: row.school_subject
+		for row in frappe.get_all(
+			"Yearly Exam Date CT",
+			filters={"parent": summary.exam_detail},
+			fields=["subject", "school_subject"],
+		)
+		if row.subject
+	}
+	rows = frappe.get_all(
+		"Exam Summary CT",
+		filters={"parent": summary.name, "parenttype": "Exams Summary"},
+		fields=["class", "subject", "no_of_students"],
+	)
+	subject_names = list({row.subject for row in rows if row.subject})
+	subject_abbreviations = {}
+	if subject_names:
+		subject_abbreviations = {
+			subject.name: subject.abbr
+			for subject in frappe.get_all(
+				"School Subject",
+				filters={"name": ["in", subject_names]},
+				fields=["name", "abbr"],
+			)
+		}
+
+	counts_by_class = {}
+	for row in rows:
+		class_name = str(row.get("class") or "").strip()
+		class_match = re.search(r"\d+", class_name)
+		class_key = class_match.group(0) if class_match else class_name.lower()
+		if not class_key or not row.subject:
+			continue
+
+		abbreviation = (
+			subject_abbreviations.get(row.subject)
+			or yearly_subject_codes.get(row.subject)
+			or derive_short_name(row.subject)
+			or row.subject
+		).strip()
+		subject_code = (
+			abbreviation.lower()
+			.replace(" ", "_")
+			.replace("-", "_")
+			.replace("(", "")
+			.replace(")", "")[:20]
+		)
+		student_count = max(cint(row.no_of_students), 0)
+		if not subject_code or not student_count:
+			continue
+
+		class_counts = counts_by_class.setdefault(class_key, {})
+		class_counts[subject_code] = class_counts.get(subject_code, 0) + student_count
+
+	return counts_by_class
+
+
+def _get_wof_olympiad_registration_subject_counts(customer_name, academic_year=None):
+	customer_year = frappe.db.get_value(
+		"Customer", customer_name, "custom_current_academic_year"
+	)
+	academic_year = customer_year or academic_year or "AY-2026/27"
+	if not academic_year.startswith("AY-"):
+		parts = academic_year.replace("-", "/").split("/")
+		academic_year = (
+			f"AY-{parts[0]}/{parts[1]}" if len(parts) == 2 else f"AY-{academic_year}"
+		)
+
+	exam_dates = frappe.get_all(
+		"Yearly Exam Date",
+		filters={
+			"academic_year": academic_year,
+			"is_little_champ": 0,
+			"docstatus": 1,
+		},
+		pluck="name",
+	)
+	if not exam_dates:
+		return {}
+
+	summaries = frappe.get_all(
+		"Exams Summary",
+		filters={
+			"customer": customer_name,
+			"exam_detail": ["in", exam_dates],
+			"is_little_champ": 0,
+			"is_wof": 1,
+		},
+		fields=["name", "exam_detail"],
+		order_by="creation desc",
+		limit_page_length=1,
+	)
+	if not summaries and cint(frappe.db.get_value("Customer", customer_name, "custom_is_wof")):
+		summaries = frappe.get_all(
+			"Exams Summary",
+			filters={
+				"customer": customer_name,
+				"exam_detail": ["in", exam_dates],
+				"is_little_champ": 0,
+				"is_wof": 0,
+			},
+			fields=["name", "exam_detail"],
+			order_by="creation desc",
+			limit_page_length=1,
+		)
+	if not summaries:
+		return {}
+
+	registered_subjects = get_subjects_for_year(
+		academic_year,
+		is_little_champ=0,
+		customer_name=customer_name,
+		for_wof_olympiad=1,
+	)
+	subject_codes = {}
+	for subject in registered_subjects:
+		code = subject.get("code")
+		if not code:
+			continue
+		for key in (subject.get("name"), subject.get("abbr"), subject.get("shortName")):
+			if key:
+				subject_codes[str(key).strip().lower()] = code
+
+	if not subject_codes:
+		return {}
+
+	rows = frappe.get_all(
+		"Exam Summary CT",
+		filters={"parent": summaries[0].name, "parenttype": "Exams Summary"},
+		fields=["class", "subject", "no_of_students"],
+	)
+	counts_by_class = {}
+	for row in rows:
+		subject_code = subject_codes.get(str(row.subject or "").strip().lower())
+		class_match = re.search(r"\d+", str(row.get("class") or ""))
+		if not subject_code or not class_match:
+			continue
+
+		class_number = int(class_match.group(0))
+		if not 1 <= class_number <= 12:
+			continue
+		suffix = "th" if 10 <= class_number % 100 <= 20 else {
+			1: "st",
+			2: "nd",
+			3: "rd",
+		}.get(class_number % 10, "th")
+		class_key = f"{class_number}{suffix}"
+		student_count = max(cint(row.no_of_students), 0)
+		if student_count:
+			class_counts = counts_by_class.setdefault(class_key, {})
+			class_counts[subject_code] = class_counts.get(subject_code, 0) + student_count
+
+	return counts_by_class
+
+
 @frappe.whitelist()
 def get_bulk_student_list(academic_year=None, selected_class=None):
 	try:
@@ -2763,6 +3197,10 @@ def get_bulk_student_list(academic_year=None, selected_class=None):
 					academic_year = f"AY-{raw_year}"
 		else:
 			raw_year = academic_year
+
+		registration_subject_counts = _get_ito_registration_subject_counts(
+			customer_name, academic_year
+		)
 
 		def is_same_class(c1, c2):
 			c1_str = str(c1 or "").strip().lower()
@@ -2791,6 +3229,7 @@ def get_bulk_student_list(academic_year=None, selected_class=None):
 				except Exception:
 					pass
 			if isinstance(saved_data, dict) and saved_data.get("students"):
+				saved_data["registration_subject_counts"] = registration_subject_counts
 				return {"success": True, "data": saved_data}
 
 		# 2. Reconstruct from Bulk Student List child table (primary DB source)
@@ -2877,9 +3316,26 @@ def get_bulk_student_list(academic_year=None, selected_class=None):
 							"selected_class": "",
 							"academic_year": bsl.academic_year or academic_year,
 						},
-						"students": students_list
+						"students": students_list,
+						"registration_subject_counts": registration_subject_counts,
 					}
 				}
+
+		if registration_subject_counts:
+			school_doc = frappe.get_doc("Customer", customer_name)
+			return {
+				"success": True,
+				"data": {
+					"school_info": {
+						"school_name": school_doc.customer_name or "",
+						"ito_school_code": school_doc.custom_ito_school_code or "",
+						"selected_class": "",
+						"academic_year": academic_year,
+					},
+					"students": [],
+					"registration_subject_counts": registration_subject_counts,
+				},
+			}
 
 		return {"success": True, "data": None}
 	except Exception as e:
@@ -3227,6 +3683,10 @@ def get_little_champ_bulk(academic_year=None, selected_class=None):
 		else:
 			raw_year = academic_year
 
+		registration_subject_counts = _get_little_champ_registration_subject_counts(
+			customer_name, academic_year
+		)
+
 		def is_same_class(c1, c2):
 			c1_str = str(c1 or "").strip().lower()
 			c2_str = str(c2 or "").strip().lower()
@@ -3254,6 +3714,7 @@ def get_little_champ_bulk(academic_year=None, selected_class=None):
 				except Exception:
 					pass
 			if isinstance(saved_data, dict) and saved_data.get("students"):
+				saved_data["registration_subject_counts"] = registration_subject_counts
 				return {"success": True, "data": saved_data}
 
 		# 2. Reconstruct from Bulk Student List child table (primary DB source)
@@ -3338,9 +3799,32 @@ def get_little_champ_bulk(academic_year=None, selected_class=None):
 							"selected_class": "",
 							"academic_year": bsl.academic_year or academic_year,
 						},
-						"students": students_list
+						"students": students_list,
+						"registration_subject_counts": registration_subject_counts,
 					}
 				}
+
+		if registration_subject_counts:
+			school_doc = frappe.get_doc("Customer", customer_name)
+			lc_code = (
+				school_doc.custom_school_code
+				or school_doc.custom_lc_school_code
+				or school_doc.custom_ito_school_code
+				or ""
+			)
+			return {
+				"success": True,
+				"data": {
+					"school_info": {
+						"school_name": school_doc.customer_name or "",
+						"lc_school_code": lc_code,
+						"selected_class": "",
+						"academic_year": academic_year,
+					},
+					"students": [],
+					"registration_subject_counts": registration_subject_counts,
+				},
+			}
 
 		return {"success": True, "data": None}
 	except Exception as e:
@@ -4065,7 +4549,18 @@ def get_wof_student_draft(academic_year="AY-2026/27"):
 		if not customer_name:
 			return {"success": False, "message": "Customer not found", "data": None}
 
+		registration_subject_counts = _get_chitrakala_registration_subject_counts(customer_name)
 		saved_data = frappe.cache().get_value(f"wof_student_draft_{customer_name}_{academic_year}")
+		if isinstance(saved_data, str):
+			try:
+				saved_data = json.loads(saved_data)
+			except json.JSONDecodeError:
+				frappe.log_error(
+					f"Invalid cached Chitrakala student draft for customer {customer_name}",
+					"Get WOF Student Draft Cache Error",
+				)
+				saved_data = None
+
 		if not saved_data:
 			# Fallback to DB query if Redis cache is empty
 			bsl_name = frappe.db.get_value("Bulk Student List", {
@@ -4110,6 +4605,13 @@ def get_wof_student_draft(academic_year="AY-2026/27"):
 					},
 					"rosters": rosters
 				}
+
+		if not isinstance(saved_data, dict):
+			saved_data = {
+				"school_info": {"school_name": customer_name, "academic_year": academic_year},
+				"rosters": {},
+			}
+		saved_data["registration_subject_counts"] = registration_subject_counts
 
 		if saved_data:
 			# Enrich with roll_no from Registered Students (class-aware)
@@ -4165,6 +4667,61 @@ def get_wof_student_draft(academic_year="AY-2026/27"):
 	except Exception as e:
 		frappe.log_error(frappe.get_traceback(), "Get WOF Student Draft Error")
 		return {"success": False, "message": str(e), "data": None}
+
+
+def _get_chitrakala_registration_subject_counts(customer_name):
+	customer = frappe.get_doc("Customer", customer_name)
+	academic_year = customer.get("custom_current_academic_year") or "AY-2026/27"
+	if not academic_year.startswith("AY-"):
+		parts = academic_year.replace("-", "/").split("/")
+		academic_year = f"AY-{parts[0]}/{parts[1]}" if len(parts) == 2 else f"AY-{academic_year}"
+
+	registered_subjects = {
+		subject.get("name")
+		for subject in get_subjects_for_year(
+			academic_year,
+			is_little_champ=0,
+			customer_name=customer_name,
+			for_chitrakala=1,
+		)
+		if subject.get("name")
+	}
+	if not registered_subjects:
+		return {}
+
+	matrix_name = frappe.db.get_value(
+		"Competition Entry Matrix",
+		{"customer": customer_name, "is_submitted": 1},
+		"name",
+		order_by="creation desc",
+	)
+	if not matrix_name:
+		return {}
+
+	group_classes = {
+		"group_a": ["Nursery", "LKG", "UKG"],
+		"group_b": ["1st", "2nd"],
+		"group_c": ["3rd", "4th", "5th"],
+		"group_d": ["6th", "7th", "8th"],
+		"group_e": ["9th", "10th", "11th", "12th"],
+	}
+	counts_by_class = {}
+	for row in frappe.get_all(
+		"Entry Matrix CT",
+		filters={"parent": matrix_name, "parenttype": "Competition Entry Matrix"},
+		fields=["subject", *group_classes.keys()],
+	):
+		if row.subject not in registered_subjects:
+			continue
+		for group, classes in group_classes.items():
+			student_count = max(cint(row.get(group)), 0)
+			if not student_count:
+				continue
+			for class_name in classes:
+				class_counts = counts_by_class.setdefault(class_name, {})
+				class_counts[row.subject] = student_count
+
+	return counts_by_class
 
 
 # ==================== WOF OLYMPIAD STUDENT LIST APIS ====================
@@ -4649,6 +5206,18 @@ def get_wof_olympiad_student_draft(academic_year="AY-2026/27"):
 		if not customer_name:
 			return {"success": False, "message": "Customer not found", "data": None}
 
+		academic_year = (
+			frappe.db.get_value("Customer", customer_name, "custom_current_academic_year")
+			or academic_year
+		)
+		if not academic_year.startswith("AY-"):
+			parts = academic_year.replace("-", "/").split("/")
+			academic_year = (
+				f"AY-{parts[0]}/{parts[1]}" if len(parts) == 2 else f"AY-{academic_year}"
+			)
+		registration_subject_counts = _get_wof_olympiad_registration_subject_counts(
+			customer_name, academic_year
+		)
 		saved_data = frappe.cache().get_value(f"wof_olympiad_student_draft_{customer_name}_{academic_year}")
 		if not saved_data:
 			saved_data = frappe.cache().get_value(f"wof_olympiad_student_draft_{customer_name}_AY-2026/27")
@@ -4698,61 +5267,76 @@ def get_wof_olympiad_student_draft(academic_year="AY-2026/27"):
 					"rosters": rosters
 				}
 
-		if saved_data:
-			if isinstance(saved_data, str):
-				try:
-					saved_data = json.loads(saved_data)
-				except Exception:
-					pass
+		if isinstance(saved_data, str):
+			try:
+				saved_data = json.loads(saved_data)
+			except json.JSONDecodeError:
+				frappe.log_error(
+					f"Invalid cached WOF Olympiad student draft for customer {customer_name}",
+					"Get WOF Olympiad Student Draft Cache Error",
+				)
+				saved_data = None
 
-			# Enrich with roll_no and mobile from Registered Students (class-aware)
-			if frappe.db.exists("DocType", "Registered Students"):
-				try:
-					registered_students = frappe.get_all(
-						"Registered Students",
-						filters={"school": customer_name, "not_registered": 0},
-						fields=["student_name", "roll_no", "class", "mobile_number"],
-					)
-					roll_number_by_student = {}
-					mobile_by_student = {}
-					for record in registered_students:
-						s_name = (record.student_name or "").strip().upper()
-						s_class = str(record.get("class") or "").strip()
-						if s_name and s_class:
-							roll_number_by_student[(s_class, s_name)] = record.roll_no or ""
-							if record.mobile_number:
-								mobile_by_student[(s_class, s_name)] = str(record.mobile_number).strip()
+		if not isinstance(saved_data, dict):
+			if registration_subject_counts:
+				saved_data = {
+					"school_info": {
+						"school_name": customer_name,
+						"academic_year": academic_year,
+					},
+					"rosters": {},
+				}
+			else:
+				return {"success": True, "data": None}
 
-					rosters_dict = saved_data.get("rosters") or {}
-					for b_key, b_val in rosters_dict.items():
+		saved_data["registration_subject_counts"] = registration_subject_counts
+
+		# Enrich with roll_no and mobile from Registered Students (class-aware)
+		if frappe.db.exists("DocType", "Registered Students"):
+			try:
+				registered_students = frappe.get_all(
+					"Registered Students",
+					filters={"school": customer_name, "not_registered": 0},
+					fields=["student_name", "roll_no", "class", "mobile_number"],
+				)
+				roll_number_by_student = {}
+				mobile_by_student = {}
+				for record in registered_students:
+					s_name = (record.student_name or "").strip().upper()
+					s_class = str(record.get("class") or "").strip()
+					if s_name and s_class:
+						roll_number_by_student[(s_class, s_name)] = record.roll_no or ""
+						if record.mobile_number:
+							mobile_by_student[(s_class, s_name)] = str(record.mobile_number).strip()
+
+				rosters_dict = saved_data.get("rosters") or {}
+				for b_key, b_val in rosters_dict.items():
+					if isinstance(b_val, dict):
+						b_class = map_class_to_erp(b_val.get("class_grade") or b_key.split("_")[0])
+						st_list = b_val.get("students", [])
+					elif isinstance(b_val, list):
+						b_class = map_class_to_erp(b_key.split("_")[0])
+						st_list = b_val
+					else:
+						st_list = []
 						b_class = ""
-						if isinstance(b_val, dict):
-							b_class = map_class_to_erp(b_val.get("class_grade") or b_key.split("_")[0])
-							st_list = b_val.get("students", [])
-						elif isinstance(b_val, list):
-							b_class = map_class_to_erp(b_key.split("_")[0])
-							st_list = b_val
-						else:
-							st_list = []
 
-						for st in st_list:
-							st_name = (st.get("student_name") or st.get("name") or "").strip().upper()
-							r_no = roll_number_by_student.get((b_class, st_name))
-							m_no = mobile_by_student.get((b_class, st_name))
-							if not r_no:
-								r_no = roll_number_by_student.get((str(b_class).zfill(2), st_name))
-							if not m_no:
-								m_no = mobile_by_student.get((str(b_class).zfill(2), st_name))
-							if r_no:
-								st["roll_no"] = r_no
-							if m_no and not st.get("mobile"):
-								st["mobile"] = m_no
-				except Exception:
-					frappe.log_error(frappe.get_traceback(), "Get WOF Olympiad Student Draft - Roll No & Mobile Enrich Error")
+					for st in st_list:
+						st_name = (st.get("student_name") or st.get("name") or "").strip().upper()
+						r_no = roll_number_by_student.get((b_class, st_name))
+						m_no = mobile_by_student.get((b_class, st_name))
+						if not r_no:
+							r_no = roll_number_by_student.get((str(b_class).zfill(2), st_name))
+						if not m_no:
+							m_no = mobile_by_student.get((str(b_class).zfill(2), st_name))
+						if r_no:
+							st["roll_no"] = r_no
+						if m_no and not st.get("mobile"):
+							st["mobile"] = m_no
+			except Exception:
+				frappe.log_error(frappe.get_traceback(), "Get WOF Olympiad Student Draft - Roll No & Mobile Enrich Error")
 
-			return {"success": True, "data": saved_data}
-
-		return {"success": True, "data": None}
+		return {"success": True, "data": saved_data}
 
 	except Exception as e:
 		frappe.log_error(frappe.get_traceback(), "Get WOF Olympiad Student Draft Error")
@@ -5620,15 +6204,36 @@ def _count_wof_registration_students(exams_data):
 
 
 def save_wof_exams_summary(customer, exams_data):
-	es_name = frappe.db.get_value("Exams Summary", {"customer": customer})
-	if not es_name:
+	academic_year = frappe.db.get_value(
+		"Customer", customer, "custom_current_academic_year"
+	)
+	if academic_year and not academic_year.startswith("AY-"):
+		parts = academic_year.replace("-", "/").split("/")
+		academic_year = (
+			f"AY-{parts[0]}/{parts[1]}" if len(parts) == 2 else f"AY-{academic_year}"
+		)
+	yed_filters = {"docstatus": 1, "is_little_champ": 0}
+	if academic_year:
+		yed_filters["academic_year"] = academic_year
+	yed_name = frappe.db.get_value(
+		"Yearly Exam Date", yed_filters, "name", order_by="creation desc"
+	)
+	if not yed_name:
 		yed_name = (
 			frappe.db.get_value("Yearly Exam Date", {"docstatus": 1}, "name", order_by="creation desc")
 			or frappe.db.get_value("Yearly Exam Date", {}, "name", order_by="creation desc")
 		)
+
+	es_name = frappe.db.get_value(
+		"Exams Summary",
+		{"customer": customer, "is_little_champ": 0, "is_wof": 1},
+	)
+	if not es_name:
 		es_doc = frappe.new_doc("Exams Summary")
 		es_doc.naming_series = "ES-.#####."
 		es_doc.customer = customer
+		es_doc.is_little_champ = 0
+		es_doc.is_wof = 1
 		if yed_name:
 			es_doc.exam_detail = yed_name
 		else:
@@ -5642,6 +6247,10 @@ def save_wof_exams_summary(customer, exams_data):
 
 	if es_name:
 		es_doc = frappe.get_doc("Exams Summary", es_name)
+		es_doc.is_little_champ = 0
+		es_doc.is_wof = 1
+		if yed_name:
+			es_doc.exam_detail = yed_name
 		es_doc.exam_summary = []
 
 		for subj_key, subj_val in exams_data.items():
