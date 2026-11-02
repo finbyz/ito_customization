@@ -1,7 +1,7 @@
 # Copyright (c) 2026, FinByz Tech Pvt Ltd and Contributors
 # See license.txt
 
-# import frappe
+import frappe
 from frappe.tests import IntegrationTestCase
 
 
@@ -19,4 +19,16 @@ class IntegrationTestWebFormsRegistration(IntegrationTestCase):
 	Use this class for testing interactions between multiple components.
 	"""
 
-	pass
+	def test_duplicate_mobile_number_is_rejected(self):
+		mobile_number = "9" + str(int(frappe.generate_hash(length=8), 16) % 100000000).zfill(8)
+		frappe.get_doc({
+			"doctype": "Web Forms Registration",
+			"mobile_number": mobile_number,
+		}).insert(ignore_permissions=True)
+
+		duplicate = frappe.get_doc({
+			"doctype": "Web Forms Registration",
+			"mobile_number": f" {mobile_number} ",
+		})
+		with self.assertRaises(frappe.ValidationError):
+			duplicate.insert(ignore_permissions=True)

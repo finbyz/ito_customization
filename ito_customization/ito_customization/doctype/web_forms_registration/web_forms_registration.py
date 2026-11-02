@@ -4,6 +4,7 @@ from frappe.model.document import Document
 from frappe.rate_limiter import rate_limit
 
 ALREADY_REGISTERED_MSG = "Registration has already been done with this email ID."
+MOBILE_ALREADY_REGISTERED_MSG = "Registration has already been done with this mobile number."
 
 
 class WebFormsRegistration(Document):
@@ -13,6 +14,10 @@ class WebFormsRegistration(Document):
 			self.email = self.email.strip().lower()
 			if _email_exists(self.email, exclude=self.name):
 				frappe.throw(ALREADY_REGISTERED_MSG, title="Already Registered")
+		if self.mobile_number:
+			self.mobile_number = self.mobile_number.strip()
+			if _mobile_exists(self.mobile_number, exclude=self.name):
+				frappe.throw(MOBILE_ALREADY_REGISTERED_MSG, title="Already Registered")
 
 	def before_insert(self):
 		if not self.epass_token:
@@ -37,6 +42,13 @@ def _email_exists(email, exclude=None):
 	return bool(frappe.db.exists("Web Forms Registration", filters))
 
 
+def _mobile_exists(mobile_number, exclude=None):
+	filters = {"mobile_number": mobile_number.strip()}
+	if exclude:
+		filters["name"] = ["!=", exclude]
+	return bool(frappe.db.exists("Web Forms Registration", filters))
+
+
 @frappe.whitelist(allow_guest=True)
 @rate_limit(limit=30, seconds=60)
 def email_registered(email=None):
@@ -44,3 +56,12 @@ def email_registered(email=None):
 	if not email:
 		return False
 	return _email_exists(email)
+
+
+@frappe.whitelist(allow_guest=True)
+@rate_limit(limit=30, seconds=60)
+def mobile_registered(mobile_number=None):
+	"""Used by the web form to warn early. Returns only True/False."""
+	if not mobile_number:
+		return False
+	return _mobile_exists(mobile_number)

@@ -3,6 +3,26 @@ frappe.ready(function () {
   const RADIO_FIELDS = ["designation", "attendance_confirmation"];
 
   frappe.web_form.after_load = function () {
+    const $mobile = $("#mobile_number");
+    $mobile.on("blur", function () {
+      const mobileNumber = this.value.trim();
+      if (!mobileNumber || $mobile.data("checked-mobile") === mobileNumber) return;
+      $mobile.data("checked-mobile", mobileNumber);
+      frappe.call({
+        method: "ito_customization.ito_customization.doctype.web_forms_registration.web_forms_registration.mobile_registered",
+        args: { mobile_number: mobileNumber },
+      }).then((response) => {
+        if (response.message) {
+          frappe.msgprint(__("This mobile number is already registered. Please use a different number."));
+        }
+      }).catch(() => {
+        frappe.msgprint(__("Could not check whether this mobile number is already registered. The number will be checked when you submit."));
+      });
+    });
+    $mobile.on("input", function () {
+      $mobile.removeData("checked-mobile");
+    });
+
     RADIO_FIELDS.forEach(function (fn) {
       const f = frappe.web_form.fields_dict[fn];
       if (!f) return;

@@ -64,7 +64,8 @@
   {
    "fieldname": "mobile_number",
    "fieldtype": "Data",
-   "label": "Mobile Number"
+   "label": "Mobile Number",
+   "unique": 1
   },
   {
    "fieldname": "email",
