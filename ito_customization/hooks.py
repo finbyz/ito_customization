@@ -54,7 +54,8 @@ doctype_js = {
 	"Customer": "public/js/customer.js",
 	"Sales Partner": "public/js/customer.js",
 	"HD Ticket": "public/js/hd_ticket.js",
-    	"Sales Invoice" : "public/js/sales_invoice.js"
+	"Sales Invoice": "public/js/sales_invoice.js",
+	"Case Format Settings": "ito_customization/doctype/case_format_settings/case_format_settings.js",
 }
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
@@ -151,6 +152,9 @@ doctype_js = {
 # Hook on document methods and events
 
 doc_events = {
+    "*": {
+        "validate": "ito_customization.ito_customization.case_format.apply_case_format",
+    },
     "Sales Invoice": {
         "before_validate": "ito_customization.ito_customization.registration_invoice_tax.keep_registration_invoice_tax_free",
         "validate": "ito_customization.ito_customization.registration_invoice_tax.keep_registration_invoice_tax_free",

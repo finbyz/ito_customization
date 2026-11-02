@@ -1,0 +1,1 @@
+"""Case Format Exclusion DocType."""
