@@ -23,6 +23,7 @@ required_apps = ["multi_company_razorpay"]
 fixtures = [
     {"dt": "Custom Field", "filters": [["module", "in", ["ITO Customization"]]]},
     {"dt": "Property Setter", "filters": [["module", "in", ["ITO Customization"]]]},
+    {"dt": "Case Format Settings"},
 ]
 
 after_migrate = "ito_customization.ito_customization.student_agent_setup.ensure_student_list_agent"
@@ -184,6 +185,7 @@ doc_events = {
         "on_update": [
             "ito_customization.ito_customization.doc_events.customer.sync_teachers",
             "ito_customization.ito_customization.doc_events.customer.sync_school_code",
+            "ito_customization.ito_customization.doc_events.customer.sync_token_expiry_with_deadline",
             # "ito_customization.ito_customization.doc_events.hd_customer.sync_school_code_to_hd",
         ],
         "autoname": "ito_customization.ito_customization.doc_events.customer.autoname",

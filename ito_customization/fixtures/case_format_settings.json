@@ -1,0 +1,745 @@
+[
+ {
+  "case_format": "Title Case",
+  "docstatus": 0,
+  "doctype": "Case Format Settings",
+  "enabled": 1,
+  "exclusions": [
+   {
+    "document_type": "Asset",
+    "field_name": "purchase_receipt_item"
+   },
+   {
+    "document_type": "Asset",
+    "field_name": "purchase_invoice_item"
+   },
+   {
+    "document_type": "Asset",
+    "field_name": "policy_number"
+   },
+   {
+    "document_type": "Asset",
+    "field_name": "insured_value"
+   },
+   {
+    "document_type": "Asset",
+    "field_name": "comprehensive_insurance"
+   },
+   {
+    "document_type": "Asset Capitalization Stock Item",
+    "field_name": "purchase_receipt_item"
+   },
+   {
+    "document_type": "Asset Movement",
+    "field_name": "lr_no"
+   },
+   {
+    "document_type": "Asset Movement",
+    "field_name": "vehicle_no"
+   },
+   {
+    "document_type": "Asset Repair Consumed Item",
+    "field_name": "consumed_quantity"
+   },
+   {
+    "document_type": "Asset Repair Consumed Item",
+    "field_name": "serial_no"
+   },
+   {
+    "document_type": "BOM Creator Item",
+    "field_name": "parent_row_no"
+   },
+   {
+    "document_type": "Bank Guarantee",
+    "field_name": "fixed_deposit_number"
+   },
+   {
+    "document_type": "Bank Transaction",
+    "field_name": "reference_number"
+   },
+   {
+    "document_type": "Bank Transaction",
+    "field_name": "transaction_type"
+   },
+   {
+    "document_type": "Bank Transaction",
+    "field_name": "bank_party_account_number"
+   },
+   {
+    "document_type": "Bank Transaction",
+    "field_name": "bank_party_iban"
+   },
+   {
+    "document_type": "Bill of Entry",
+    "field_name": "bill_of_entry_no"
+   },
+   {
+    "document_type": "Bill of Entry",
+    "field_name": "bill_of_lading_no"
+   },
+   {
+    "document_type": "Bill of Entry",
+    "field_name": "port_code"
+   },
+   {
+    "document_type": "Blanket Order",
+    "field_name": "order_no"
+   },
+   {
+    "document_type": "C-Form",
+    "field_name": "c_form_no"
+   },
+   {
+    "document_type": "Delivery Note",
+    "field_name": "lr_no"
+   },
+   {
+    "document_type": "Delivery Note",
+    "field_name": "ecommerce_gstin"
+   },
+   {
+    "document_type": "Delivery Note",
+    "field_name": "shipping_bill_number"
+   },
+   {
+    "document_type": "Delivery Note",
+    "field_name": "vehicle_no"
+   },
+   {
+    "document_type": "Delivery Note",
+    "field_name": "po_no"
+   },
+   {
+    "document_type": "Delivery Note",
+    "field_name": "utm_content"
+   },
+   {
+    "document_type": "Delivery Note",
+    "field_name": "excise_page"
+   },
+   {
+    "document_type": "Delivery Note Item",
+    "field_name": "barcode"
+   },
+   {
+    "document_type": "Delivery Note Item",
+    "field_name": "material_request_item"
+   },
+   {
+    "document_type": "Delivery Note Box Detail",
+    "field_name": "tracking__consignment_no"
+   },
+   {
+    "document_type": "Delivery Note Box Detail",
+    "field_name": "custom_weight"
+   },
+   {
+    "document_type": "Delivery Note Box Detail",
+    "field_name": "destination__speed_post_code"
+   },
+   {
+    "document_type": "Sales Taxes and Charges",
+    "field_name": "row_id"
+   },
+   {
+    "document_type": "Item Wise Tax Detail",
+    "field_name": "item_row"
+   },
+   {
+    "document_type": "Item Wise Tax Detail",
+    "field_name": "tax_row"
+   },
+   {
+    "document_type": "Sales Team",
+    "field_name": "contact_no"
+   },
+   {
+    "document_type": "Journal Entry",
+    "field_name": "cheque_no"
+   },
+   {
+    "document_type": "Journal Entry",
+    "field_name": "bill_no"
+   },
+   {
+    "document_type": "Journal Entry Account",
+    "field_name": "account_type"
+   },
+   {
+    "document_type": "Journal Entry Account",
+    "field_name": "reference_detail_no"
+   },
+   {
+    "document_type": "Leave Policy",
+    "field_name": "title"
+   },
+   {
+    "document_type": "Maintenance Visit Purpose",
+    "field_name": "maintenance_schedule_detail"
+   },
+   {
+    "document_type": "Material Request Item",
+    "field_name": "job_card_item"
+   },
+   {
+    "document_type": "POS Invoice",
+    "field_name": "po_no"
+   },
+   {
+    "document_type": "POS Invoice",
+    "field_name": "against_income_account"
+   },
+   {
+    "document_type": "POS Invoice Item",
+    "field_name": "barcode"
+   },
+   {
+    "document_type": "Sales Invoice Payment",
+    "field_name": "reference_no"
+   },
+   {
+    "document_type": "Parent Consent Registration",
+    "field_name": "parent_email"
+   },
+   {
+    "document_type": "Payment Entry",
+    "field_name": "reference_no"
+   },
+   {
+    "document_type": "Payment Entry Reference",
+    "field_name": "account_type"
+   },
+   {
+    "document_type": "Payment Entry Reference",
+    "field_name": "payment_type"
+   },
+   {
+    "document_type": "Advance Taxes and Charges",
+    "field_name": "row_id"
+   },
+   {
+    "document_type": "Payment Request",
+    "field_name": "email_to"
+   },
+   {
+    "document_type": "Payment Request",
+    "field_name": "phone_number"
+   },
+   {
+    "document_type": "Pick List Item",
+    "field_name": "serial_no"
+   },
+   {
+    "document_type": "Production Plan Sales Order",
+    "field_name": "status"
+   },
+   {
+    "document_type": "Production Plan Item",
+    "field_name": "sales_order_item"
+   },
+   {
+    "document_type": "Production Plan Item",
+    "field_name": "material_request_item"
+   },
+   {
+    "document_type": "Production Plan Item",
+    "field_name": "item_reference"
+   },
+   {
+    "document_type": "Production Plan Item",
+    "field_name": "temporary_name"
+   },
+   {
+    "document_type": "Production Plan Item Reference",
+    "field_name": "item_reference"
+   },
+   {
+    "document_type": "Production Plan Item Reference",
+    "field_name": "sales_order_item"
+   },
+   {
+    "document_type": "Production Plan Sub Assembly Item",
+    "field_name": "sales_order_item"
+   },
+   {
+    "document_type": "Purchase Invoice",
+    "field_name": "bill_no"
+   },
+   {
+    "document_type": "Purchase Invoice",
+    "field_name": "lr_no"
+   },
+   {
+    "document_type": "Purchase Invoice",
+    "field_name": "vehicle_no"
+   },
+   {
+    "document_type": "Purchase Invoice",
+    "field_name": "against_expense_account"
+   },
+   {
+    "document_type": "Purchase Invoice Item",
+    "field_name": "manufacturer_part_no"
+   },
+   {
+    "document_type": "Purchase Taxes and Charges",
+    "field_name": "row_id"
+   },
+   {
+    "document_type": "Purchase Order",
+    "field_name": "order_confirmation_no"
+   },
+   {
+    "document_type": "Purchase Order",
+    "field_name": "language"
+   },
+   {
+    "document_type": "Purchase Order Item",
+    "field_name": "sales_order_packed_item"
+   },
+   {
+    "document_type": "Purchase Order Item",
+    "field_name": "manufacturer_part_no"
+   },
+   {
+    "document_type": "Purchase Receipt",
+    "field_name": "supplier_delivery_note"
+   },
+   {
+    "document_type": "Purchase Receipt",
+    "field_name": "vehicle_no"
+   },
+   {
+    "document_type": "Purchase Receipt",
+    "field_name": "lr_no"
+   },
+   {
+    "document_type": "Purchase Receipt",
+    "field_name": "range"
+   },
+   {
+    "document_type": "Purchase Receipt Item",
+    "field_name": "barcode"
+   },
+   {
+    "document_type": "Purchase Receipt Item",
+    "field_name": "manufacturer_part_no"
+   },
+   {
+    "document_type": "Quality Inspection Reading",
+    "field_name": "value"
+   },
+   {
+    "document_type": "Quality Inspection Reading",
+    "field_name": "reading_value"
+   },
+   {
+    "document_type": "Quality Inspection Reading",
+    "field_name": "reading_1"
+   },
+   {
+    "document_type": "Quality Inspection Reading",
+    "field_name": "reading_2"
+   },
+   {
+    "document_type": "Quality Inspection Reading",
+    "field_name": "reading_3"
+   },
+   {
+    "document_type": "Quality Inspection Reading",
+    "field_name": "reading_4"
+   },
+   {
+    "document_type": "Quality Inspection Reading",
+    "field_name": "reading_5"
+   },
+   {
+    "document_type": "Quality Inspection Reading",
+    "field_name": "reading_6"
+   },
+   {
+    "document_type": "Quality Inspection Reading",
+    "field_name": "reading_7"
+   },
+   {
+    "document_type": "Quality Inspection Reading",
+    "field_name": "reading_8"
+   },
+   {
+    "document_type": "Quality Inspection Reading",
+    "field_name": "reading_9"
+   },
+   {
+    "document_type": "Quality Inspection Reading",
+    "field_name": "reading_10"
+   },
+   {
+    "document_type": "Quotation",
+    "field_name": "utm_content"
+   },
+   {
+    "document_type": "Request for Quotation Item",
+    "field_name": "material_request_item"
+   },
+   {
+    "document_type": "Salary Slip",
+    "field_name": "bank_account_no"
+   },
+   {
+    "document_type": "Sales Invoice",
+    "field_name": "po_no"
+   },
+   {
+    "document_type": "Sales Invoice",
+    "field_name": "against_income_account"
+   },
+   {
+    "document_type": "Sales Invoice",
+    "field_name": "lr_no"
+   },
+   {
+    "document_type": "Sales Invoice",
+    "field_name": "vehicle_no"
+   },
+   {
+    "document_type": "Sales Invoice",
+    "field_name": "ecommerce_gstin"
+   },
+   {
+    "document_type": "Sales Invoice",
+    "field_name": "shipping_bill_number"
+   },
+   {
+    "document_type": "Sales Invoice",
+    "field_name": "utm_content"
+   },
+   {
+    "document_type": "Sales Invoice",
+    "field_name": "custom_dd_no"
+   },
+   {
+    "document_type": "Sales Invoice",
+    "field_name": "custom_utr_no"
+   },
+   {
+    "document_type": "Sales Invoice",
+    "field_name": "custom_transaction_id"
+   },
+   {
+    "document_type": "Sales Invoice",
+    "field_name": "custom_branch_code"
+   },
+   {
+    "document_type": "Sales Invoice",
+    "field_name": "custom_upi_transaction_id__ref_no"
+   },
+   {
+    "document_type": "Sales Invoice Item",
+    "field_name": "barcode"
+   },
+   {
+    "document_type": "Sales Order",
+    "field_name": "ecommerce_gstin"
+   },
+   {
+    "document_type": "Sales Order",
+    "field_name": "utm_content"
+   },
+   {
+    "document_type": "Sales Order",
+    "field_name": "po_no"
+   },
+   {
+    "document_type": "Sales Order Item",
+    "field_name": "material_request_item"
+   },
+   {
+    "document_type": "Shipment",
+    "field_name": "shipment_id"
+   },
+   {
+    "document_type": "Shipment",
+    "field_name": "awb_number"
+   },
+   {
+    "document_type": "Stock Entry",
+    "field_name": "lr_no"
+   },
+   {
+    "document_type": "Stock Entry",
+    "field_name": "vehicle_no"
+   },
+   {
+    "document_type": "Stock Entry Detail",
+    "field_name": "barcode"
+   },
+   {
+    "document_type": "Stock Reconciliation Item",
+    "field_name": "barcode"
+   },
+   {
+    "document_type": "Subcontracting Order Item",
+    "field_name": "manufacturer_part_no"
+   },
+   {
+    "document_type": "Subcontracting Receipt",
+    "field_name": "supplier_delivery_note"
+   },
+   {
+    "document_type": "Subcontracting Receipt",
+    "field_name": "bill_no"
+   },
+   {
+    "document_type": "Subcontracting Receipt",
+    "field_name": "range"
+   },
+   {
+    "document_type": "Subcontracting Receipt",
+    "field_name": "vehicle_no"
+   },
+   {
+    "document_type": "Subcontracting Receipt",
+    "field_name": "lr_no"
+   },
+   {
+    "document_type": "Subcontracting Receipt Item",
+    "field_name": "serial_no"
+   },
+   {
+    "document_type": "Subcontracting Receipt Item",
+    "field_name": "rejected_serial_no"
+   },
+   {
+    "document_type": "Subcontracting Receipt Item",
+    "field_name": "manufacturer_part_no"
+   },
+   {
+    "document_type": "Supplier Quotation",
+    "field_name": "quotation_number"
+   },
+   {
+    "document_type": "Supplier Quotation Item",
+    "field_name": "manufacturer_part_no"
+   },
+   {
+    "document_type": "Installation Note Item",
+    "field_name": "serial_no"
+   },
+   {
+    "document_type": "Travel Request",
+    "field_name": "personal_id_number"
+   },
+   {
+    "document_type": "Travel Itinerary",
+    "field_name": "advance_amount"
+   },
+   {
+    "document_type": "Unreconcile Payment Entries",
+    "field_name": "account"
+   },
+   {
+    "document_type": "Unreconcile Payment Entries",
+    "field_name": "party_type"
+   },
+   {
+    "document_type": "Unreconcile Payment Entries",
+    "field_name": "party"
+   },
+   {
+    "document_type": "Vehicle Log",
+    "field_name": "invoice"
+   },
+   {
+    "document_type": "Work Order Additional Item",
+    "field_name": "type"
+   },
+   {
+    "document_type": "Purchase Receipt",
+    "field_name": "instructions"
+   },
+   {
+    "document_type": "Purchase Receipt",
+    "field_name": "remarks"
+   },
+   {
+    "document_type": "Purchase Taxes and Charges",
+    "field_name": "description"
+   },
+   {
+    "document_type": "Job Card",
+    "field_name": "remarks"
+   },
+   {
+    "document_type": "Quotation",
+    "field_name": "order_lost_reason"
+   },
+   {
+    "document_type": "Sales Taxes and Charges",
+    "field_name": "description"
+   },
+   {
+    "document_type": "Leave Adjustment",
+    "field_name": "reason_for_adjustment"
+   },
+   {
+    "document_type": "Salary Withholding",
+    "field_name": "reason_for_withholding_salary"
+   },
+   {
+    "document_type": "BOM Creator Item",
+    "field_name": "instruction"
+   },
+   {
+    "document_type": "Appraisal Goal",
+    "field_name": "kra"
+   },
+   {
+    "document_type": "Subcontracting Receipt",
+    "field_name": "instructions"
+   },
+   {
+    "document_type": "Subcontracting Receipt",
+    "field_name": "remarks"
+   },
+   {
+    "document_type": "Landed Cost Taxes and Charges",
+    "field_name": "description"
+   },
+   {
+    "document_type": "Journal Entry",
+    "field_name": "user_remark"
+   },
+   {
+    "document_type": "Journal Entry",
+    "field_name": "remark"
+   },
+   {
+    "document_type": "Journal Entry Account",
+    "field_name": "user_remark"
+   },
+   {
+    "document_type": "Sales Invoice",
+    "field_name": "remarks"
+   },
+   {
+    "document_type": "Employee Advance",
+    "field_name": "purpose"
+   },
+   {
+    "document_type": "Full and Final Outstanding Statement",
+    "field_name": "remark"
+   },
+   {
+    "document_type": "Full and Final Asset",
+    "field_name": "description"
+   },
+   {
+    "document_type": "Employee Grievance",
+    "field_name": "resolution_detail"
+   },
+   {
+    "document_type": "Shipment",
+    "field_name": "description_of_content"
+   },
+   {
+    "document_type": "POS Invoice",
+    "field_name": "remarks"
+   },
+   {
+    "document_type": "Bank Transaction",
+    "field_name": "description"
+   },
+   {
+    "document_type": "Travel Request",
+    "field_name": "description"
+   },
+   {
+    "document_type": "Travel Itinerary",
+    "field_name": "other_details"
+   },
+   {
+    "document_type": "Travel Request Costing",
+    "field_name": "comments"
+   },
+   {
+    "document_type": "Attendance Request",
+    "field_name": "explanation"
+   },
+   {
+    "document_type": "Compensatory Leave Request",
+    "field_name": "reason"
+   },
+   {
+    "document_type": "Payment Entry",
+    "field_name": "remarks"
+   },
+   {
+    "document_type": "Advance Taxes and Charges",
+    "field_name": "description"
+   },
+   {
+    "document_type": "Payment Entry Deduction",
+    "field_name": "description"
+   },
+   {
+    "document_type": "Payment Reference",
+    "field_name": "description"
+   },
+   {
+    "document_type": "Job Offer Term",
+    "field_name": "value"
+   },
+   {
+    "document_type": "Purchase Order",
+    "field_name": "customer_contact_display"
+   },
+   {
+    "document_type": "Purchase Invoice",
+    "field_name": "hold_comment"
+   },
+   {
+    "document_type": "Purchase Invoice",
+    "field_name": "remarks"
+   },
+   {
+    "document_type": "Installation Note",
+    "field_name": "remarks"
+   },
+   {
+    "document_type": "Timesheet Detail",
+    "field_name": "description"
+   },
+   {
+    "document_type": "Leave Allocation",
+    "field_name": "description"
+   },
+   {
+    "document_type": "Leave Application",
+    "field_name": "description"
+   },
+   {
+    "document_type": "Maintenance Visit",
+    "field_name": "customer_feedback"
+   },
+   {
+    "document_type": "Maintenance Visit Purpose",
+    "field_name": "work_done"
+   },
+   {
+    "document_type": "Expense Claim",
+    "field_name": "remark"
+   },
+   {
+    "document_type": "Expense Taxes and Charges",
+    "field_name": "description"
+   },
+   {
+    "document_type": "Period Closing Voucher",
+    "field_name": "remarks"
+   }
+  ],
+  "include_small_text": 1,
+  "modified": "2026-11-03 13:21:08.101909",
+  "name": "Case Format Settings"
+ }
+]

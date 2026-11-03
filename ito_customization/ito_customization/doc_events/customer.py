@@ -346,3 +346,24 @@ def get_customer_summary(customer):
         summary["book_order_amount"] = flt(book_rows[0].total_amount)
 
     return summary
+
+
+def sync_token_expiry_with_deadline(doc, method=None):
+    """Keep the student portal token expiry in step with the application deadline."""
+    if doc.is_new() or not doc.get("custom_consent_token"):
+        return
+    if not doc.has_value_changed("custom_application_deadline"):
+        return
+
+    from ito_customization.ito_customization.doctype.student_portal.student_portal import (
+        TOKEN_EXPIRY_FIELD,
+        get_token_expiry,
+    )
+
+    frappe.db.set_value(
+        "Customer",
+        doc.name,
+        TOKEN_EXPIRY_FIELD,
+        get_token_expiry(doc.get("custom_application_deadline")),
+        update_modified=False,
+    )

@@ -23,6 +23,18 @@ BOOK_ORDER_ITEM_CODE = "ITO-Olympiad Book Order"
 BOOK_ORDER_ITEM_NAME = "Olympiad Book Order"
 
 
+def get_token_expiry(application_deadline=None):
+	"""
+	Expiry for a student portal token. When the customer has an application
+	deadline the link stays valid until the end of that day; otherwise it falls
+	back to TOKEN_VALIDITY_DAYS from now.
+	"""
+	if application_deadline:
+		deadline = frappe.utils.getdate(application_deadline)
+		return frappe.utils.get_datetime(f"{deadline} 23:59:59")
+	return frappe.utils.add_to_date(frappe.utils.now_datetime(), days=TOKEN_VALIDITY_DAYS)
+
+
 def _get_book_order_item():
 	"""
 	Returns the single, admin-provisioned Item used for every book-order
@@ -196,9 +208,9 @@ def generate_student_portal_token(customer):
 	base_url = frappe.utils.get_url()
 	full_url = f"{base_url}/student-portal?token={token}&school_code={code}"
 
-	# Token expires 7 days from the moment it's generated (regenerating always
-	# grants a fresh 7-day window, even if an older token was still valid).
-	expiry = frappe.utils.add_to_date(frappe.utils.now_datetime(), days=TOKEN_VALIDITY_DAYS)
+	# Token expires at the end of the customer's application deadline; if no
+	# deadline is set, falls back to TOKEN_VALIDITY_DAYS from now.
+	expiry = get_token_expiry(customer_doc.get("custom_application_deadline"))
 	expiry_str = frappe.utils.get_datetime_str(expiry)
 
 	try:
