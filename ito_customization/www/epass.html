@@ -26,6 +26,29 @@
 	.ep-row { display: flex; justify-content: space-between; gap: 12px; padding: 11px 2px; border-bottom: 1px solid #e8eaed; font-size: 14px; }
 	.ep-row span { color: #5f6368; }
 	.ep-row b { text-align: right; }
+	.ep-fab { position: fixed; right: 16px; bottom: 16px; border: 0; border-radius: 28px; padding: 13px 20px; background: #2f7f73; color: #fff; font-weight: 700; font-size: 15px; box-shadow: 0 4px 14px rgba(0,0,0,.3); z-index: 900; }
+	.ep-ov { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 1000; display: none; align-items: flex-end; justify-content: center; }
+	.ep-ov.open { display: flex; }
+	.ep-sheet { background: #fff; width: 100%; max-width: 460px; border-radius: 20px 20px 0 0; padding: 20px 20px calc(20px + env(safe-area-inset-bottom)); text-align: center; animation: ep-up .22s ease-out; max-height: 92vh; overflow-y: auto; }
+	@media (min-width: 520px) { .ep-ov { align-items: center; } .ep-sheet { border-radius: 20px; } }
+	@keyframes ep-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+	.ep-x { float: right; border: 0; background: #f1f3f4; border-radius: 50%; width: 34px; height: 34px; font-size: 18px; line-height: 1; color: #5f6368; }
+	.ep-sp { width: 84px; height: 84px; object-fit: cover; border-radius: 50%; border: 3px solid #def0ee; background: #f1f3f4; }
+	.ep-sname { font-size: 22px; font-weight: 700; margin-top: 8px; }
+	.ep-ssub { font-size: 13px; color: #5f6368; margin-top: 2px; }
+	.ep-pill { display: inline-block; margin-top: 12px; padding: 5px 18px; border-radius: 20px; font-weight: 700; font-size: 14px; background: #e8eaed; color: #3c4043; }
+	.ep-pill.Present { background: #e6f4ea; color: #137333; }
+	.ep-pill.Absent { background: #fce8e6; color: #c5221f; }
+	.ep-by { font-size: 12px; color: #5f6368; margin-top: 6px; min-height: 16px; }
+	.ep-btns { display: flex; gap: 12px; margin-top: 16px; }
+	.ep-btn { flex: 1; border: 0; border-radius: 14px; padding: 20px 0; font-size: 19px; font-weight: 700; color: #fff; }
+	.ep-btn.p { background: #188038; } .ep-btn.a { background: #d93025; }
+	.ep-btn:active { transform: scale(.97); }
+	.ep-btn:disabled { opacity: .45; }
+	.ep-msg { margin-top: 12px; font-size: 14px; font-weight: 600; min-height: 20px; color: #5f6368; }
+	.ep-msg.ok { color: #137333; } .ep-msg.err { color: #c5221f; }
+	.ep-done { margin-top: 12px; width: 100%; border: 0; border-radius: 12px; padding: 13px; background: #f1f3f4; font-size: 15px; font-weight: 600; color: #202124; }
+	.ep-login { display: block; text-align: center; padding: 10px; font-size: 12px; color: #5f6368; }
 	.ep-foot { padding: 14px 22px 20px; font-size: 12px; color: #5f6368; text-align: center; line-height: 1.5; }
 </style>
 
@@ -53,6 +76,80 @@
 				<!-- <div class="ep-row"><span>Pass No.</span><b>{{ d.name }}</b></div> -->
 			</div>
 		</div>
+		{% if is_staff %}
+		<button class="ep-fab" id="ep-open" type="button">Attendance: <span id="ep-fab-s">{{ attendance.status }}</span></button>
+		<div class="ep-ov" id="ep-ov">
+			<div class="ep-sheet" role="dialog" aria-modal="true">
+				<button class="ep-x" id="ep-close" type="button" aria-label="Close">&times;</button>
+				{% if photo %}<img class="ep-sp" src="{{ photo }}" alt="">{% endif %}
+				<div class="ep-sname">{{ d.full_name }}</div>
+				<div class="ep-ssub">{{ d.designation }}{% if d.school_name %} &middot; {{ d.school_name }}{% endif %}</div>
+				<span id="ep-pill" class="ep-pill {{ attendance.status|replace(' ', '') }}">{{ attendance.status }}</span>
+				<div class="ep-by" id="ep-by">{% if attendance.marked_on %}{{ attendance.marked_on_display }}{% if attendance.marked_by %} &middot; by {{ attendance.marked_by }}{% endif %}{% endif %}</div>
+				{% if can_mark %}
+				<div class="ep-btns">
+					<button class="ep-btn p" data-s="Present" type="button">&#10004; Present</button>
+					<button class="ep-btn a" data-s="Absent" type="button">&#10006; Absent</button>
+				</div>
+				{% else %}
+				<div class="ep-msg err">Responded No to the RSVP &ndash; cannot be marked.</div>
+				{% endif %}
+				<div class="ep-msg" id="ep-msg"></div>
+				<button class="ep-done" id="ep-done" type="button">View full pass</button>
+			</div>
+		</div>
+		<script>
+		(function () {
+			var ov = document.getElementById("ep-ov"), msg = document.getElementById("ep-msg");
+			function open() { ov.classList.add("open"); document.body.style.overflow = "hidden"; }
+			function close() { ov.classList.remove("open"); document.body.style.overflow = ""; }
+			open();
+			document.getElementById("ep-open").onclick = open;
+			document.getElementById("ep-close").onclick = close;
+			document.getElementById("ep-done").onclick = close;
+			ov.addEventListener("click", function (e) { if (e.target === ov) close(); });
+			document.querySelectorAll(".ep-btn").forEach(function (b) {
+				b.addEventListener("click", function () {
+					var btns = document.querySelectorAll(".ep-btn");
+					btns.forEach(function (x) { x.disabled = true; });
+					msg.className = "ep-msg"; msg.textContent = "Saving\u2026";
+					fetch("/api/method/ito_customization.ito_customization.doc_events.epass.mark_attendance", {
+						method: "POST",
+						headers: {"Content-Type": "application/json", "X-Frappe-CSRF-Token": "{{ frappe.session.csrf_token }}"},
+						body: JSON.stringify({t: {{ token|tojson }}, status: b.dataset.s})
+					}).then(function (r) { return r.json().then(function (j) { return {ok: r.ok, j: j}; }); })
+					.then(function (res) {
+						if (res.ok) {
+							var m = res.j.message, cls = m.status.replace(" ", "");
+							var pill = document.getElementById("ep-pill");
+							pill.textContent = m.status; pill.className = "ep-pill " + cls;
+							document.getElementById("ep-fab-s").textContent = m.status;
+							document.getElementById("ep-by").textContent = m.marked_by ? "by " + m.marked_by : "";
+							msg.className = "ep-msg " + (m.changed ? "ok" : ""); msg.textContent = m.message;
+							if (navigator.vibrate) navigator.vibrate(m.changed ? 60 : [40, 40, 40]);
+							// attendance is final once marked; hide the buttons
+							document.querySelector(".ep-btns").style.display = "none";
+						} else {
+							var err = "Could not save. Try again.";
+							try { err = JSON.parse(JSON.parse(res.j._server_messages)[0]).message; } catch (e) {}
+							msg.className = "ep-msg err"; msg.textContent = err;
+							btns.forEach(function (x) { x.disabled = false; });
+						}
+					}).catch(function () {
+						msg.className = "ep-msg err"; msg.textContent = "Network error. Try again.";
+						btns.forEach(function (x) { x.disabled = false; });
+					});
+				});
+			});
+			if ("{{ attendance.status }}" !== "Not Marked") {
+				var bt = document.querySelector(".ep-btns"); if (bt) bt.style.display = "none";
+				msg.textContent = "Already marked {{ attendance.status }}, no change needed.";
+			}
+		})();
+		</script>
+		{% else %}
+		<a class="ep-login" href="{{ login_url }}">Event staff? Log in</a>
+		{% endif %}
 		<div class="ep-foot">Entry is strictly for the invited individual and is subject to verification at the venue. No accompanying persons are permitted.</div>
 		{% else %}
 		<div class="ep-bad">&#10006; {{ reason }}<br>Please contact the event organisers if you think this is a mistake.</div>

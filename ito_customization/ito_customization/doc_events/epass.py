@@ -7,6 +7,8 @@ from frappe.utils.data import cint
 
 DOCTYPE = "Web Forms Registration"
 PRINT_FORMAT = "ITO E-Pass"
+STAFF_ROLES = {"ITO Event Staff", "System Manager"}
+ATTENDANCE_STATUSES = ("Present", "Absent")
 EVENT_NAME = "ITO Excellence Award Felicitation Ceremony 2026\u201327"
 
 EMAIL_HTML = """
@@ -179,4 +181,93 @@ def backfill_tokens_and_queue(send_emails=False):
 			frappe.db.set_value(DOCTYPE, name, "epass_token", frappe.generate_hash(length=24), update_modified=False)
 		if send_emails and not doc.epass_email_sent:
 			queue_epass(frappe.get_doc(DOCTYPE, name))
-	# frappe.db.commit()
+
+
+def name_by_token(token):
+	token = (token or "").strip()
+	return frappe.db.get_value(DOCTYPE, {"epass_token": token}, "name") if token else None
+
+
+def is_staff(user=None):
+	user = user or frappe.session.user
+	if user == "Guest":
+		return False
+	return bool(STAFF_ROLES & set(frappe.get_roles(user)))
+
+
+def attendance_info(doc):
+	by = doc.attendance_marked_by
+	return {
+		"status": doc.event_attendance or "Not Marked",
+		"marked_on": doc.attendance_marked_on,
+		"marked_on_display": frappe.utils.format_datetime(doc.attendance_marked_on, "dd MMM, hh:mm a")
+		if doc.attendance_marked_on
+		else "",
+		"marked_by": frappe.db.get_value("User", by, "full_name") if by else None,
+	}
+
+
+def _declined(doc):
+	return str(doc.attendance_confirmation or "").strip().lower().startswith("no")
+
+
+@frappe.whitelist()
+def mark_attendance(t, status):
+	"""Staff-only: record Present/Absent for the E-Pass identified by token `t`."""
+	if frappe.session.user == "Guest":
+		frappe.throw("Please log in to mark attendance.", frappe.PermissionError)
+	if not is_staff():
+		frappe.throw("You are not allowed to mark attendance.", frappe.PermissionError)
+	if status not in ATTENDANCE_STATUSES:
+		frappe.throw("Invalid attendance status.")
+
+	name = name_by_token(t)
+	if not name:
+		frappe.throw("This E-Pass is invalid or could not be found.", frappe.DoesNotExistError)
+
+	# Row lock: a concurrent scan of the same pass waits here, then sees the committed status.
+	frappe.db.get_value(DOCTYPE, name, "name", for_update=True)
+	doc = frappe.get_doc(DOCTYPE, name)
+
+	if not is_approved(doc):
+		frappe.throw("This registration has not been approved for an E-Pass.")
+	if _declined(doc):
+		frappe.throw("This person responded No to the RSVP and cannot be marked.")
+
+	current = doc.event_attendance or "Not Marked"
+	if current in ATTENDANCE_STATUSES:
+		return {
+			"changed": False,
+			"message": f"Already marked {current}, no change made.",
+			**attendance_info(doc),
+		}
+
+	doc.event_attendance = status
+	doc.attendance_marked_on = frappe.utils.now_datetime()
+	doc.attendance_marked_by = frappe.session.user
+	doc.flags.ignore_permissions = True
+	doc.flags.ignore_validate = True
+	doc.save()
+	return {"changed": True, "message": f"Marked {status}.", **attendance_info(doc)}
+
+
+def mark_remaining_absent():
+	"""After the event: approved, RSVP-confirmed registrations never scanned -> Absent. Returns count."""
+	names = frappe.get_all(
+		DOCTYPE,
+		filters={
+			"status": "Approve",
+			"attendance_confirmation": ["like", "Yes%"],
+			"event_attendance": ["in", ["", "Not Marked"]],
+		},
+		pluck="name",
+	)
+	now = frappe.utils.now_datetime()
+	for name in names:
+		frappe.db.set_value(
+			DOCTYPE,
+			name,
+			{"event_attendance": "Absent", "attendance_marked_on": now},
+			update_modified=False,
+		)
+	return len(names)

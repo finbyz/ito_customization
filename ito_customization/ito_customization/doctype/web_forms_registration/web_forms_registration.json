@@ -22,7 +22,12 @@
   "designation",
   "school_state",
   "photo",
-  "epass_email_sent"
+  "epass_email_sent",
+  "attendance_section",
+  "event_attendance",
+  "attendance_marked_on",
+  "attendance_marked_by",
+  "name1"
  ],
  "fields": [
   {
@@ -113,12 +118,44 @@
    "fieldtype": "Check",
    "label": "Mail Sent",
    "read_only": 1
+  },
+  {
+   "fieldname": "attendance_section",
+   "fieldtype": "Section Break",
+   "label": "Event Attendance"
+  },
+  {
+   "default": "Not Marked",
+   "fieldname": "event_attendance",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Event Attendance",
+   "options": "Not Marked\nPresent\nAbsent"
+  },
+  {
+   "fieldname": "attendance_marked_on",
+   "fieldtype": "Datetime",
+   "label": "Attendance Marked On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "attendance_marked_by",
+   "fieldtype": "Link",
+   "label": "Attendance Marked By",
+   "options": "User"
+  },
+  {
+   "fetch_from": "attendance_marked_by.full_name",
+   "fieldname": "name1",
+   "fieldtype": "Data",
+   "label": "Name"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-27 18:10:12.014820",
+ "modified": "2026-11-03 17:54:13.125499",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Web Forms Registration",
@@ -142,5 +179,6 @@
  "rows_threshold_for_grid_search": 20,
  "sort_field": "creation",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "track_changes": 1
 }
