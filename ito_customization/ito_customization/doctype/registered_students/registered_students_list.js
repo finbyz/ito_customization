@@ -111,6 +111,8 @@ const studentImportMethod =
 
 function openStudentImport(listview) {
     let fileName = null;
+    let extractionJobId = null;
+    let extractionKey = null;
     const dialog = new frappe.ui.Dialog({
         title: __("Import Registered Students"),
         fields: [
@@ -126,19 +128,59 @@ function openStudentImport(listview) {
             }
             dialog.disable_primary_action();
             try {
-                const response = await frappe.call({
-                    method: `${studentImportMethod}.extract_students`,
-                    args: { ...values, file_name: fileName },
-                    freeze: true,
-                    freeze_message: __("Reading the student list..."),
-                });
-                const rows = response.message?.rows || [];
+                // A job belongs to one file, school and year; never reuse it for anything else.
+                const key = [fileName, values.school, values.academic_year].join("::");
+                if (extractionKey !== key) {
+                    extractionJobId = null;
+                    extractionKey = key;
+                }
+                if (!extractionJobId) {
+                    const response = await frappe.call({
+                        method: `${studentImportMethod}.extract_students`,
+                        args: { ...values, file_name: fileName },
+                        freeze: true,
+                        freeze_message: __("Starting student extraction..."),
+                        silent: true,
+                    });
+                    extractionJobId = response.message?.job_id;
+                    if (!extractionJobId) {
+                        throw new Error(__("Could not start student extraction."));
+                    }
+                }
+
+                const extraction = await waitForStudentExtraction(extractionJobId, label);
+                if (extraction.status === "failed") {
+                    extractionJobId = null;
+                    frappe.msgprint({
+                        title: __("Student Extraction Failed"),
+                        message: extraction.message || __("Could not read the student list. Please try again."),
+                        indicator: "red",
+                    });
+                    return;
+                }
+
+                if (extraction.result?.file_name !== fileName) {
+                    extractionJobId = null;
+                    throw new Error(__("The extraction result does not belong to the uploaded file. Please extract again."));
+                }
+
+                const rows = extraction.result?.rows || [];
                 if (!rows.length) {
+                    extractionJobId = null;
                     frappe.msgprint(__("No student rows were found in the file."));
                     return;
                 }
                 dialog.hide();
-                openStudentReview(listview, rows, values, fileName, response.message?.file_url);
+                openStudentReview(
+                    listview, rows, values, fileName, extraction.result.file_url, extraction.result.warnings || []
+                );
+            } catch (error) {
+                console.error("Unable to extract students from the uploaded file", error);
+                frappe.msgprint({
+                    title: __("Student Extraction Failed"),
+                    message: error.message || __("Could not read the student list. Please try again."),
+                    indicator: "red",
+                });
             } finally {
                 dialog.enable_primary_action();
             }
@@ -159,13 +201,38 @@ function openStudentImport(listview) {
             restrictions: { allowed_file_types: ["image/jpeg", "image/png", "image/webp", "application/pdf"] },
             on_success(file) {
                 fileName = file.name;
+                extractionJobId = null;
+                extractionKey = null;
                 label.text(file.file_name || file.name);
             },
         });
     });
 }
 
-function openStudentReview(listview, rows, context, fileName, fileUrl) {
+async function waitForStudentExtraction(jobId, statusLabel) {
+    while (true) {
+        const response = await frappe.call({
+            method: `${studentImportMethod}.get_student_extraction_status`,
+            args: { job_id: jobId },
+            type: "GET",
+            silent: true,
+        });
+        const extraction = response.message;
+
+        if (extraction.status === "completed" || extraction.status === "failed") {
+            return extraction;
+        }
+
+        statusLabel.text(
+            extraction.status === "queued"
+                ? __("Student extraction is queued...")
+                : __("Reading page {0}...", [extraction.current_page || 1])
+        );
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+}
+
+function openStudentReview(listview, rows, context, fileName, fileUrl, warnings = []) {
     rows.forEach((row) => {
         row.initial_review = row.subject_review_required
             ? __("Check subjects")
@@ -247,6 +314,11 @@ function openStudentReview(listview, rows, context, fileName, fileUrl) {
     const sourceLink = fileUrl
         ? `<a class="btn btn-default btn-xs" href="${frappe.utils.escape_html(frappe.utils.get_file_link(fileUrl))}" target="_blank" rel="noopener">${__("Open original file")}</a>`
         : "";
+    const warningHtml = warnings.length
+        ? `<div class="alert alert-warning" style="flex-basis:100%">${warnings
+            .map((warning) => frappe.utils.escape_html(warning))
+            .join("<br>")}</div>`
+        : "";
     dialog.fields_dict.instructions.$wrapper.html(
         `<style>
             .student-import-review { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
@@ -262,6 +334,7 @@ function openStudentReview(listview, rows, context, fileName, fileUrl) {
                 <div class="student-import-review__stat"><strong>${toConfirm}</strong>${__("Subjects to confirm")}</div>
             </div>
             ${sourceLink}
+            ${warningHtml}
             <p class="student-import-review__hint text-muted">${__("Compare names, classes, serial numbers and subjects with the original file. Flags are from extraction and do not update as you edit. Rows marked Check subjects must be ticked Checked before import. Click a row to edit Mobile. Roll numbers are assigned alphabetically within each class.")}</p>
         </div>`
     );

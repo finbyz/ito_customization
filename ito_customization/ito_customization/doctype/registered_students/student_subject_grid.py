@@ -64,7 +64,7 @@ def read_grid(image: bytes, columns: list[str], student_count: int) -> GridResul
     )
     if segments is None:
         return None
-    segments = segments[:, 0]
+    segments = np.asarray(segments).reshape(-1, 4)  # (N,1,4) on OpenCV 4, (N,4) on OpenCV 5
     vertical = find_vertical_lines(segments, width, height, len(columns), scale)
     if not vertical:
         return None

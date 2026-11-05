@@ -20,6 +20,7 @@
   "class",
   "roll_no",
   "from_student_portal",
+  "registration_source",
   "not_registered",
   "academic_year",
   "section_break_mxtf",
@@ -153,6 +154,14 @@
    "fieldname": "from_student_portal",
    "fieldtype": "Check",
    "label": "From Student Portal"
+  },
+  {
+   "description": "How the student was registered. Blank on older records whose origin could not be inferred.",
+   "fieldname": "registration_source",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Registration Source",
+   "options": "\nSchool\nStudent Portal Link"
   }
  ],
  "grid_page_length": 50,

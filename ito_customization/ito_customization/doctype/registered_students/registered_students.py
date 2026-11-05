@@ -13,7 +13,22 @@ class RegisteredStudents(Document):
         if not self.student_name or not self.student_name.strip():
             frappe.throw(_("Student Name is required."))
 
-        self.name = self.student_name.strip()
+        name = self.student_name.strip()
+        # A school-wide list holds many students with the same name; only a name that is already
+        # taken gets a suffix, so every record that could be inserted before keeps its name.
+        self.name = name
+        suffix = 0
+        while frappe.db.exists("Registered Students", self.name):
+            suffix += 1
+            self.name = f"{name}-{suffix}"
+
+    def validate(self):
+        # from_student_portal predates registration_source; keep the two in step so the portal-link
+        # flow and hall-ticket lookups, which read from_student_portal, keep working.
+        if self.registration_source == "Student Portal Link":
+            self.from_student_portal = 1
+        elif self.from_student_portal and not self.registration_source:
+            self.registration_source = "Student Portal Link"
 
 
 @frappe.whitelist(methods=["POST"])
