@@ -153,6 +153,7 @@
    "default": "0",
    "fieldname": "from_student_portal",
    "fieldtype": "Check",
+   "hidden": 1,
    "label": "From Student Portal"
   },
   {
@@ -167,7 +168,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-27 09:51:07.622776",
+ "modified": "2026-11-06 16:30:02.121624",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Registered Students",
