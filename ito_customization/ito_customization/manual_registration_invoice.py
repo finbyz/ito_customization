@@ -82,6 +82,14 @@ def create_or_update_manual_registration_invoice(
         if form_name in (ITO_PAGE, "WOF Olympiad")
         else 0
     )
+    if form_name == ITO_PAGE:
+        from ito_customization.ito_customization import school_student_list
+
+        basis = school_student_list.get_fee_basis(customer)
+        if basis["has_list"]:
+            # Derived from the saved student list, never from the request.
+            total_students = basis["entries"]
+            free_registrations = basis["free"]
     if free_registrations < 0 or free_registrations > total_students:
         frappe.throw(_("Invalid number of free registrations."))
     paid_students = total_students - free_registrations

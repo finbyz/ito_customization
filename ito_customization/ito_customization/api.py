@@ -95,6 +95,9 @@ def save_ito_registration(registration_data):
 		frappe.flags.ignore_permissions = True
 		
 		try:
+			# The student list is optional: students can also register through the Student Portal link.
+			from ito_customization.ito_customization import school_student_list as ssl
+
 			school_info = data.get("school_info", {})
 			gstin = school_info.get("gst_no", "").strip().upper()
 			if gstin and len(gstin) != 15:
@@ -123,67 +126,9 @@ def save_ito_registration(registration_data):
 			# Create/update teachers - saves to DB session
 			create_or_update_teachers(data.get("coordinators", {}), customer)
 
-			# Save exams data
-			exams_data = data.get("exams", {})
-			if exams_data:
-				es_name = frappe.db.get_value(
-					"Exams Summary",
-					{"customer": customer, "is_little_champ": 0, "is_wof": 0},
-				)
-				if es_name:
-					es_doc = frappe.get_doc("Exams Summary", es_name)
-				else:
-					academic_year = frappe.db.get_value(
-						"Customer", customer, "custom_current_academic_year"
-					)
-					if academic_year and not academic_year.startswith("AY-"):
-						parts = academic_year.replace("-", "/").split("/")
-						academic_year = (
-							f"AY-{parts[0]}/{parts[1]}" if len(parts) == 2 else f"AY-{academic_year}"
-						)
-					yed_filters = {"docstatus": 1, "is_little_champ": 0}
-					if academic_year:
-						yed_filters["academic_year"] = academic_year
-					yed_name = frappe.db.get_value(
-						"Yearly Exam Date", yed_filters, "name", order_by="creation desc"
-					)
-					if not yed_name:
-						frappe.throw(_("No submitted exam schedule is available for this customer."))
-					es_doc = frappe.new_doc("Exams Summary")
-					es_doc.customer = customer
-					es_doc.exam_detail = yed_name
-
-				es_doc.exam_summary = []
-				subject_map = {
-					"IDO": "Drawing Olympiad (IDO)",
-					"NESO": "Essay Olympiad (NESO)",
-					"EIO": "English Olympiad (EIO)",
-					"IMO": "Maths Olympiad (IMO)",
-					"ISO": "Science Olympiad (ISO)",
-					"GKIO": "General Knowledge (GKIO)",
-					"ICO": "Computer Olympiad (ICO)",
-					"NSSO": "Social Studies (NSSO)",
-					"NHO": "Hindi Olympiad (NHO)",
-					"NLRO": "Logical Reasoning (NLRO)",
-					"CIO": "Commerce Olympiad (CIO)",
-				}
-				for subject_code, rows in exams_data.items():
-					subject_name = subject_map.get(subject_code, subject_code)
-					for row in rows:
-						es_doc.append("exam_summary", {
-							"subject": subject_name,
-							"class": row.get("class"),
-							"teacher_name": row.get("teacher_name"),
-							"whatsapp_no": row.get("whatsapp"),
-							"no_of_students": row.get("students"),
-							"slot_date": row.get("slot_date") or None,
-						})
-				es_doc.is_little_champ = 0
-				es_doc.is_wof = 0
-				if es_doc.is_new():
-					es_doc.insert(ignore_permissions=True)
-				else:
-					es_doc.save(ignore_permissions=True)
+			# Save exams data. Student counts are derived from the school's student list on the server;
+			# only teacher, WhatsApp and exam-date values are taken from the request.
+			ssl.sync_exam_summary(customer, data.get("exams", {}))
 
 			payment = data.get("payment") or {}
 			if payment.get("mode") in ("dd", "neft", "cash", "upi"):
@@ -270,46 +215,10 @@ def save_registration_step():
 				if not customer:
 					frappe.throw("Please save School Information first.")
 
-				exams_data = data.get("exams", {})
-				frappe.log_error(title="STEP 3 EXAMS DATA", message=frappe.as_json(exams_data))
+				# Counts come from the saved student list; the request only supplies teacher details.
+				from ito_customization.ito_customization import school_student_list as ssl
 
-				if exams_data:
-					es_name = frappe.db.get_value(
-						"Exams Summary",
-						{"customer": customer, "is_little_champ": 0, "is_wof": 0},
-					)
-					if es_name:
-						es_doc = frappe.get_doc("Exams Summary", es_name)
-						es_doc.exam_summary = []
-
-						subject_map = {
-							"IDO": "Drawing Olympiad (IDO)",
-							"NESO": "Essay Olympiad (NESO)",
-							"EIO": "English Olympiad (EIO)",
-							"IMO": "Maths Olympiad (IMO)",
-							"ISO": "Science Olympiad (ISO)",
-							"GKIO": "General Knowledge (GKIO)",
-							"ICO": "Computer Olympiad (ICO)",
-							"NSSO": "Social Studies (NSSO)",
-							"NHO": "Hindi Olympiad (NHO)",
-							"NLRO": "Logical Reasoning (NLRO)",
-							"CIO": "Commerce Olympiad (CIO)"
-						}
-
-						for subject_code, rows in exams_data.items():
-							subject_name = subject_map.get(subject_code, subject_code)
-							for row in rows:
-								es_doc.append("exam_summary", {
-									"subject": subject_name,
-									"class": row.get("class"),
-									"teacher_name": row.get("teacher_name"),
-									"whatsapp_no": row.get("whatsapp"),
-									"no_of_students": row.get("students"),
-									"slot_date": row.get("slot_date") or None
-								})
-
-						# Save exams - persists to DB session
-						es_doc.save(ignore_permissions=True)
+				ssl.sync_exam_summary(customer, data.get("exams", {}))
 
 			elif step == 4:
 				# Review has no data to save; the final submit persists the registration.
@@ -444,6 +353,12 @@ def save_review_window_registration():
 
 			# ---- Step 3: Exams (class / teacher / whatsapp only — student count locked) ----
 			exams_data = data.get("exams")
+			if exams_data:
+				from ito_customization.ito_customization import school_student_list as ssl
+
+				if ssl.get_fee_basis(customer)["has_list"]:
+					ssl.sync_exam_summary(customer, exams_data)
+					exams_data = None
 			if exams_data:
 				es_name = frappe.db.get_value("Exams Summary", {"customer": customer})
 				if es_name:

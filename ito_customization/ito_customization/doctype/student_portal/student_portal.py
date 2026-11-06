@@ -965,6 +965,7 @@ def _save_student_portal_registered_student(registration_payload):
 	student.mobile_number = registration_payload.get("mobile_number")
 	student.set("class", class_name)
 	student.from_student_portal = 1
+	student.registration_source = "Student Portal Link"
 
 	for exam in registration_payload.get("exam_list") or []:
 		subject = exam.get("school_subject")

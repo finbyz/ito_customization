@@ -258,6 +258,16 @@ def initiate_registration_fee_payment(customer=None, free_registrations=0, form_
             min(cint(free_registrations), total_students_val),
         )
 
+        if form_name == PAGE:
+            # With a saved student list the fee basis is derived from it; whatever the browser sent
+            # for the totals or the free count is ignored.
+            from ito_customization.ito_customization import school_student_list
+
+            basis = school_student_list.get_fee_basis(customer)
+            if basis["has_list"]:
+                total_students_val = basis["entries"]
+                free_registrations = basis["free"]
+
         rate = _get_registration_fee_rate("INR", form_name=form_name, customer=customer)
         if rate <= 0:
             frappe.throw(
@@ -782,6 +792,16 @@ def get_registration_fee_payment_status(customer=None, form_name=None, new_lot_i
     invoice = _find_registration_fee_invoice(customer, company, fee_item=fee_item, lot_id=new_lot_id)
     if not invoice or invoice.docstatus != 1:
         return {"paid": False}
+
+    if form_name == PAGE:
+        # The fee follows the saved student list. An invoice for an older list no longer counts as paid.
+        from ito_customization.ito_customization import school_student_list
+
+        basis = school_student_list.get_fee_basis(customer)
+        if basis["has_list"]:
+            rate = _get_registration_fee_rate("INR", form_name=form_name, customer=customer)
+            if abs(flt(basis["paid"]) * flt(rate) - flt(invoice.net_total)) > 0.01:
+                return {"paid": False}
 
     payment_entry = _get_completed_registration_payment(invoice, flt(invoice.net_total))
     if not payment_entry and flt(invoice.outstanding_amount) <= 0:
