@@ -114,15 +114,11 @@ def queue_epass(doc):
 	)
 
 
-def send_epass_email(docname):
+def send_epass_email(docname, force=False):
 	doc = frappe.get_doc(DOCTYPE, docname)
-	if (
-		not is_approved(doc)
-		or not doc.email
-		or not doc.epass_token
-		or cint(doc.epass_email_sent)
-		or cint(doc.mail_sent)
-	):
+	if not is_approved(doc) or not doc.email or not doc.epass_token:
+		return
+	if not force and (cint(doc.epass_email_sent) or cint(doc.mail_sent)):
 		return
 
 	page_url = epass_url(doc.epass_token)
@@ -158,6 +154,27 @@ def send_epass_email(docname):
 		{"epass_email_sent": 1, "mail_sent": 1},
 		update_modified=False,
 	)
+
+
+@frappe.whitelist()
+def resend_epass_email(docname):
+	"""Re-queue the E-Pass email for an approved registration (button on the form)."""
+	doc = frappe.get_doc(DOCTYPE, docname)
+	doc.check_permission("write")
+	if not is_approved(doc):
+		frappe.throw("E-Pass email can only be resent for approved registrations.")
+	if not doc.email:
+		frappe.throw("This registration has no email address.")
+	if not doc.epass_token:
+		frappe.db.set_value(DOCTYPE, doc.name, "epass_token", frappe.generate_hash(length=24), update_modified=False)
+	frappe.enqueue(
+		"ito_customization.ito_customization.doc_events.epass.send_epass_email",
+		queue="short",
+		docname=doc.name,
+		force=True,
+		enqueue_after_commit=True,
+	)
+	return True
 
 
 @frappe.whitelist(allow_guest=True)
