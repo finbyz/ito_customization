@@ -15,6 +15,10 @@ function show_amount_mismatch_banner(frm) {
         return;
     }
 
+    if (frm.doc.custom_payment_mode === "Pay Online (Razorpay)") {
+        return;
+    }
+
     const precision = frappe.defaults.get_default("float_precision") || 2;
     const total = flt(frm.doc.total, precision);
     const amount_paid = flt(frm.doc.custom_amount, precision);
