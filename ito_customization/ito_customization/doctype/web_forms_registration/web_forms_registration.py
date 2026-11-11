@@ -65,3 +65,36 @@ def mobile_registered(mobile_number=None):
 	if not mobile_number:
 		return False
 	return _mobile_exists(mobile_number)
+
+@frappe.whitelist()
+def send_bulk_email(names, email_template):
+	"""Queue an Email Template to the email of each selected registration."""
+	if isinstance(names, str):
+		names = frappe.parse_json(names)
+
+	if not frappe.has_permission("Web Forms Registration", "email"):
+		frappe.throw("Not permitted to send emails", frappe.PermissionError)
+
+	template = frappe.get_doc("Email Template", email_template)
+	queued = skipped = 0
+
+	for name in names:
+		doc = frappe.get_doc("Web Forms Registration", name)
+		doc.check_permission("read")
+		if not doc.email:
+			skipped += 1
+			continue
+
+		rendered = template.get_formatted_email({"doc": doc.as_dict()})
+		subject, message = rendered["subject"], rendered["message"]
+
+		frappe.sendmail(
+			recipients=[doc.email],
+			subject=subject,
+			message=message,
+			reference_doctype=doc.doctype,
+			reference_name=doc.name,
+		)
+		queued += 1
+
+	return {"queued": queued, "skipped": skipped}
