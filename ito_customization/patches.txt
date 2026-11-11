@@ -6,3 +6,6 @@
 # Patches added in this section will be executed after doctypes are migrated
 ito_customization.patches.create_event_staff_role
 ito_customization.patches.backfill_registration_source
+ito_customization.patches.add_registration_link_fields
+ito_customization.patches.fix_registration_link_field_position
+ito_customization.patches.unflag_registration_link_fields

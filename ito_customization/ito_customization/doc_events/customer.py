@@ -29,6 +29,7 @@ def sync_teachers(doc, method=None):
                 teacher_name
             )
             teacher_doc.school_name = ""
+            teacher_doc.flags.ignore_mandatory = True
             teacher_doc.save(
                 ignore_permissions=True
             )
@@ -43,7 +44,10 @@ def sync_teachers(doc, method=None):
                 "Teacher",
                 teacher_name
             )
+            if teacher_doc.school_name == doc.name:
+                continue
             teacher_doc.school_name = doc.name
+            teacher_doc.flags.ignore_mandatory = True
             teacher_doc.save(
                 ignore_permissions=True
             )

@@ -7,6 +7,9 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "linked_records_section",
+  "linked_records_html",
+  "section_break_zvrv",
   "full_name",
   "school_name",
   "school_code",
@@ -150,12 +153,27 @@
    "fieldname": "name1",
    "fieldtype": "Data",
    "label": "Name"
+  },
+  {
+   "depends_on": "eval:!doc.__islocal",
+   "fieldname": "linked_records_section",
+   "fieldtype": "Section Break",
+   "label": "Linked Records"
+  },
+  {
+   "fieldname": "linked_records_html",
+   "fieldtype": "HTML",
+   "label": "Linked Records"
+  },
+  {
+   "fieldname": "section_break_zvrv",
+   "fieldtype": "Section Break"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-03 17:54:13.125499",
+ "modified": "2026-11-11 18:01:26.777727",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Web Forms Registration",
