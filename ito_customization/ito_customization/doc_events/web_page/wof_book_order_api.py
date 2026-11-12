@@ -876,8 +876,8 @@ def confirm_wof_books_order_payment(
     Called after Razorpay checkout completes.
     1. Verify signature & capture payment
     2. Submit Sales Order
-    3. Create a draft Sales Invoice
-    4. Create & submit Payment Entry against the Sales Order
+    3. Create and submit the Sales Invoice
+    4. Create & submit Payment Entry against the Sales Invoice
     5. Update Razorpay Transaction
     """
     original_ignore_permissions = frappe.flags.ignore_permissions
@@ -998,13 +998,17 @@ def confirm_wof_books_order_payment(
             so_doc.flags.ignore_permissions = True
             so_doc.submit()
 
-        # Keep the Sales Invoice in draft; the payment is recorded as an
-        # advance against the submitted Sales Order.
         sales_invoice = _get_or_create_draft_wof_books_order_invoice(
             so_doc,
             data.get("book_order_payment_mode"),
             data.get("book_order_payment_details"),
         )
+
+        # This handler runs only after Razorpay confirms a captured payment.
+        # Offline payment modes continue to retain their draft invoice.
+        if sales_invoice.docstatus == 0:
+            sales_invoice.flags.ignore_permissions = True
+            sales_invoice.submit()
 
         # Create Payment Entry
         actual_pe_class.set_missing_ref_details = fake_set_missing_ref_details
@@ -1012,8 +1016,8 @@ def confirm_wof_books_order_payment(
         from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
 
         payment_entry = get_payment_entry(
-            "Sales Order",
-            so_doc.name,
+            "Sales Invoice",
+            sales_invoice.name,
             party_amount=transaction.amount,
             bank_account=settings.payment_account,
         )
@@ -1064,8 +1068,8 @@ def confirm_wof_books_order_payment(
         transaction.db_set({
             "status": "Completed",
             "sales_invoice": sales_invoice.name,
-            "reference_doctype": "Sales Order",
-            "reference_docname": so_doc.name,
+            "reference_doctype": "Sales Invoice",
+            "reference_docname": sales_invoice.name,
             "payment_entry": payment_entry.name,
             "gateway_response": json.dumps(payment, default=str),
             "processed_on": frappe.utils.now_datetime(),

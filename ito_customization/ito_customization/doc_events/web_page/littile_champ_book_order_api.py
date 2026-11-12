@@ -2147,8 +2147,8 @@ def confirm_little_champ_books_order_payment(
     Flow:
     1. Verify Razorpay signature & capture payment
     2. Submit the draft Sales Order
-    3. Create a draft Sales Invoice
-    4. Create & submit Payment Entry as an advance against the Sales Order
+    3. Create and submit the Sales Invoice
+    4. Create & submit Payment Entry against the Sales Invoice
     5. Update Razorpay Transaction
     """
 
@@ -2370,6 +2370,12 @@ def confirm_little_champ_books_order_payment(
             delivery_charge_rate,
         )
 
+        # This handler runs only after Razorpay confirms a captured payment.
+        # Offline payment modes continue to retain their draft invoice.
+        if sales_invoice.docstatus == 0:
+            sales_invoice.flags.ignore_permissions = True
+            sales_invoice.submit()
+
         # =========================================================
         # Step 5: Create Payment Entry
         # =========================================================
@@ -2385,8 +2391,8 @@ def confirm_little_champ_books_order_payment(
         )
 
         payment_entry = get_payment_entry(
-            "Sales Order",
-            so_doc.name,
+            "Sales Invoice",
+            sales_invoice.name,
             party_amount=transaction.amount,
             bank_account=settings.payment_account,
         )
@@ -2490,8 +2496,8 @@ def confirm_little_champ_books_order_payment(
         transaction.db_set({
             "status": "Completed",
             "sales_invoice": sales_invoice.name,
-            "reference_doctype": "Sales Order",
-            "reference_docname": so_doc.name,
+            "reference_doctype": "Sales Invoice",
+            "reference_docname": sales_invoice.name,
             "payment_entry": payment_entry.name,
             "gateway_response": json.dumps(
                 payment,
