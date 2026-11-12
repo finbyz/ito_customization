@@ -32,7 +32,7 @@ after_migrate = "ito_customization.ito_customization.student_agent_setup.ensure_
 # ------------------
 
 # include js, css files in header of desk.html
-# app_include_css = "/assets/ito_customization/css/ito_customization.css"
+app_include_css = "/assets/ito_customization/css/web_forms_registration.css"
 # app_include_js = "/assets/ito_customization/js/ito_customization.js"
 
 # include js, css files in header of web template

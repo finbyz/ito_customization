@@ -480,6 +480,8 @@ def get_linked_records(name):
 				"title": row.get(title_f),
 				"subtitle": row.get(sub_f),
 				"created_on": frappe.utils.format_datetime(row.creation, "dd MMM yyyy, hh:mm a"),
+				"created_iso": str(row.creation),
+				"owner": row.owner,
 				"created_by": frappe.db.get_value("User", row.owner, "full_name") or row.owner,
 			}
 		)

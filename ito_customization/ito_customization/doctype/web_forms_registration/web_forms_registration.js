@@ -179,49 +179,86 @@ function show_result(frm, result, extras, doctypes) {
 }
 
 
-const WFR_ICONS = { Customer: "🏫", Lead: "🎯", Contact: "👤", Teacher: "🎓" };
+// Inline stroke icons: follow the theme (currentColor) and look the same on every OS.
+const WFR_ICONS = {
+	Customer: '<path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/>',
+	Lead: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+	Contact: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-7 8-7s8 3 8 7"/>',
+	Teacher: '<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/>',
+};
+const WFR_STATE_CLASS = { linked: "is-linked", reused: "is-reused", missing: "is-missing", restricted: "is-restricted" };
+
+function wfr_icon(dt) {
+	return `<svg class="wfr-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${WFR_ICONS[dt] || ""}</svg>`;
+}
+
+function wfr_skeleton() {
+	const one = `<div class="wfr-card wfr-skeleton"><div class="wfr-sk-line w40"></div><div class="wfr-sk-line w80"></div><div class="wfr-sk-line w60"></div></div>`;
+	return `<div class="wfr-grid">${one.repeat(WFR_DOCTYPES.length)}</div>`;
+}
 
 function render_linked_records(frm) {
 	const $wrap = frm.fields_dict.linked_records_html && frm.fields_dict.linked_records_html.$wrapper;
 	if (!$wrap) return;
-	$wrap.html(`<div class="text-muted small">${__("Loading...")}</div>`);
+	$wrap.html(wfr_skeleton());
 
 	frappe.call({
 		method: `${WFR_API}.get_linked_records`,
 		args: { name: frm.doc.name },
+		error() {
+			$wrap.html(`<div class="wfr-error">${__("Could not load linked records.")}
+				<a href="#" class="wfr-retry">${__("Retry")}</a></div>`);
+			$wrap.find(".wfr-retry").on("click", (e) => {
+				e.preventDefault();
+				render_linked_records(frm);
+			});
+		},
 		callback(r) {
 			const esc = frappe.utils.escape_html;
-			const cards = (r.message || []).map((x) => {
-				const icon = WFR_ICONS[x.doctype] || "";
-				const head = `<div class="wfr-card-top"><span class="wfr-icon">${icon}</span><span class="wfr-dt">${__(x.doctype)}</span>`;
+			const rows = r.message || [];
+			const done = rows.filter((x) => x.state === "linked").length;
+			const total = rows.length;
+			const pct = total ? Math.round((done / total) * 100) : 0;
+
+			const summary = `<div class="wfr-summary">
+				<div class="wfr-summary-text">
+					${done === total && total ? `<span class="indicator-pill green">${__("All linked")}</span>` : ""}
+					<span>${__("{0} of {1} records created", [done, total])}</span>
+				</div>
+				<div class="wfr-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">
+					<div class="wfr-bar-fill${done === total && total ? " is-done" : ""}" style="width:${pct}%"></div>
+				</div>
+			</div>`;
+
+			const cards = rows.map((x) => {
+				const dt = __(x.doctype);
+				const head = (pill, tone) => `<div class="wfr-card-top">
+					<span class="wfr-icon">${wfr_icon(x.doctype)}</span>
+					<span class="wfr-dt">${esc(dt)}</span>
+					<span class="indicator-pill ${tone}" aria-label="${esc(pill)}">${esc(pill)}</span>
+				</div>`;
+
 				if (x.state === "linked") {
-					return `<div class="wfr-card">
-						${head}<span class="indicator-pill green">${__("Linked")}</span></div>
-						<a class="wfr-title" href="/app/${frappe.router.slug(x.doctype)}/${encodeURIComponent(x.name)}">${esc(x.title || x.name)}</a>
+					const href = `/app/${frappe.router.slug(x.doctype)}/${encodeURIComponent(x.name)}`;
+					const when = x.created_iso ? frappe.datetime.prettyDate(x.created_iso) : esc(x.created_on);
+					const avatar = x.owner ? frappe.avatar(x.owner, "avatar-xs") : "";
+					return `<a class="wfr-card ${WFR_STATE_CLASS.linked}" href="${href}" aria-label="${esc(__("Open {0}", [dt]))}">
+						${head(__("Linked"), "green")}
+						<div class="wfr-title">${esc(x.title || x.name)}</div>
 						<div class="wfr-sub">${esc(x.subtitle || x.name)}</div>
-						<div class="wfr-meta">${__("Created {0} by {1}", [esc(x.created_on), esc(x.created_by)])}</div>
-					</div>`;
+						<div class="wfr-meta" title="${esc(x.created_on)} — ${esc(x.created_by)}">
+							${avatar}<span>${esc(when)} · ${esc(x.created_by)}</span>
+						</div>
+					</a>`;
 				}
-				const label = x.state === "restricted" ? __("No access") : __("Not created");
-				const tone = x.state === "restricted" ? "gray" : "orange";
-				return `<div class="wfr-card wfr-card-empty">
-					${head}<span class="indicator-pill ${tone}">${label}</span></div>
-					<div class="wfr-sub">${x.state === "restricted" ? "" : __("Use the Create button above")}</div>
+				const restricted = x.state === "restricted";
+				return `<div class="wfr-card ${restricted ? WFR_STATE_CLASS.restricted : WFR_STATE_CLASS.missing}">
+					${head(restricted ? __("No access") : __("Not created"), restricted ? "gray" : "orange")}
+					<div class="wfr-sub">${restricted ? "" : __("Use the Create button above")}</div>
 				</div>`;
 			});
-			$wrap.html(`
-				<style>
-					.wfr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
-					.wfr-card{border:1px solid var(--border-color);border-radius:var(--border-radius-md);background:var(--card-bg);padding:14px 16px;box-shadow:var(--shadow-xs)}
-					.wfr-card-empty{background:var(--control-bg);border-style:dashed;box-shadow:none}
-					.wfr-card-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-					.wfr-icon{font-size:18px}
-					.wfr-dt{font-weight:600;color:var(--text-muted);text-transform:uppercase;font-size:11px;letter-spacing:.04em;flex:1}
-					.wfr-title{display:block;font-size:var(--text-lg);font-weight:600;margin-bottom:2px;word-break:break-word}
-					.wfr-sub{color:var(--text-color);font-size:var(--text-md);margin-bottom:6px;word-break:break-word}
-					.wfr-meta{color:var(--text-muted);font-size:var(--text-sm)}
-				</style>
-				<div class="wfr-grid">${cards.join("")}</div>`);
+
+			$wrap.html(`${summary}<div class="wfr-grid">${cards.join("")}</div>`);
 		},
 	});
 }
