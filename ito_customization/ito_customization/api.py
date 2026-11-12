@@ -3,6 +3,7 @@
 
 from functools import reduce
 import frappe
+from ito_customization.ito_customization.academic_year import DEFAULT_ACADEMIC_YEAR, normalize_academic_year
 from frappe import _, scrub
 import json
 import csv
@@ -966,10 +967,8 @@ def get_customer_from_session_user():
 	)
 	if is_little_champ:
 		academic_year = customer.get("custom_current_academic_year") or ""
-		if academic_year and not academic_year.startswith("AY-"):
-			parts = academic_year.replace("-", "/").split("/")
-			if len(parts) == 2:
-				academic_year = f"AY-{parts[0]}/{parts[1]}"
+		if academic_year:
+			academic_year = normalize_academic_year(academic_year)
 		yearly_exam_dates = frappe.get_all(
 			"Yearly Exam Date",
 			filters={
@@ -1071,10 +1070,7 @@ def get_customer_from_session_user():
 		yed_filters = {"docstatus": 1, "is_little_champ": is_little_champ}
 		if ay:
 			normalized_ay = ay
-			if not normalized_ay.startswith("AY-"):
-				parts = normalized_ay.replace("-", "/").split("/")
-				if len(parts) == 2:
-					normalized_ay = f"AY-{parts[0]}/{parts[1]}"
+			normalized_ay = normalize_academic_year(normalized_ay)
 			yed_filters["academic_year"] = normalized_ay
 
 		yearly_exams = frappe.get_all("Yearly Exam Date", filters=yed_filters, fields=["name", "academic_year"], order_by="creation desc", limit=1)
@@ -1209,12 +1205,9 @@ def get_customer_from_session_user():
 def _get_little_champ_exam_summary(customer_name):
 	academic_year = (
 		frappe.db.get_value("Customer", customer_name, "custom_current_academic_year")
-		or "AY-2026/27"
+		or DEFAULT_ACADEMIC_YEAR
 	)
-	if not academic_year.startswith("AY-"):
-		parts = academic_year.replace("-", "/").split("/")
-		academic_year = f"AY-{parts[0]}/{parts[1]}" if len(parts) == 2 else f"AY-{academic_year}"
-
+	academic_year = normalize_academic_year(academic_year)
 	exam_dates = frappe.get_all(
 		"Yearly Exam Date",
 		filters={
@@ -1887,10 +1880,7 @@ def get_subjects_for_year(
 			return []
 
 		# Normalize academic year format
-		if not academic_year.startswith("AY-"):
-			parts = academic_year.replace("-", "/").split("/")
-			if len(parts) == 2:
-				academic_year = f"AY-{parts[0]}/{parts[1]}"
+		academic_year = normalize_academic_year(academic_year)
 
 		# CRITICAL: Convert to integer
 		is_little_champ = int(is_little_champ or 0)
@@ -2017,9 +2007,9 @@ def get_bulk_subjects_for_year(
 		if not academic_year:
 			if customer_name:
 				academic_year = frappe.db.get_value("Customer", customer_name,
-					"custom_current_academic_year") or "AY-2026/27"
+					"custom_current_academic_year") or DEFAULT_ACADEMIC_YEAR
 			else:
-				academic_year = "AY-2026/27"
+				academic_year = DEFAULT_ACADEMIC_YEAR
 
 		subjects = get_subjects_for_year(
 			academic_year,
@@ -2051,9 +2041,9 @@ def get_chitrakala_subjects_for_year(academic_year=None):
 		if not academic_year:
 			if customer_name:
 				academic_year = frappe.db.get_value("Customer", customer_name,
-					"custom_current_academic_year") or "AY-2026/27"
+					"custom_current_academic_year") or DEFAULT_ACADEMIC_YEAR
 			else:
-				academic_year = "AY-2026/27"
+				academic_year = DEFAULT_ACADEMIC_YEAR
 
 		subjects = get_subjects_for_year(
 			academic_year,
@@ -2084,9 +2074,9 @@ def get_little_champ_subjects_for_year(academic_year=None):
 		if not academic_year:
 			if customer_name:
 				academic_year = frappe.db.get_value("Customer", customer_name,
-					"custom_current_academic_year") or "AY-2026/27"
+					"custom_current_academic_year") or DEFAULT_ACADEMIC_YEAR
 			else:
-				academic_year = "AY-2026/27"
+				academic_year = DEFAULT_ACADEMIC_YEAR
 
 		subjects = get_subjects_for_year(academic_year, is_little_champ=1, customer_name=customer_name, for_chitrakala=0)
 
@@ -2115,9 +2105,9 @@ def download_bulk_student_template():
 				{"user": frappe.session.user}, "parent")
 			if customer_name:
 				academic_year = frappe.db.get_value("Customer", customer_name,
-					"custom_current_academic_year") or "AY-2026/27"
+					"custom_current_academic_year") or DEFAULT_ACADEMIC_YEAR
 			else:
-				academic_year = "AY-2026/27"
+				academic_year = DEFAULT_ACADEMIC_YEAR
 
 		subjects = get_subjects_for_year(academic_year, is_little_champ)
 
@@ -2172,9 +2162,9 @@ def download_little_champ_template():
 				{"user": frappe.session.user}, "parent")
 			if customer_name:
 				academic_year = frappe.db.get_value("Customer", customer_name,
-					"custom_current_academic_year") or "AY-2026/27"
+					"custom_current_academic_year") or DEFAULT_ACADEMIC_YEAR
 			else:
-				academic_year = "AY-2026/27"
+				academic_year = DEFAULT_ACADEMIC_YEAR
 
 		subjects = get_subjects_for_year(academic_year, is_little_champ=1)
 
@@ -2229,9 +2219,9 @@ def upload_bulk_student_template():
 			{"user": frappe.session.user}, "parent")
 		if customer_name:
 			academic_year = frappe.db.get_value("Customer", customer_name,
-				"custom_current_academic_year") or "AY-2026/27"
+				"custom_current_academic_year") or DEFAULT_ACADEMIC_YEAR
 		else:
-			academic_year = "AY-2026/27"
+			academic_year = DEFAULT_ACADEMIC_YEAR
 
 		if not filedata:
 			return {"success": False, "message": "No file data provided"}
@@ -2354,9 +2344,9 @@ def upload_little_champ_template():
 			{"user": frappe.session.user}, "parent")
 		if customer_name:
 			academic_year = frappe.db.get_value("Customer", customer_name,
-				"custom_current_academic_year") or "AY-2026/27"
+				"custom_current_academic_year") or DEFAULT_ACADEMIC_YEAR
 		else:
-			academic_year = "AY-2026/27"
+			academic_year = DEFAULT_ACADEMIC_YEAR
 
 		if not filedata:
 			return {"success": False, "message": "No file data provided"}
@@ -2516,14 +2506,7 @@ def save_bulk_student_list():
 		if not raw_year:
 			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or "2026-27"
 
-		if raw_year.startswith("AY-"):
-			academic_year = raw_year
-		else:
-			parts = raw_year.replace("-", "/").split("/")
-			if len(parts) == 2:
-				academic_year = f"AY-{parts[0]}/{parts[1]}"
-			else:
-				academic_year = f"AY-{raw_year}"
+		academic_year = normalize_academic_year(raw_year)
 
 		if not frappe.db.exists("School Academic Year", academic_year):
 			existing = frappe.db.get_value("School Academic Year", {}, "name", order_by="creation desc")
@@ -2999,12 +2982,8 @@ def _get_wof_olympiad_registration_subject_counts(customer_name, academic_year=N
 	customer_year = frappe.db.get_value(
 		"Customer", customer_name, "custom_current_academic_year"
 	)
-	academic_year = customer_year or academic_year or "AY-2026/27"
-	if not academic_year.startswith("AY-"):
-		parts = academic_year.replace("-", "/").split("/")
-		academic_year = (
-			f"AY-{parts[0]}/{parts[1]}" if len(parts) == 2 else f"AY-{academic_year}"
-		)
+	academic_year = customer_year or academic_year or DEFAULT_ACADEMIC_YEAR
+	academic_year = normalize_academic_year(academic_year)
 
 	exam_dates = frappe.get_all(
 		"Yearly Exam Date",
@@ -3102,14 +3081,7 @@ def get_bulk_student_list(academic_year=None, selected_class=None):
 
 		if not academic_year:
 			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or "2026-27"
-			if raw_year.startswith("AY-"):
-				academic_year = raw_year
-			else:
-				parts = raw_year.replace("-", "/").split("/")
-				if len(parts) == 2:
-					academic_year = f"AY-{parts[0]}/{parts[1]}"
-				else:
-					academic_year = f"AY-{raw_year}"
+			academic_year = normalize_academic_year(raw_year)
 		else:
 			raw_year = academic_year
 
@@ -3282,14 +3254,7 @@ def save_little_champ_bulk():
 		if not raw_year:
 			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or "2026-27"
 
-		if raw_year.startswith("AY-"):
-			academic_year = raw_year
-		else:
-			parts = raw_year.replace("-", "/").split("/")
-			if len(parts) == 2:
-				academic_year = f"AY-{parts[0]}/{parts[1]}"
-			else:
-				academic_year = f"AY-{raw_year}"
+		academic_year = normalize_academic_year(raw_year)
 
 		if not frappe.db.exists("School Academic Year", academic_year):
 			existing = frappe.db.get_value("School Academic Year", {}, "name", order_by="creation desc")
@@ -3587,14 +3552,7 @@ def get_little_champ_bulk(academic_year=None, selected_class=None):
 
 		if not academic_year:
 			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or "2026-27"
-			if raw_year.startswith("AY-"):
-				academic_year = raw_year
-			else:
-				parts = raw_year.replace("-", "/").split("/")
-				if len(parts) == 2:
-					academic_year = f"AY-{parts[0]}/{parts[1]}"
-				else:
-					academic_year = f"AY-{raw_year}"
+			academic_year = normalize_academic_year(raw_year)
 		else:
 			raw_year = academic_year
 
@@ -4021,16 +3979,9 @@ def save_wof_student_list():
 
 		raw_year = school_info.get("academic_year", "")
 		if not raw_year:
-			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or "AY-2026/27"
+			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or DEFAULT_ACADEMIC_YEAR
 
-		if raw_year.startswith("AY-"):
-			academic_year = raw_year
-		else:
-			parts = raw_year.replace("-", "/").split("/")
-			if len(parts) == 2:
-				academic_year = f"AY-{parts[0]}/{parts[1]}"
-			else:
-				academic_year = f"AY-{raw_year}"
+		academic_year = normalize_academic_year(raw_year)
 
 		if not frappe.db.exists("School Academic Year", academic_year):
 			existing = frappe.db.get_value("School Academic Year", {}, "name", order_by="creation desc")
@@ -4340,16 +4291,9 @@ def save_wof_student_draft():
 
 		raw_year = school_info.get("academic_year", "")
 		if not raw_year:
-			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or "AY-2026/27"
+			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or DEFAULT_ACADEMIC_YEAR
 
-		if raw_year.startswith("AY-"):
-			academic_year = raw_year
-		else:
-			parts = raw_year.replace("-", "/").split("/")
-			if len(parts) == 2:
-				academic_year = f"AY-{parts[0]}/{parts[1]}"
-			else:
-				academic_year = f"AY-{raw_year}"
+		academic_year = normalize_academic_year(raw_year)
 
 		if not frappe.db.exists("School Academic Year", academic_year):
 			existing = frappe.db.get_value("School Academic Year", {}, "name", order_by="creation desc")
@@ -4458,7 +4402,7 @@ def save_wof_student_draft():
 
 
 @frappe.whitelist()
-def get_wof_student_draft(academic_year="AY-2026/27"):
+def get_wof_student_draft(academic_year=DEFAULT_ACADEMIC_YEAR):
 	try:
 		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
 		if not customer_name:
@@ -4586,11 +4530,8 @@ def get_wof_student_draft(academic_year="AY-2026/27"):
 
 def _get_chitrakala_registration_subject_counts(customer_name):
 	customer = frappe.get_doc("Customer", customer_name)
-	academic_year = customer.get("custom_current_academic_year") or "AY-2026/27"
-	if not academic_year.startswith("AY-"):
-		parts = academic_year.replace("-", "/").split("/")
-		academic_year = f"AY-{parts[0]}/{parts[1]}" if len(parts) == 2 else f"AY-{academic_year}"
-
+	academic_year = customer.get("custom_current_academic_year") or DEFAULT_ACADEMIC_YEAR
+	academic_year = normalize_academic_year(academic_year)
 	registered_subjects = {
 		subject.get("name")
 		for subject in get_subjects_for_year(
@@ -4677,16 +4618,9 @@ def save_wof_olympiad_student_list():
 
 		raw_year = school_info.get("academic_year", "")
 		if not raw_year:
-			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or "AY-2026/27"
+			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or DEFAULT_ACADEMIC_YEAR
 
-		if raw_year.startswith("AY-"):
-			academic_year = raw_year
-		else:
-			parts = raw_year.replace("-", "/").split("/")
-			if len(parts) == 2:
-				academic_year = f"AY-{parts[0]}/{parts[1]}"
-			else:
-				academic_year = f"AY-{raw_year}"
+		academic_year = normalize_academic_year(raw_year)
 
 		if not frappe.db.exists("School Academic Year", academic_year):
 			existing = frappe.db.get_value("School Academic Year", {}, "name", order_by="creation desc")
@@ -4976,16 +4910,9 @@ def save_wof_olympiad_student_draft():
 
 		raw_year = school_info.get("academic_year", "")
 		if not raw_year:
-			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or "AY-2026/27"
+			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or DEFAULT_ACADEMIC_YEAR
 
-		if raw_year.startswith("AY-"):
-			academic_year = raw_year
-		else:
-			parts = raw_year.replace("-", "/").split("/")
-			if len(parts) == 2:
-				academic_year = f"AY-{parts[0]}/{parts[1]}"
-			else:
-				academic_year = f"AY-{raw_year}"
+		academic_year = normalize_academic_year(raw_year)
 
 		if not frappe.db.exists("School Academic Year", academic_year):
 			existing = frappe.db.get_value("School Academic Year", {}, "name", order_by="creation desc")
@@ -5112,7 +5039,7 @@ def save_wof_olympiad_student_draft():
 
 
 @frappe.whitelist()
-def get_wof_olympiad_student_draft(academic_year="AY-2026/27"):
+def get_wof_olympiad_student_draft(academic_year=DEFAULT_ACADEMIC_YEAR):
 	try:
 		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
 		if not customer_name:
@@ -5125,17 +5052,13 @@ def get_wof_olympiad_student_draft(academic_year="AY-2026/27"):
 			frappe.db.get_value("Customer", customer_name, "custom_current_academic_year")
 			or academic_year
 		)
-		if not academic_year.startswith("AY-"):
-			parts = academic_year.replace("-", "/").split("/")
-			academic_year = (
-				f"AY-{parts[0]}/{parts[1]}" if len(parts) == 2 else f"AY-{academic_year}"
-			)
+		academic_year = normalize_academic_year(academic_year)
 		registration_subject_counts = _get_wof_olympiad_registration_subject_counts(
 			customer_name, academic_year
 		)
 		saved_data = frappe.cache().get_value(f"wof_olympiad_student_draft_{customer_name}_{academic_year}")
 		if not saved_data:
-			saved_data = frappe.cache().get_value(f"wof_olympiad_student_draft_{customer_name}_AY-2026/27")
+			saved_data = frappe.cache().get_value(f"wof_olympiad_student_draft_{customer_name}_{DEFAULT_ACADEMIC_YEAR}")
 
 		if not saved_data:
 			# Fallback to database query for saved Bulk Student List with for_wof_olympiad=1
@@ -5516,10 +5439,10 @@ def save_wof_teacher_entry():
 			entry_doc.save(ignore_permissions=True)
 
 		# Clear teacher draft cache
-		raw_year = school_info.get("academic_year", "AY-2026/27")
+		raw_year = school_info.get("academic_year", DEFAULT_ACADEMIC_YEAR)
 		try:
 			frappe.cache().delete_value(f"wof_teacher_draft_{customer_name}_{raw_year}")
-			frappe.cache().delete_value(f"wof_teacher_draft_{customer_name}_AY-2026/27")
+			frappe.cache().delete_value(f"wof_teacher_draft_{customer_name}_{DEFAULT_ACADEMIC_YEAR}")
 		except Exception:
 			pass
 
@@ -5570,7 +5493,7 @@ def save_wof_teacher_draft():
 			return {"success": False, "message": "Customer not found"}
 
 		customer_doc = frappe.get_doc("Customer", customer_name)
-		raw_year = school_info.get("academic_year", "AY-2026/27")
+		raw_year = school_info.get("academic_year", DEFAULT_ACADEMIC_YEAR)
 
 		teacher_name = (teacher_info.get("name") or "").strip().upper()
 		teacher_email = (teacher_info.get("email") or "").strip()
@@ -5694,7 +5617,7 @@ def save_wof_teacher_draft():
 			entry_doc.save(ignore_permissions=True)
 
 		frappe.cache().set_value(f"wof_teacher_draft_{customer_name}_{raw_year}", payload)
-		frappe.cache().set_value(f"wof_teacher_draft_{customer_name}_AY-2026/27", payload)
+		frappe.cache().set_value(f"wof_teacher_draft_{customer_name}_{DEFAULT_ACADEMIC_YEAR}", payload)
 
 		return {
 			"success": True,
@@ -5710,7 +5633,7 @@ def save_wof_teacher_draft():
 
 
 @frappe.whitelist()
-def get_wof_teacher_draft(academic_year="AY-2026/27"):
+def get_wof_teacher_draft(academic_year=DEFAULT_ACADEMIC_YEAR):
 	try:
 		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
 		if not customer_name:
@@ -5719,7 +5642,7 @@ def get_wof_teacher_draft(academic_year="AY-2026/27"):
 		# 1. Check Redis cache first
 		cached_draft = frappe.cache().get_value(f"wof_teacher_draft_{customer_name}_{academic_year}")
 		if not cached_draft:
-			cached_draft = frappe.cache().get_value(f"wof_teacher_draft_{customer_name}_AY-2026/27")
+			cached_draft = frappe.cache().get_value(f"wof_teacher_draft_{customer_name}_{DEFAULT_ACADEMIC_YEAR}")
 		if cached_draft:
 			return {
 				"success": True,
@@ -6003,10 +5926,10 @@ def save_wof_school_registration(registration_data=None):
 			)
 
 		# Clear cache
-		raw_year = data.get("academic_year", "AY-2026/27")
+		raw_year = data.get("academic_year", DEFAULT_ACADEMIC_YEAR)
 		try:
 			frappe.cache().delete_value(f"wof_school_reg_draft_{customer}_{raw_year}")
-			frappe.cache().delete_value(f"wof_school_reg_draft_{customer}_AY-2026/27")
+			frappe.cache().delete_value(f"wof_school_reg_draft_{customer}_{DEFAULT_ACADEMIC_YEAR}")
 		except Exception:
 			pass
 
@@ -6122,11 +6045,8 @@ def save_wof_exams_summary(customer, exams_data):
 	academic_year = frappe.db.get_value(
 		"Customer", customer, "custom_current_academic_year"
 	)
-	if academic_year and not academic_year.startswith("AY-"):
-		parts = academic_year.replace("-", "/").split("/")
-		academic_year = (
-			f"AY-{parts[0]}/{parts[1]}" if len(parts) == 2 else f"AY-{academic_year}"
-		)
+	if academic_year:
+		academic_year = normalize_academic_year(academic_year)
 	yed_filters = {"docstatus": 1, "is_little_champ": 0}
 	if academic_year:
 		yed_filters["academic_year"] = academic_year
@@ -6154,7 +6074,7 @@ def save_wof_exams_summary(customer, exams_data):
 		else:
 			# Fallback: create a dummy Yearly Exam Date if none exists
 			yed_doc = frappe.new_doc("Yearly Exam Date")
-			yed_doc.academic_year = "AY-2026/27"
+			yed_doc.academic_year = normalize_academic_year()
 			yed_doc.insert(ignore_permissions=True)
 			es_doc.exam_detail = yed_doc.name
 		es_doc.insert(ignore_permissions=True)
@@ -6287,9 +6207,9 @@ def save_wof_school_registration_step(step=None, data=None):
 
 		# Also update the draft cache in background
 		if customer:
-			raw_year = payload.get("academic_year", "AY-2026/27")
+			raw_year = payload.get("academic_year", DEFAULT_ACADEMIC_YEAR)
 			frappe.cache().set_value(f"wof_school_reg_draft_{customer}_{raw_year}", payload)
-			frappe.cache().set_value(f"wof_school_reg_draft_{customer}_AY-2026/27", payload)
+			frappe.cache().set_value(f"wof_school_reg_draft_{customer}_{DEFAULT_ACADEMIC_YEAR}", payload)
 
 		return {"success": True, "step": step, "customer": customer}
 
@@ -6318,9 +6238,9 @@ def save_wof_school_registration_draft():
 		if not customer_name:
 			return {"success": False, "message": "Customer not found"}
 
-		raw_year = payload.get("academic_year", "AY-2026/27")
+		raw_year = payload.get("academic_year", DEFAULT_ACADEMIC_YEAR)
 		frappe.cache().set_value(f"wof_school_reg_draft_{customer_name}_{raw_year}", payload)
-		frappe.cache().set_value(f"wof_school_reg_draft_{customer_name}_AY-2026/27", payload)
+		frappe.cache().set_value(f"wof_school_reg_draft_{customer_name}_{DEFAULT_ACADEMIC_YEAR}", payload)
 
 		return {"success": True, "message": "Draft saved successfully"}
 	except Exception as e:
@@ -6331,7 +6251,7 @@ def save_wof_school_registration_draft():
 
 
 @frappe.whitelist(  )
-def get_wof_school_registration_draft(academic_year="AY-2026/27"):
+def get_wof_school_registration_draft(academic_year=DEFAULT_ACADEMIC_YEAR):
 	try:
 		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
 		if not customer_name:
@@ -6339,7 +6259,7 @@ def get_wof_school_registration_draft(academic_year="AY-2026/27"):
 
 		cached_draft = frappe.cache().get_value(f"wof_school_reg_draft_{customer_name}_{academic_year}")
 		if not cached_draft:
-			cached_draft = frappe.cache().get_value(f"wof_school_reg_draft_{customer_name}_AY-2026/27")
+			cached_draft = frappe.cache().get_value(f"wof_school_reg_draft_{customer_name}_{DEFAULT_ACADEMIC_YEAR}")
 
 		return {"success": True, "data": cached_draft}
 	except Exception as e:

@@ -12,6 +12,7 @@ import re
 from collections import defaultdict
 
 import frappe
+from ito_customization.ito_customization.academic_year import normalize_academic_year
 from frappe import _
 from frappe.utils import cint
 
@@ -67,10 +68,7 @@ def get_session_school() -> frappe._dict:
 
 
 def resolve_academic_year(raw_year: str | None) -> str | None:
-    year = (raw_year or "").strip()
-    if year and not year.startswith("AY-"):
-        parts = year.replace("-", "/").split("/")
-        year = f"AY-{parts[0]}/{parts[1]}" if len(parts) == 2 else f"AY-{year}"
+    year = normalize_academic_year(raw_year, default=None)
     if year and frappe.db.exists("School Academic Year", year):
         return year
     # Same fallback as the Student List page: the newest academic year on record.

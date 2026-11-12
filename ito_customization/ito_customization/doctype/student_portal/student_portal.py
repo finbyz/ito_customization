@@ -4,6 +4,7 @@
 import re
 import secrets
 import frappe
+from ito_customization.ito_customization.academic_year import normalize_academic_year
 from frappe.model.document import Document
 from frappe.utils import flt, cint
 from ito_customization.ito_customization.book_order_delivery_charge import (
@@ -345,11 +346,7 @@ def get_customer_exam_details(customer=None, school_code=None, token=None, class
 		ay = customer_doc.get("custom_current_academic_year")
 		yed_filters = {"docstatus": 1}
 		if ay:
-			normalized_ay = ay
-			if not normalized_ay.startswith("AY-"):
-				parts = normalized_ay.replace("-", "/").split("/")
-				if len(parts) == 2:
-					normalized_ay = f"AY-{parts[0]}/{parts[1]}"
+			normalized_ay = normalize_academic_year(ay)
 			yed_filters["academic_year"] = normalized_ay
 
 		yearly_exams = frappe.get_all(

@@ -602,7 +602,7 @@ def download_result_template():
 		],
 		[
 			"academic_year",
-			'Please enter Academic Year in this format: "AY-2025/26"',
+			'Please enter Academic Year in this format: "2025-26" (AY-2025/26 also works)',
 		],
 		[
 			"round_1_score",
