@@ -131,10 +131,6 @@
    },
    {
     "document_type": "Delivery Note Box Detail",
-    "field_name": "custom_weight"
-   },
-   {
-    "document_type": "Delivery Note Box Detail",
     "field_name": "destination__speed_post_code"
    },
    {
