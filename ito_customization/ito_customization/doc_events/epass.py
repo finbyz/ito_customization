@@ -156,15 +156,18 @@ def send_epass_email(docname, force=False):
 	)
 
 
-@frappe.whitelist()
-def resend_epass_email(docname):
-	"""Re-queue the E-Pass email for an approved registration (button on the form)."""
-	doc = frappe.get_doc(DOCTYPE, docname)
-	doc.check_permission("write")
+def _resend_block_reason(doc):
+	"""Why the E-Pass email cannot be resent for this registration, or None if it can."""
+	if not doc.has_permission("write"):
+		return "Not permitted"
 	if not is_approved(doc):
-		frappe.throw("E-Pass email can only be resent for approved registrations.")
+		return "Registration is not approved"
 	if not doc.email:
-		frappe.throw("This registration has no email address.")
+		return "No email address"
+	return None
+
+
+def _queue_resend(doc):
 	if not doc.epass_token:
 		frappe.db.set_value(DOCTYPE, doc.name, "epass_token", frappe.generate_hash(length=24), update_modified=False)
 	frappe.enqueue(
@@ -174,7 +177,41 @@ def resend_epass_email(docname):
 		force=True,
 		enqueue_after_commit=True,
 	)
+
+
+@frappe.whitelist()
+def resend_epass_email(docname):
+	"""Re-queue the E-Pass email for an approved registration (button on the form)."""
+	doc = frappe.get_doc(DOCTYPE, docname)
+	doc.check_permission("write")
+	reason = _resend_block_reason(doc)
+	if reason:
+		frappe.throw(f"E-Pass email cannot be resent: {reason}.")
+	_queue_resend(doc)
 	return True
+
+
+@frappe.whitelist()
+def bulk_resend_epass_email(names):
+	"""Re-queue the E-Pass email for each selected registration (list view).
+	Records that fail the same checks as the form button are skipped and reported back."""
+	if isinstance(names, str):
+		names = frappe.parse_json(names)
+
+	queued, skipped = [], []
+	for name in names or []:
+		if not frappe.db.exists(DOCTYPE, name):
+			skipped.append({"name": name, "reason": "Not found"})
+			continue
+		doc = frappe.get_doc(DOCTYPE, name)
+		reason = _resend_block_reason(doc)
+		if reason:
+			skipped.append({"name": name, "full_name": doc.full_name, "email": doc.email, "status": doc.status, "reason": reason})
+			continue
+		_queue_resend(doc)
+		queued.append(name)
+
+	return {"queued": queued, "skipped": skipped}
 
 
 @frappe.whitelist(allow_guest=True)
