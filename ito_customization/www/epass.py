@@ -4,6 +4,8 @@ import frappe
 
 from ito_customization.ito_customization.doc_events.epass import (
 	EVENT_NAME,
+	VENUE_ADDRESS,
+	VENUE_MAP_URL,
 	DOCTYPE,
 	attendance_info,
 	is_approved,
@@ -15,6 +17,8 @@ from ito_customization.ito_customization.doc_events.epass import (
 def get_context(context):
 	context.no_cache = 1
 	context.event_name = EVENT_NAME
+	context.venue_address = VENUE_ADDRESS
+	context.venue_map_url = VENUE_MAP_URL
 	context.valid = False
 	context.reason = "This E-Pass is invalid or could not be found."
 	context.photo = ""
