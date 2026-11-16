@@ -10,6 +10,11 @@ PRINT_FORMAT = "ITO E-Pass"
 STAFF_ROLES = {"ITO Event Staff", "System Manager"}
 ATTENDANCE_STATUSES = ("Present", "Absent")
 EVENT_NAME = "ITO Excellence Award Felicitation Ceremony 2026\u201327"
+VENUE_ADDRESS = (
+	"9c, 2nd A Cross Rd, Sector A, Yelahanka Satellite Town, Yelahanka New Town, "
+	"Bengaluru, Karnataka 560064"
+)
+VENUE_MAP_URL = "https://maps.app.goo.gl/7Ca2HyThYC82fR9L8"
 
 EMAIL_HTML = """
 <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;color:#202124">
@@ -27,9 +32,10 @@ EMAIL_HTML = """
       <br><span style="font-size:12px;color:#5f6368">If the image is hidden, open the attached QR / PDF.</span>
     </p>
     <table style="font-size:14px;line-height:1.7">
-      <tr><td style="color:#5f6368;padding-right:14px">Date</td><td><b>23rd November 2026</b></td></tr>
-      <tr><td style="color:#5f6368;padding-right:14px">Time</td><td><b>10:00 AM to 1:00 PM</b></td></tr>
-      <tr><td style="color:#5f6368;padding-right:14px">Venue</td><td><b>Bangalore</b> (detailed address will be shared shortly)</td></tr>
+      <tr><td style="color:#5f6368;padding-right:14px;vertical-align:top">Date</td><td><b>23rd November 2026</b></td></tr>
+      <tr><td style="color:#5f6368;padding-right:14px;vertical-align:top">Time</td><td><b>10:00 AM to 1:00 PM</b></td></tr>
+      <tr><td style="color:#5f6368;padding-right:14px;vertical-align:top">Venue</td><td><b>{{ venue_address }}</b><br>
+        <a href="{{ venue_map_url }}">Open in Google Maps</a></td></tr>
     </table>
     <p style="font-size:13px;color:#5f6368;margin-top:18px">
       Entry is strictly for the invited individual. Accompanying persons are not permitted.
@@ -137,6 +143,8 @@ def send_epass_email(docname, force=False):
 			"event": EVENT_NAME,
 			"name": doc.full_name,
 			"page_url": page_url,
+			"venue_address": VENUE_ADDRESS,
+			"venue_map_url": VENUE_MAP_URL,
 			"qr_url": f"{get_url()}/api/method/ito_customization.ito_customization.doc_events.epass.qr_image?t={doc.epass_token}",
 		},
 	)
