@@ -4,8 +4,13 @@
 {% block header %}{% endblock %}
 {% block footer %}{% endblock %}
 
-{% block page_content %}
+{% block head_include %}
 <meta name="robots" content="noindex,nofollow">
+<meta name="format-detection" content="telephone=no, address=no, date=no, email=no">
+<meta name="x-apple-disable-message-reformatting">
+{% endblock %}
+
+{% block page_content %}
 <style>
 	body { background: #def0ee !important; }
 	.page-content-wrapper, .page_content, main.container { background: transparent !important; padding: 0 !important; }
@@ -28,6 +33,12 @@
 	.ep-row b { text-align: right; }
 	.ep-venue span { flex-shrink: 0; }
 	.ep-venue b { font-weight: 600; line-height: 1.45; }
+	.ep-addr { font-weight: 400; color: #3c4043 !important; }
+	/* Safety net: if any browser/app still wraps the address in a link, make it look and behave like plain text */
+	.ep-addr a, .ep-addr a[x-apple-data-detectors], a[href^="x-apple-data-detectors:"] {
+		color: inherit !important; text-decoration: none !important; pointer-events: none !important;
+		font-size: inherit !important; font-family: inherit !important; font-weight: inherit !important; line-height: inherit !important;
+	}
 	.ep-map { display: inline-block; margin-top: 4px; font-size: 13px; color: #2f7f73; }
 	.ep-fab { position: fixed; right: 16px; bottom: 16px; border: 0; border-radius: 28px; padding: 13px 20px; background: #2f7f73; color: #fff; font-weight: 700; font-size: 15px; box-shadow: 0 4px 14px rgba(0,0,0,.3); z-index: 900; }
 	.ep-ov { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 1000; display: none; align-items: flex-end; justify-content: center; }
@@ -75,7 +86,7 @@
 				<div class="ep-row"><span>City</span><b>{{ d.school_city }}</b></div>
 				<div class="ep-row"><span>State</span><b>{{ d.school_state }}</b></div>
 				<div class="ep-row"><span>Date</span><b>23 Nov 2026, 10:00 AM &ndash; 1:00 PM</b></div>
-				<div class="ep-row ep-venue"><span>Venue</span><b>{{ venue_address }}{% if not is_staff %}<br><a class="ep-map" href="{{ venue_map_url }}" target="_blank" rel="noopener">Open in Google Maps</a>{% endif %}</b></div>
+				<div class="ep-row ep-venue"><span>Venue</span><b>{{ venue_name }}<br><span class="ep-addr">{{ venue_address }}</span>{% if not is_staff %}<br><a class="ep-map" href="{{ venue_map_url }}" target="_blank" rel="noopener">Open in Google Maps</a>{% endif %}</b></div>
 				<!-- <div class="ep-row"><span>Pass No.</span><b>{{ d.name }}</b></div> -->
 			</div>
 		</div>
@@ -115,7 +126,7 @@
 				b.addEventListener("click", function () {
 					var btns = document.querySelectorAll(".ep-btn");
 					btns.forEach(function (x) { x.disabled = true; });
-					msg.className = "ep-msg"; msg.textContent = "Saving\u2026";
+					msg.className = "ep-msg"; msg.textContent = "Saving…";
 					fetch("/api/method/ito_customization.ito_customization.doc_events.epass.mark_attendance", {
 						method: "POST",
 						headers: {"Content-Type": "application/json", "X-Frappe-CSRF-Token": "{{ frappe.session.csrf_token }}"},

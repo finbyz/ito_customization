@@ -1,5 +1,6 @@
 import base64
 import io
+import re
 
 import frappe
 from frappe.utils import get_url
@@ -10,11 +11,21 @@ PRINT_FORMAT = "ITO E-Pass"
 STAFF_ROLES = {"ITO Event Staff", "System Manager"}
 ATTENDANCE_STATUSES = ("Present", "Absent")
 EVENT_NAME = "ITO Excellence Award Felicitation Ceremony 2026\u201327"
+VENUE_NAME = "Dr. B. R. Ambedkar Bhavana"
 VENUE_ADDRESS = (
 	"9c, 2nd A Cross Rd, Sector A, Yelahanka Satellite Town, Yelahanka New Town, "
 	"Bengaluru, Karnataka 560064"
 )
 VENUE_MAP_URL = "https://maps.app.goo.gl/7Ca2HyThYC82fR9L8"
+
+
+def no_autolink(text):
+	"""HTML-escape text and put an invisible zero-width non-joiner after the first digit of each
+	number, e.g. "9c" -> "9&zwnj;c". It looks and copies the same, but Gmail, Apple Mail and iOS
+	no longer recognise it as a street address and stop turning it into a blue maps link."""
+	from markupsafe import Markup, escape
+
+	return Markup(re.sub(r"(\d)(?=\w)", r"\1&zwnj;", str(escape(text))))
 
 EMAIL_HTML = """
 <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;color:#202124">
@@ -34,7 +45,8 @@ EMAIL_HTML = """
     <table style="font-size:14px;line-height:1.7">
       <tr><td style="color:#5f6368;padding-right:14px;vertical-align:top">Date</td><td><b>23rd November 2026</b></td></tr>
       <tr><td style="color:#5f6368;padding-right:14px;vertical-align:top">Time</td><td><b>10:00 AM to 1:00 PM</b></td></tr>
-      <tr><td style="color:#5f6368;padding-right:14px;vertical-align:top">Venue</td><td><b>{{ venue_address }}</b><br>
+      <tr><td style="color:#5f6368;padding-right:14px;vertical-align:top">Venue</td><td><b>{{ venue_name }}</b><br>
+        <a href="{{ venue_map_url }}" style="color:#202124 !important;text-decoration:none !important;cursor:text"><span style="color:#202124 !important;text-decoration:none !important">{{ venue_address }}</span></a><br>
         <a href="{{ venue_map_url }}">Open in Google Maps</a></td></tr>
     </table>
     <p style="font-size:13px;color:#5f6368;margin-top:18px">
@@ -143,6 +155,9 @@ def send_epass_email(docname, force=False):
 			"event": EVENT_NAME,
 			"name": doc.full_name,
 			"page_url": page_url,
+			# Plain text: the address sits inside our own <a> (see EMAIL_HTML), so mail apps
+			# don't add their own maps link, and copying it gives clean text.
+			"venue_name": VENUE_NAME,
 			"venue_address": VENUE_ADDRESS,
 			"venue_map_url": VENUE_MAP_URL,
 			"qr_url": f"{get_url()}/api/method/ito_customization.ito_customization.doc_events.epass.qr_image?t={doc.epass_token}",
