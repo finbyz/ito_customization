@@ -1292,26 +1292,17 @@ def save_little_champ_registration(registration_data):
 		# Create/update teachers - saves to DB session
 		create_or_update_little_champ_teachers(coordinators_data, customer_doc.name)
 
-		# Save exams data
-		exams_data = data.get("exams", {})
-		if exams_data:
-			es_doc = _get_little_champ_exam_summary(customer_doc.name)
+		# Save exams data. Student counts are derived from the school's student list on the server;
+		# only teacher, WhatsApp and exam-date values are taken from the request.
+		from ito_customization.ito_customization import school_student_list as ssl
 
-			es_doc.exam_summary = []
-			for subject_key, subject_data in exams_data.items():
-				subject_name = subject_data.get("subject") or subject_data.get("subject_name") or subject_key
-				registrations = subject_data.get("registrations", [])
-				for row in registrations:
-					es_doc.append("exam_summary", {
-						"subject": subject_name,
-						"class": row.get("class"),
-						"teacher_name": row.get("teacher_name"),
-						"whatsapp_no": row.get("whatsapp"),
-						"no_of_students": row.get("students"),
-						"slot_date": row.get("slot_date") or None
-					})
+		exams_data = ssl.exams_from_little_champ_payload(data.get("exams", {}))
+		if exams_data or ssl.get_fee_basis(customer_doc.name)["has_list"]:
+			ssl.sync_exam_summary(customer_doc.name, exams_data)
 
-			es_doc.save(ignore_permissions=True)
+		# Marks the registration as submitted. A new student list clears it, so the school pays the
+		# updated fee and submits again.
+		frappe.db.set_value("Customer", customer_doc.name, "custom_registration_date", frappe.utils.nowdate())
 
 		payment = data.get("payment") or {}
 		if payment.get("mode") in ("dd", "neft", "cash", "upi"):
@@ -1473,25 +1464,12 @@ def save_little_champ_step():
 				if not customer:
 					frappe.throw("Please save School Information first.")
 
-				exams_data = data.get("exams", {})
-				if exams_data:
-					es_doc = _get_little_champ_exam_summary(customer)
+				# Counts come from the saved student list; the request only supplies teacher details.
+				from ito_customization.ito_customization import school_student_list as ssl
 
-					es_doc.exam_summary = []
-					for subject_key, subject_data in exams_data.items():
-						subject_name = subject_data.get("subject") or subject_data.get("subject_name") or subject_key
-						registrations = subject_data.get("registrations", [])
-						for row in registrations:
-							es_doc.append("exam_summary", {
-								"subject": subject_name,
-								"class": row.get("class"),
-								"teacher_name": row.get("teacher_name"),
-								"whatsapp_no": row.get("whatsapp"),
-								"no_of_students": row.get("students"),
-								"slot_date": row.get("slot_date")
-							})
-
-					es_doc.save(ignore_permissions=True)
+				exams_data = ssl.exams_from_little_champ_payload(data.get("exams", {}))
+				if exams_data or ssl.get_fee_basis(customer)["has_list"]:
+					ssl.sync_exam_summary(customer, exams_data)
 
 				# NO explicit commit - let Frappe handle it
 				return {"success": True, "step": 3}
@@ -5890,7 +5868,9 @@ def save_wof_school_registration(registration_data=None):
 		customer_doc.save(ignore_permissions=True)
 		frappe.db.set_value("Customer", customer, {
 			"custom_is_wof": 1,
-			"custom_registration_date": frappe.utils.nowdate()
+			"custom_registration_date": frappe.utils.nowdate(),
+			# The WOF form's own submitted marker; custom_registration_date is shared with Chitrakala.
+			"custom_wof_registration_date": frappe.utils.nowdate(),
 		}, update_modified=False)
 
 		create_or_update_address(customer, school_info)
@@ -5903,10 +5883,13 @@ def save_wof_school_registration(registration_data=None):
 		# Create/update teachers with WOF flag
 		create_or_update_wof_coordinators(coordinators_data, customer)
 
-		# Save WOF Exam summary rows
+		# WOF Exam summary rows: counts come from the saved student list, the browser only supplies
+		# teacher name, WhatsApp number and exam date.
+		from ito_customization.ito_customization import school_student_list as ssl
+
 		exams_data = data.get("exams", {})
-		if exams_data:
-			save_wof_exams_summary(customer, exams_data)
+		if exams_data or ssl.get_fee_basis(customer)["has_list"]:
+			ssl.sync_exam_summary(customer, exams_data)
 
 		# Payment comment
 		payment = dict(data.get("payment") or {})
@@ -6178,9 +6161,11 @@ def save_wof_school_registration_step(step=None, data=None):
 			if not customer:
 				customer = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
 			if customer:
+				from ito_customization.ito_customization import school_student_list as ssl
+
 				exams_data = payload.get("exams", {})
-				if exams_data:
-					save_wof_exams_summary(customer, exams_data)
+				if exams_data or ssl.get_fee_basis(customer)["has_list"]:
+					ssl.sync_exam_summary(customer, exams_data)
 
 		elif step == 4:
 			if not customer:

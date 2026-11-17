@@ -17,6 +17,8 @@ from multi_company_razorpay.api import (
 )
 
 PAGE = "ITO Registration"
+# Forms whose fee follows the school's saved student list (school_student_list.get_fee_basis).
+LIST_FEE_FORMS = (PAGE, "WOF Olympiad")
 
 
 def _get_customer(customer=None):
@@ -258,7 +260,7 @@ def initiate_registration_fee_payment(customer=None, free_registrations=0, form_
             min(cint(free_registrations), total_students_val),
         )
 
-        if form_name == PAGE:
+        if form_name in LIST_FEE_FORMS:
             # With a saved student list the fee basis is derived from it; whatever the browser sent
             # for the totals or the free count is ignored.
             from ito_customization.ito_customization import school_student_list
@@ -793,7 +795,7 @@ def get_registration_fee_payment_status(customer=None, form_name=None, new_lot_i
     if not invoice or invoice.docstatus != 1:
         return {"paid": False}
 
-    if form_name == PAGE:
+    if form_name in LIST_FEE_FORMS:
         # The fee follows the saved student list. An invoice for an older list no longer counts as paid.
         from ito_customization.ito_customization import school_student_list
 

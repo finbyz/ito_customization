@@ -1,4 +1,11 @@
-"""School-wide student list for the ITO Registration wizard.
+"""School-wide student list for the ITO, Little Champ and WOF Registration wizards.
+
+A school is one of:
+- a WOF school (Customer.custom_is_wof): classes 1 to 12, WOF Olympiad subjects, no free subjects,
+  its counts go to the WOF Exams Summary (is_wof = 1). WOF has no Student Portal link yet.
+- a Little Champ school (Customer.custom_is_little_champ): Nursery, Junior KG and Senior KG, no free
+  subjects.
+- otherwise an ITO school: classes 1 to 12, one subject in four free.
 
 The school uploads one sheet holding every class. Registered Students (source "School") is the single
 source of truth: the Exam Summary counts and the registration fee are derived from it on the server and
@@ -36,6 +43,40 @@ CLASS_HEADERS = {"class", "std", "standard", "classstd"}
 MOBILE_HEADERS = {"mobileno", "mobile", "mobilenumber", "phone", "phoneno", "contact", "contactno", "whatsappno"}
 SERIAL_HEADERS = {"srno", "sr", "serialno", "serial", "slno", "sno"}
 
+# Little Champ classes and the spellings schools use for them (compared after _normalise_header).
+LC_CLASSES = ("Nursery", "Junior KG", "Senior KG")
+LC_CLASS_ALIASES = {
+    "nursery": "Nursery", "nur": "Nursery", "playgroup": "Nursery",
+    "juniorkg": "Junior KG", "jrkg": "Junior KG", "jkg": "Junior KG", "lkg": "Junior KG", "lowerkg": "Junior KG",
+    "seniorkg": "Senior KG", "srkg": "Senior KG", "skg": "Senior KG", "ukg": "Senior KG", "upperkg": "Senior KG",
+}
+_LC_ORDER = {name: index for index, name in enumerate(LC_CLASSES)}
+
+
+def class_sort_key(value) -> tuple:
+    """Order Nursery, Junior KG, Senior KG, then 1 to 12, then anything else."""
+    value = str(value or "")
+    if value in _LC_ORDER:
+        return (0, _LC_ORDER[value], value)
+    if value.isdigit():
+        return (1, int(value), value)
+    return (2, 0, value)
+
+
+# Subjects of the Chitrakala form that can lack the for_chitrakala flag; the WOF form hides them by name.
+WOF_EXCLUDED_SUBJECT_WORDS = ("handwriting", "colouring", "coloring", "sketching", "cartoon", "caricature", "greeting")
+
+
+def school_program(customer: str) -> frappe._dict:
+    """is_wof / is_lc flags of a school. WOF wins over Little Champ, as in the portal menu."""
+    flags = frappe.db.get_value("Customer", customer, ["custom_is_wof", "custom_is_little_champ"], as_dict=True) or {}
+    is_wof = bool(cint(flags.get("custom_is_wof")))
+    return frappe._dict(is_wof=is_wof, is_lc=not is_wof and bool(cint(flags.get("custom_is_little_champ"))))
+
+
+def is_little_champ_school(customer: str) -> bool:
+    return school_program(customer).is_lc
+
 
 # --------------------------------------------------------------------------------------------------
 # School and year
@@ -57,13 +98,21 @@ def get_session_school() -> frappe._dict:
             "name",
             "customer_name",
             "custom_ito_school_code",
+            "custom_school_code",
             "custom_current_academic_year",
             "custom_registration_date",
             "custom_application_deadline",
+            "custom_is_little_champ",
+            "custom_last_date_of_reg",
+            "custom_last_date_of_reg_2",
+            "custom_is_wof",
+            "custom_wof_registration_date",
         ],
         as_dict=True,
     )
     school.academic_year = resolve_academic_year(school.custom_current_academic_year)
+    school.is_wof = bool(cint(school.custom_is_wof))
+    school.is_lc = not school.is_wof and bool(cint(school.custom_is_little_champ))
     return school
 
 
@@ -75,10 +124,20 @@ def resolve_academic_year(raw_year: str | None) -> str | None:
     return frappe.db.get_value("School Academic Year", {}, "name", order_by="creation desc")
 
 
+def registration_deadline(school):
+    """ITO: the application deadline. Little Champ: the later of the two slot dates (the form stays
+    open until both slots have closed), falling back to the application deadline."""
+    if school.get("is_lc"):
+        slots = [d for d in (school.get("custom_last_date_of_reg"), school.get("custom_last_date_of_reg_2")) if d]
+        if slots:
+            return max(frappe.utils.getdate(d) for d in slots)
+    return school.get("custom_application_deadline")
+
+
 def is_locked(school) -> bool:
-    """The list can be uploaded or replaced until the application deadline (the whole deadline day is
+    """The list can be uploaded or replaced until the registration deadline (the whole deadline day is
     still open). Submitting the registration does not lock it."""
-    deadline = school.get("custom_application_deadline")
+    deadline = registration_deadline(school)
     if not deadline:
         return False
     return frappe.utils.getdate(frappe.utils.nowdate()) > frappe.utils.getdate(deadline)
@@ -143,7 +202,15 @@ def get_subject_columns(school) -> list[dict]:
     """Subjects offered to this school, as {name, abbr}."""
     from ito_customization.ito_customization.api import get_subjects_for_year
 
-    subjects = get_subjects_for_year(school.academic_year, 0, customer_name=school.name)
+    if school.get("is_wof"):
+        subjects = get_subjects_for_year(school.academic_year, 0, customer_name=school.name, for_wof_olympiad=1)
+        subjects = [
+            s for s in subjects
+            if not cint(s.get("for_chitrakala"))
+            and not any(word in (s["name"] or "").lower() for word in WOF_EXCLUDED_SUBJECT_WORDS)
+        ]
+    else:
+        subjects = get_subjects_for_year(school.academic_year, 1 if school.get("is_lc") else 0, customer_name=school.name)
     seen, result = set(), []
     for subject in subjects:
         if subject["name"] in seen:
@@ -153,7 +220,23 @@ def get_subject_columns(school) -> list[dict]:
     return result
 
 
-def parse_student_sheet(rows: list[list[str]], subjects: list[dict]) -> dict:
+def _parse_class(raw_class: str, is_lc: bool):
+    """Return (class name, error)."""
+    if is_lc:
+        class_name = LC_CLASS_ALIASES.get(_normalise_header(raw_class))
+        if not class_name:
+            return None, _("Class must be Nursery, Junior KG or Senior KG (found '{0}').").format(raw_class)
+    else:
+        match = CLASS_PATTERN.match(raw_class.strip()) if raw_class else None
+        if not (match and 1 <= int(match.group(1)) <= 12):
+            return None, _("Class must be a number from 1 to 12 (found '{0}').").format(raw_class)
+        class_name = str(int(match.group(1)))
+    if not frappe.db.exists("Class", class_name):
+        return None, _("Class {0} is not set up.").format(class_name)
+    return class_name, None
+
+
+def parse_student_sheet(rows: list[list[str]], subjects: list[dict], is_lc: bool = False) -> dict:
     """Validate a sheet. Nothing is saved; every row carries its own errors."""
     result = {"rows": [], "errors": [], "warnings": [], "subject_columns": []}
 
@@ -230,15 +313,10 @@ def parse_student_sheet(rows: list[list[str]], subjects: list[dict]) -> dict:
         elif len(name) > 100:
             errors.append(_("Student name is longer than 100 characters."))
 
-        class_name = None
         raw_class = cell("class")
-        match = CLASS_PATTERN.match(raw_class.strip()) if raw_class else None
-        if match and 1 <= int(match.group(1)) <= 12:
-            class_name = str(int(match.group(1)))
-            if not frappe.db.exists("Class", class_name):
-                errors.append(_("Class {0} is not set up.").format(class_name))
-        else:
-            errors.append(_("Class must be a number from 1 to 12 (found '{0}').").format(raw_class))
+        class_name, class_error = _parse_class(raw_class, is_lc)
+        if class_error:
+            errors.append(class_error)
 
         mobile = cell("mobile")
         digits = re.sub(r"[\s+\-()]", "", mobile)
@@ -295,7 +373,7 @@ def _summarise_preview(parsed: dict, school) -> dict:
         "total_rows": len(parsed["rows"]),
         "valid_rows": len(parsed["rows"]) - len(invalid),
         "invalid_rows": len(invalid),
-        "by_class": dict(sorted(by_class.items(), key=lambda item: int(item[0]))),
+        "by_class": dict(sorted(by_class.items(), key=lambda item: class_sort_key(item[0]))),
         "can_save": bool(parsed["rows"]) and not invalid and not parsed["errors"] and not is_locked(school),
         "locked": is_locked(school),
         "existing_students": count_school_students(school),
@@ -350,9 +428,11 @@ def derive_registration(school) -> dict:
 
     counts = defaultdict(int)
     entries = free = 0
+    # Little Champ and WOF have no free subjects.
+    per_free = 0 if (school.get("is_lc") or school.get("is_wof")) else SUBJECTS_PER_FREE
     for name, subjects in subjects_of.items():
         entries += len(subjects)
-        free += len(subjects) // SUBJECTS_PER_FREE
+        free += len(subjects) // per_free if per_free else 0
         for subject in subjects:
             counts[(class_of[name], subject)] += 1
 
@@ -369,7 +449,7 @@ def get_fee_basis(customer: str) -> dict:
     """Server-side fee basis for a customer, used by the payment code. has_list is False when the
     school has no list (older registrations), and the caller then keeps its previous behaviour."""
     year = resolve_academic_year(frappe.db.get_value("Customer", customer, "custom_current_academic_year"))
-    derived = derive_registration(frappe._dict(name=customer, academic_year=year))
+    derived = derive_registration(frappe._dict(name=customer, academic_year=year, **school_program(customer)))
     return {
         "has_list": derived["students"] > 0,
         "students": derived["students"],
@@ -383,8 +463,14 @@ def get_fee_basis(customer: str) -> dict:
 # Exam Summary
 # --------------------------------------------------------------------------------------------------
 
-def _get_or_create_exams_summary(customer: str):
-    name = frappe.db.get_value("Exams Summary", {"customer": customer, "is_little_champ": 0, "is_wof": 0})
+def _get_or_create_exams_summary(customer: str, is_lc: bool = False, is_wof: bool = False):
+    if is_lc:
+        from ito_customization.ito_customization.api import _get_little_champ_exam_summary
+
+        return _get_little_champ_exam_summary(customer)
+
+    is_wof = 1 if is_wof else 0
+    name = frappe.db.get_value("Exams Summary", {"customer": customer, "is_little_champ": 0, "is_wof": is_wof})
     if name:
         return frappe.get_doc("Exams Summary", name)
 
@@ -399,7 +485,7 @@ def _get_or_create_exams_summary(customer: str):
     doc.customer = customer
     doc.exam_detail = exam_detail
     doc.is_little_champ = 0
-    doc.is_wof = 0
+    doc.is_wof = is_wof
     return doc
 
 
@@ -411,8 +497,32 @@ def _resolve_subject(key, known: dict) -> str | None:
     return known.get(key.lower())
 
 
+def _class_key(value) -> str:
+    """Class names compared without case: the site's Case Format rule stores "Senior KG" in the
+    Exam Summary (a Data field) as "Senior Kg"."""
+    return str(value or "").strip().lower()
+
+
+def exams_from_little_champ_payload(exams: dict | None) -> dict:
+    """The Little Champ wizard sends {subject: {subject, exam_date, registrations: [...]}}; return the
+    {subject: [rows]} shape sync_exam_summary takes."""
+    result = {}
+    for key, value in (exams or {}).items():
+        if isinstance(value, dict):
+            rows = value.get("registrations") or []
+            exam_date = value.get("exam_date")
+            rows = [
+                {**row, "slot_date": row.get("slot_date") or exam_date} for row in rows if isinstance(row, dict)
+            ]
+            if rows:
+                result[value.get("subject") or key] = rows
+        elif isinstance(value, list) and value:
+            result[key] = value
+    return result
+
+
 def sync_exam_summary(customer: str, client_exams: dict | None = None) -> None:
-    """Rebuild the ITO Exams Summary from the school's student list.
+    """Rebuild the school's Exams Summary (ITO, Little Champ or WOF) from its student list.
 
     Counts always come from the list. The browser may only supply teacher name, WhatsApp number and the
     exam date; those are matched to a class and subject that the list produced. A school without a
@@ -421,9 +531,10 @@ def sync_exam_summary(customer: str, client_exams: dict | None = None) -> None:
     school = frappe._dict(
         name=customer,
         academic_year=resolve_academic_year(frappe.db.get_value("Customer", customer, "custom_current_academic_year")),
+        **school_program(customer),
     )
     derived = derive_registration(school)
-    doc = _get_or_create_exams_summary(customer)
+    doc = _get_or_create_exams_summary(customer, school.is_lc, school.is_wof)
 
     known = {}
     for row in frappe.get_all("School Subject", fields=["name", "abbr"]):
@@ -435,7 +546,7 @@ def sync_exam_summary(customer: str, client_exams: dict | None = None) -> None:
     details = {}
     slot_dates = {}
     for row in doc.exam_summary:
-        details[(str(row.get("class") or ""), row.subject)] = {
+        details[(_class_key(row.get("class")), row.subject)] = {
             "teacher_name": row.teacher_name,
             "whatsapp_no": row.whatsapp_no,
             "slot_date": row.slot_date,
@@ -450,7 +561,7 @@ def sync_exam_summary(customer: str, client_exams: dict | None = None) -> None:
         for row in rows:
             if not isinstance(row, dict):
                 continue
-            entry = details.setdefault((str(row.get("class") or ""), subject), {})
+            entry = details.setdefault((_class_key(row.get("class")), subject), {})
             entry["teacher_name"] = row.get("teacher_name") or ""
             entry["whatsapp_no"] = row.get("whatsapp") or row.get("whatsapp_no") or ""
             if row.get("slot_date"):
@@ -460,9 +571,9 @@ def sync_exam_summary(customer: str, client_exams: dict | None = None) -> None:
     if derived["students"]:
         doc.exam_summary = []
         for (class_name, subject), count in sorted(
-            derived["counts"].items(), key=lambda item: (item[0][1], int(item[0][0] or 0))
+            derived["counts"].items(), key=lambda item: (item[0][1], class_sort_key(item[0][0]))
         ):
-            entry = details.get((class_name, subject), {})
+            entry = details.get((_class_key(class_name), subject), {})
             doc.append(
                 "exam_summary",
                 {
@@ -477,7 +588,7 @@ def sync_exam_summary(customer: str, client_exams: dict | None = None) -> None:
     else:
         # No list: never touch the counts, only the teacher fields of rows that already exist.
         for row in doc.exam_summary:
-            entry = details.get((str(row.get("class") or ""), row.subject), {})
+            entry = details.get((_class_key(row.get("class")), row.subject), {})
             row.teacher_name = entry.get("teacher_name")
             row.whatsapp_no = entry.get("whatsapp_no")
             row.slot_date = entry.get("slot_date") or row.slot_date
@@ -505,6 +616,8 @@ def get_student_list_state():
         "free": derived["free"],
         "paid": derived["paid"],
         "academic_year": school.academic_year,
+        "deadline": str(registration_deadline(school) or "") or None,
+        "program": "wof" if school.is_wof else "lc" if school.is_lc else "ito",
     }
 
 
@@ -518,17 +631,19 @@ def download_school_student_template():
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
+    first, second = ("Nursery", "Senior KG") if school.is_lc else ("5", "8")
     writer.writerow(["Sr. No.", "Student Name", "Class", "Mobile No."] + [s["abbr"] for s in subjects])
-    writer.writerow(["1", "DEMO STUDENT", "5", "9999999999"] + ["Yes"] + ["No"] * (len(subjects) - 1))
-    writer.writerow(["2", "DEMO STUDENT TWO", "8", ""] + ["Yes"] * min(2, len(subjects)) + ["No"] * max(len(subjects) - 2, 0))
-    return {"filename": f"ITO_Student_List_Template_{frappe.utils.today()}.csv", "content": buffer.getvalue()}
+    writer.writerow(["1", "DEMO STUDENT", first, "9999999999"] + ["Yes"] + ["No"] * (len(subjects) - 1))
+    writer.writerow(["2", "DEMO STUDENT TWO", second, ""] + ["Yes"] * min(2, len(subjects)) + ["No"] * max(len(subjects) - 2, 0))
+    prefix = "WOF" if school.is_wof else "Little_Champ" if school.is_lc else "ITO"
+    return {"filename": f"{prefix}_Student_List_Template_{frappe.utils.today()}.csv", "content": buffer.getvalue()}
 
 
 @frappe.whitelist()
 def preview_school_student_list(filedata=None, filename=None):
     """Validate an upload and return it row by row. Saves nothing."""
     school = get_session_school()
-    parsed = parse_student_sheet(read_sheet(filedata, filename), get_subject_columns(school))
+    parsed = parse_student_sheet(read_sheet(filedata, filename), get_subject_columns(school), school.is_lc)
     return _summarise_preview(parsed, school)
 
 
@@ -541,9 +656,9 @@ def save_school_student_list(filedata=None, filename=None, replace=0):
     """
     school = get_session_school()
     if is_locked(school):
-        frappe.throw(_("The application deadline has passed, so the student list can no longer be changed."))
+        frappe.throw(_("The registration deadline has passed, so the student list can no longer be changed."))
 
-    parsed = parse_student_sheet(read_sheet(filedata, filename), get_subject_columns(school))
+    parsed = parse_student_sheet(read_sheet(filedata, filename), get_subject_columns(school), school.is_lc)
     preview = _summarise_preview(parsed, school)
     if not preview["can_save"]:
         return {"success": False, "message": _("Fix the errors in the file before saving."), "preview": preview}
@@ -552,9 +667,10 @@ def save_school_student_list(filedata=None, filename=None, replace=0):
     if existing and not cint(replace):
         return {"success": False, "needs_confirmation": True, "existing_students": existing}
 
-    if not school.custom_ito_school_code:
-        frappe.throw(_("ITO School Code is required before registering students."))
-    code = school.custom_ito_school_code.strip().upper()
+    # Little Champ schools carry their code in custom_school_code.
+    code = (school.custom_ito_school_code or (school.custom_school_code if school.is_lc else "") or "").strip().upper()
+    if not code:
+        frappe.throw(_("School Code is required before registering students."))
 
     flags = frappe.flags.ignore_permissions
     frappe.flags.ignore_permissions = True
@@ -576,9 +692,11 @@ def save_school_student_list(filedata=None, filename=None, replace=0):
             student.insert(ignore_permissions=True)
 
         sync_exam_summary(school.name)
-        if school.custom_registration_date:
-            # The fee follows the list, so a changed list reopens payment; the school submits again.
-            frappe.db.set_value("Customer", school.name, "custom_registration_date", None)
+        # The fee follows the list, so a changed list reopens payment; the school submits again.
+        # WOF keeps its own submitted date: custom_registration_date is shared with the Chitrakala form.
+        submitted_field = "custom_wof_registration_date" if school.is_wof else "custom_registration_date"
+        if school.get(submitted_field):
+            frappe.db.set_value("Customer", school.name, submitted_field, None)
     finally:
         frappe.flags.ignore_permissions = flags
 
@@ -639,7 +757,7 @@ def get_school_student_list(filters=None):
         "not_recorded": sum(1 for s in rows if s["source"] not in SOURCE_LABELS),
         "total": len(rows),
     }
-    classes = sorted({s["class"] for s in rows if s["class"]}, key=lambda value: (not value.isdigit(), int(value) if value.isdigit() else 0, value))
+    classes = sorted({s["class"] for s in rows if s["class"]}, key=class_sort_key)
     subjects = sorted({abbr for s in rows for abbr in s["subjects"]})
 
     if class_filter:
@@ -649,10 +767,12 @@ def get_school_student_list(filters=None):
     if source_filter:
         rows = [s for s in rows if (s["source"] if s["source"] in SOURCE_LABELS else SOURCE_UNKNOWN) == (source_filter if source_filter in SOURCE_LABELS else SOURCE_UNKNOWN)]
 
-    rows.sort(key=lambda s: (int(s["class"]) if s["class"].isdigit() else 99, s["student_name"]))
+    rows.sort(key=lambda s: (class_sort_key(s["class"]), s["student_name"]))
     return {
         "students": rows,
         "totals": totals,
         "shown": len(rows),
         "filters": {"classes": classes, "subjects": subjects, "sources": list(SOURCE_LABELS)},
+        # WOF has no Student Portal link yet.
+        "show_link": not school.is_wof,
     }

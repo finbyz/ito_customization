@@ -309,3 +309,205 @@ class TestSchoolStudentList(IntegrationTestCase):
         legacy.from_student_portal = 1
         legacy.insert(ignore_permissions=True)
         self.assertEqual(legacy.registration_source, "Student Portal Link")
+
+
+LC_SUBJECTS = [{"name": "Little Champ Abacus (LCAO)", "abbr": "LCAO"}]
+LC_HEADER = "Sr. No.,Student Name,Class,Mobile No.,LCAO"
+
+
+class TestLittleChampParse(IntegrationTestCase):
+    def test_kg_class_spellings_are_accepted_and_numbers_rejected(self):
+        rows = ssl.read_sheet(
+            encode(LC_HEADER, "1,A,Nursery,,Yes", "2,B,LKG,,Yes", "3,C,Sr. KG,,Yes", "4,D,ukg,,Yes", "5,E,5,,Yes"),
+            "list.csv",
+        )
+        result = ssl.parse_student_sheet(rows, LC_SUBJECTS, is_lc=True)
+        self.assertEqual([r["class"] for r in result["rows"][:4]], ["Nursery", "Junior KG", "Senior KG", "Senior KG"])
+        self.assertIn("Nursery, Junior KG or Senior KG", result["rows"][4]["errors"][0])
+
+    def test_class_order_puts_kg_before_numbers(self):
+        self.assertEqual(
+            sorted(["5", "Senior KG", "Nursery", "12", "Junior KG"], key=ssl.class_sort_key),
+            ["Nursery", "Junior KG", "Senior KG", "5", "12"],
+        )
+
+
+class TestLittleChampStudentList(IntegrationTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        frappe.set_user("Administrator")
+        cls.user = "ssl-lc-school@example.com"
+        if not frappe.db.exists("User", cls.user):
+            frappe.get_doc(
+                {"doctype": "User", "email": cls.user, "first_name": "LCSchool", "send_welcome_email": 0}
+            ).insert(ignore_permissions=True)
+        customer = frappe.get_doc(
+            {
+                "doctype": "Customer",
+                "customer_name": "SSL Test LC School",
+                "customer_type": "Company",
+                "custom_school_code": "SSLLC1",
+                "custom_is_little_champ": 1,
+                "custom_current_academic_year": "AY-2026/27",
+            }
+        )
+        customer.append("portal_users", {"user": cls.user})
+        customer.insert(ignore_permissions=True)
+        cls.school = customer.name
+
+    def setUp(self):
+        frappe.set_user("Administrator")
+        for name in frappe.get_all("Registered Students", filters={"school": self.school}, pluck="name"):
+            frappe.delete_doc("Registered Students", name, force=True, ignore_permissions=True)
+        for name in frappe.get_all("Exams Summary", filters={"customer": self.school}, pluck="name"):
+            frappe.delete_doc("Exams Summary", name, force=True, ignore_permissions=True)
+        frappe.db.set_value(
+            "Customer",
+            self.school,
+            {"custom_registration_date": None, "custom_last_date_of_reg": None, "custom_last_date_of_reg_2": None},
+        )
+        frappe.set_user(self.user)
+        patcher = patch.object(ssl, "get_subject_columns", return_value=LC_SUBJECTS)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(frappe.set_user, "Administrator")
+
+    def upload(self, *lines, replace=0):
+        return ssl.save_school_student_list(encode(LC_HEADER, *lines), "list.csv", replace)
+
+    def test_upload_builds_little_champ_summary_with_no_free_subjects(self):
+        result = self.upload("1,Tiny,Nursery,,Yes", "2,Small,UKG,,Yes", "3,Other,Nursery,,Yes")
+        self.assertTrue(result["success"], result)
+        state = ssl.get_student_list_state()
+        self.assertEqual((state["students"], state["entries"], state["free"], state["paid"]), (3, 3, 0, 3))
+
+        doc = frappe.get_doc("Exams Summary", {"customer": self.school, "is_little_champ": 1})
+        # the site's Case Format rule may re-case the class text, so compare without case
+        self.assertEqual(
+            [(r.get("class").lower(), r.no_of_students) for r in doc.exam_summary],
+            [("nursery", 2), ("senior kg", 1)],
+        )
+        # teacher details typed on the exam step survive a later sync even though the stored class was re-cased
+        ssl.sync_exam_summary(self.school, {"Little Champ Abacus (LCAO)": [{"class": "Senior KG", "teacher_name": "Ms Rao", "whatsapp": "+91-9876543210"}]})
+        ssl.sync_exam_summary(self.school, {})
+        doc.reload()
+        self.assertEqual([r.teacher_name for r in doc.exam_summary if r.get("class").lower() == "senior kg"], ["Ms Rao"])
+        listed = ssl.get_school_student_list()
+        self.assertEqual([s["class"] for s in listed["students"]], ["Nursery", "Nursery", "Senior KG"])
+
+    def test_locked_only_after_both_slots_close(self):
+        today = frappe.utils.today()
+        frappe.db.set_value(
+            "Customer",
+            self.school,
+            {
+                "custom_last_date_of_reg": frappe.utils.add_days(today, -5),
+                "custom_last_date_of_reg_2": today,
+            },
+        )
+        self.assertTrue(self.upload("1,Tiny,Nursery,,Yes")["success"])
+        frappe.db.set_value("Customer", self.school, "custom_last_date_of_reg_2", frappe.utils.add_days(today, -1))
+        with self.assertRaises(frappe.ValidationError):
+            self.upload("1,Other,Nursery,,Yes", replace=1)
+
+    def test_new_list_after_submit_reopens_registration(self):
+        self.upload("1,Tiny,Nursery,,Yes")
+        frappe.db.set_value("Customer", self.school, "custom_registration_date", frappe.utils.today())
+        self.assertTrue(self.upload("1,Tiny,Nursery,,Yes", "2,Small,Junior KG,,Yes", replace=1)["success"])
+        self.assertFalse(frappe.db.get_value("Customer", self.school, "custom_registration_date"))
+
+
+class TestWofStudentList(IntegrationTestCase):
+    """A WOF school uses the same list, with no free subjects and its own (is_wof) Exams Summary."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        frappe.set_user("Administrator")
+        cls.user = "ssl-wof-school@example.com"
+        if not frappe.db.exists("User", cls.user):
+            frappe.get_doc(
+                {"doctype": "User", "email": cls.user, "first_name": "WofSchool", "send_welcome_email": 0}
+            ).insert(ignore_permissions=True)
+        customer = frappe.get_doc(
+            {
+                "doctype": "Customer",
+                "customer_name": "SSL Test WOF School",
+                "customer_type": "Company",
+                "custom_ito_school_code": "SSLWOF1",
+                "custom_is_wof": 1,
+                "custom_current_academic_year": "AY-2026/27",
+            }
+        )
+        customer.append("portal_users", {"user": cls.user})
+        customer.insert(ignore_permissions=True)
+        cls.school = customer.name
+
+    def setUp(self):
+        frappe.set_user("Administrator")
+        for name in frappe.get_all("Registered Students", filters={"school": self.school}, pluck="name"):
+            frappe.delete_doc("Registered Students", name, force=True, ignore_permissions=True)
+        for name in frappe.get_all("Exams Summary", filters={"customer": self.school}, pluck="name"):
+            frappe.delete_doc("Exams Summary", name, force=True, ignore_permissions=True)
+        frappe.db.set_value(
+            "Customer",
+            self.school,
+            {"custom_registration_date": None, "custom_wof_registration_date": None, "custom_application_deadline": None},
+        )
+        frappe.set_user(self.user)
+        patcher = patch.object(ssl, "get_subject_columns", return_value=SUBJECTS)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(frappe.set_user, "Administrator")
+
+    def upload(self, *lines, replace=0):
+        return ssl.save_school_student_list(encode(HEADER, *lines), "list.csv", replace)
+
+    def test_upload_builds_wof_summary_with_no_free_subjects(self):
+        result = self.upload("1,Asha,5,,Yes,Yes,Yes,Yes,No", "2,Ravi,5,,Yes,No,No,No,No")
+        self.assertTrue(result["success"], result)
+        state = ssl.get_student_list_state()
+        self.assertEqual(state["program"], "wof")
+        # four subjects for Asha would give one free subject on ITO; WOF has none
+        self.assertEqual((state["students"], state["entries"], state["free"], state["paid"]), (2, 5, 0, 5))
+        self.assertEqual(ssl.get_fee_basis(self.school)["paid"], 5)
+
+        self.assertFalse(frappe.db.exists("Exams Summary", {"customer": self.school, "is_wof": 0}))
+        doc = frappe.get_doc("Exams Summary", {"customer": self.school, "is_wof": 1})
+        self.assertEqual(
+            sorted((r.subject, r.get("class"), r.no_of_students) for r in doc.exam_summary)[0],
+            ("Commerce Olympiad (CIO)", "5", 1),
+        )
+        self.assertEqual(sum(r.no_of_students for r in doc.exam_summary), 5)
+
+    def test_wof_submit_counts_come_from_the_list(self):
+        from ito_customization.ito_customization import api
+
+        self.upload("1,Asha,5,,Yes,No,No,No,No")
+        # the browser claims 999 students; the stored count still comes from the list
+        result = api.save_wof_school_registration_step(
+            3, frappe.as_json({"exams": {"Hindi Olympiad (NHO)": [{"class": "5", "students": "999", "teacher_name": "Mr Shah", "whatsapp": "+91-9876543210"}]}})
+        )
+        self.assertTrue(result["success"], result)
+        self.assertEqual(result["customer"], self.school)
+        doc = frappe.get_doc("Exams Summary", {"customer": self.school, "is_wof": 1})
+        self.assertEqual([(r.no_of_students, r.teacher_name) for r in doc.exam_summary], [(1, "Mr Shah")])
+
+    def test_new_list_reopens_wof_registration_but_not_chitrakala(self):
+        self.upload("1,Asha,5,,Yes,No,No,No,No")
+        today = frappe.utils.today()
+        frappe.db.set_value(
+            "Customer", self.school, {"custom_registration_date": today, "custom_wof_registration_date": today}
+        )
+        self.assertTrue(self.upload("1,Asha,5,,Yes,Yes,No,No,No", replace=1)["success"])
+        self.assertFalse(frappe.db.get_value("Customer", self.school, "custom_wof_registration_date"))
+        # custom_registration_date is shared with the Chitrakala form and stays
+        self.assertTrue(frappe.db.get_value("Customer", self.school, "custom_registration_date"))
+
+    def test_locked_after_application_deadline(self):
+        frappe.db.set_value(
+            "Customer", self.school, "custom_application_deadline", frappe.utils.add_days(frappe.utils.today(), -1)
+        )
+        with self.assertRaises(frappe.ValidationError):
+            self.upload("1,Asha,5,,Yes,No,No,No,No")

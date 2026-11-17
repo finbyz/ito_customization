@@ -82,7 +82,7 @@ def create_or_update_manual_registration_invoice(
         if form_name in (ITO_PAGE, "WOF Olympiad")
         else 0
     )
-    if form_name == ITO_PAGE:
+    if form_name in (ITO_PAGE, "WOF Olympiad"):
         from ito_customization.ito_customization import school_student_list
 
         basis = school_student_list.get_fee_basis(customer)
