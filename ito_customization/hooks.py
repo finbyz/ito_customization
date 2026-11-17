@@ -24,6 +24,7 @@ fixtures = [
     {"dt": "Custom Field", "filters": [["module", "in", ["ITO Customization"]]]},
     {"dt": "Property Setter", "filters": [["module", "in", ["ITO Customization"]]]},
     {"dt": "Case Format Settings"},
+    {"dt": "Print Format", "filters": [["name", "in", ["ITO E-Pass"]]]},
 ]
 
 after_migrate = "ito_customization.ito_customization.student_agent_setup.ensure_student_list_agent"
