@@ -28,7 +28,6 @@ def run():
 			continue
 		try:
 			generate_pdf_for(doc, LEGACY_OUTPUT, event)
-			frappe.db.commit()
 		except Exception:
 			frappe.db.rollback()
 			frappe.log_error(title=f"E-Pass PDF backfill failed for {name}")
