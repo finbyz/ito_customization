@@ -19,7 +19,7 @@ import re
 from collections import defaultdict
 
 import frappe
-from ito_customization.ito_customization.academic_year import normalize_academic_year
+from ito_customization.ito_customization.academic_year import DEFAULT_ACADEMIC_YEAR, normalize_academic_year
 from frappe import _
 from frappe.utils import cint
 
@@ -117,11 +117,20 @@ def get_session_school() -> frappe._dict:
 
 
 def resolve_academic_year(raw_year: str | None) -> str | None:
-    year = normalize_academic_year(raw_year, default=None)
-    if year and frappe.db.exists("School Academic Year", year):
-        return year
-    # Same fallback as the Student List page: the newest academic year on record.
-    return frappe.db.get_value("School Academic Year", {}, "name", order_by="creation desc")
+    """The school's academic year, or the portal default when the school has none.
+
+    WOF registration does not set Customer.custom_current_academic_year, so the fallback matters.
+    It used to be the newest School Academic Year on record, which is often next year's, with no
+    exam schedule yet: the subject list then came back empty.
+    """
+    for candidate in (raw_year, DEFAULT_ACADEMIC_YEAR):
+        year = normalize_academic_year(candidate, default=None)
+        if year and frappe.db.exists("School Academic Year", year):
+            return year
+    # Last resort: the year of the newest submitted exam schedule, then the newest year on record.
+    return frappe.db.get_value(
+        "Yearly Exam Date", {"docstatus": 1}, "academic_year", order_by="creation desc"
+    ) or frappe.db.get_value("School Academic Year", {}, "name", order_by="creation desc")
 
 
 def registration_deadline(school):
@@ -627,7 +636,11 @@ def download_school_student_template():
     school = get_session_school()
     subjects = get_subject_columns(school)
     if not subjects:
-        frappe.throw(_("No subjects are configured for this academic year."))
+        frappe.throw(
+            _("No subjects are set up for academic year {0}. Check the submitted Yearly Exam Date for this year.").format(
+                school.academic_year or _("(not set)")
+            )
+        )
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
