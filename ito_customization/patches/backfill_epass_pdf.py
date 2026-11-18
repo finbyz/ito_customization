@@ -26,8 +26,12 @@ def run():
 		event = event_for(doc)
 		if not output_sent(doc, LEGACY_OUTPUT, event):
 			continue
+		# A savepoint per record: a failure undoes only that record, and the job commits the rest at the end.
+		frappe.db.savepoint("epass_pdf")
 		try:
 			generate_pdf_for(doc, LEGACY_OUTPUT, event)
 		except Exception:
-			frappe.db.rollback()
+			frappe.db.rollback(save_point="epass_pdf")
 			frappe.log_error(title=f"E-Pass PDF backfill failed for {name}")
+		else:
+			frappe.db.release_savepoint("epass_pdf")
