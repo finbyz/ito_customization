@@ -43,6 +43,9 @@ SKIP_FIELDNAMES = {
     "website",
     "password",
     "username",
+    # Class names are codes ("Junior KG", "Senior KG"); title case turned them into "Junior Kg",
+    # which no class dropdown matches.
+    "class",
 }
 # Framework modules whose doctypes (and their child tables) must never be re-cased.
 SKIP_MODULES = {

@@ -14,3 +14,4 @@ ito_customization.patches.unflag_registration_link_fields
 ito_customization.patches.setup_event_outputs
 ito_customization.patches.link_event_web_form
 ito_customization.patches.backfill_epass_pdf
+ito_customization.patches.fix_lc_class_case
