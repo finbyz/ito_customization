@@ -136,7 +136,7 @@
    "fieldtype": "Attach",
    "label": "E-Pass PDF",
    "read_only": 1,
-   "description": "Saved each time the E-Pass is sent or generated. Download it from here to share it by hand, for example if the email address was wrong."
+   "description": "Made when the registration is approved, and updated automatically each time it is saved. Download it from here to share it by hand, for example if the email address was wrong."
   },
   {
    "fieldname": "status",
@@ -215,7 +215,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-18 12:00:00.000000",
+ "modified": "2026-11-18 17:00:00.000000",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Web Forms Registration",

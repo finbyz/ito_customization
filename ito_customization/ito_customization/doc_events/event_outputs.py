@@ -13,6 +13,9 @@ Templates get these variables:
   output     name of the output being sent, e.g. "E-Pass"
 """
 
+import re
+import unicodedata
+
 import frappe
 from frappe.utils import cint, get_url, getdate, now_datetime
 
@@ -193,12 +196,15 @@ def _enqueue(docname, output, event, force):
 def queue_outputs_for_trigger(doc, trigger):
 	"""Queue every enabled output of the registration's event whose 'Send When' is `trigger`."""
 	event = event_for(doc)
+	queued = []
 	for row in get_outputs(event):
 		if row.send_on != trigger or block_reason(doc, row, check_permission=False):
 			continue
 		if output_sent(doc, row.output_name, event):
 			continue
 		_enqueue(doc.name, row.output_name, event, force=False)
+		queued.append(row.output_name)
+	return queued
 
 
 def send_output(docname, output, event=None, force=False):
@@ -218,9 +224,9 @@ def send_output(docname, output, event=None, force=False):
 	subject, message = render_email(row, ctx)
 
 	attachments = []
-	pdf, file_url = _make_pdf(doc, row), None
+	pdf = _make_pdf(doc, row)
 	if pdf:
-		file_url = _save_pdf(doc, row.output_name, pdf)
+		_save_pdf(doc, row.output_name, pdf)
 		if cint(row.attach_pdf):
 			attachments.append(pdf)
 	if cint(row.attach_qr) and ctx["page_url"]:
@@ -234,7 +240,7 @@ def send_output(docname, output, event=None, force=False):
 		reference_doctype=DOCTYPE,
 		reference_name=doc.name,
 	)
-	_log_sent(doc, row.output_name, event, file_url)
+	_log_sent(doc, row.output_name, event)
 
 
 def pdf_field(output):
@@ -243,13 +249,21 @@ def pdf_field(output):
 	return f"{frappe.scrub(output)}_pdf"
 
 
+def pdf_file_name(doc, output):
+	"""E-Pass-Ravi-Kumar-WF-0009: easy to recognise once shared. The record ID keeps it unique."""
+	# keep letters, vowel signs and digits of any script (e.g. Hindi), everything else becomes "-"
+	chars = (c if unicodedata.category(c)[0] in "LMN" else "-" for c in doc.get("full_name") or "")
+	person = re.sub(r"-+", "-", "".join(chars)).strip("-")[:40]
+	return "-".join(part for part in (output, person, doc.name) if part)
+
+
 def _make_pdf(doc, row):
 	"""{"fname", "fcontent"} of the output's PDF, or None if it has no print format or fails."""
 	if not row.print_format:
 		return None
 	try:
 		pdf = frappe.attach_print(
-			DOCTYPE, doc.name, print_format=row.print_format, file_name=f"{row.output_name}-{doc.name}"
+			DOCTYPE, doc.name, print_format=row.print_format, file_name=pdf_file_name(doc, row.output_name)
 		)
 	except Exception:
 		frappe.log_error(title=f"{row.output_name} PDF could not be generated for {doc.name}")
@@ -258,8 +272,8 @@ def _make_pdf(doc, row):
 
 
 def _save_pdf(doc, output, pdf):
-	"""Keep the PDF as a private file on the registration, and point the output's PDF field at it.
-	Returns the file URL."""
+	"""Keep the PDF as a private file on the registration, point the output's PDF field at it, and
+	delete the output's older PDFs, so staff only ever see the latest one. Returns the file URL."""
 	field = pdf_field(output)
 	has_field = frappe.get_meta(DOCTYPE).has_field(field)
 	file = frappe.get_doc(
@@ -274,36 +288,31 @@ def _save_pdf(doc, output, pdf):
 		}
 	).insert(ignore_permissions=True)
 
-	# Same PDF as before: Frappe reuses the file on disk, so drop the older File record for it.
-	for name in frappe.get_all(
-		"File",
-		filters={
-			"file_url": file.file_url,
-			"attached_to_doctype": DOCTYPE,
-			"attached_to_name": doc.name,
-			"name": ["!=", file.name],
-		},
-		pluck="name",
-	):
-		frappe.delete_doc("File", name, ignore_permissions=True, force=True)
-
 	if has_field:
-		old = doc.get(field)
 		frappe.db.set_value(DOCTYPE, doc.name, field, file.file_url, update_modified=False)
 		doc.set(field, file.file_url)
-		_drop_unused_file(doc.name, old, keep=file.file_url)
+	delete_old_pdfs(doc.name, output, keep=file.name)
+	# Anyone with this registration open gets the new file without reloading (see web_forms_registration.js)
+	frappe.publish_realtime(
+		"output_pdf_updated",
+		{"name": doc.name, "output": output, "field": field if has_field else None, "file_url": file.file_url},
+		doctype=DOCTYPE,
+		docname=doc.name,
+		after_commit=True,
+	)
 	return file.file_url
 
 
-def _drop_unused_file(docname, file_url, keep):
-	"""Delete an older PDF that nothing points to any more (sent PDFs stay, as the Sent Outputs log links them)."""
-	if not file_url or file_url == keep:
-		return
-	if frappe.db.exists("ITO Output Log", {"parent": docname, "parenttype": DOCTYPE, "pdf": file_url}):
-		return
-	for name in frappe.get_all(
-		"File", filters={"file_url": file_url, "attached_to_doctype": DOCTYPE, "attached_to_name": docname}, pluck="name"
-	):
+def delete_old_pdfs(docname, output, keep):
+	"""Delete the PDFs of `output` on this registration made before the File `keep`. A file on disk that
+	the kept PDF shares (same content) stays, Frappe only removes it when nothing uses it."""
+	# Only older ones: if two jobs save a PDF at the same moment, the newest still survives.
+	created = frappe.db.get_value("File", keep, "creation")
+	base = {"attached_to_doctype": DOCTYPE, "attached_to_name": docname, "name": ["!=", keep], "creation": ["<=", created]}
+	old = set(frappe.get_all("File", filters={**base, "attached_to_field": pdf_field(output)}, pluck="name"))
+	# Older PDFs may have no field set: match them by name, e.g. E-Pass-WF-0002.pdf, E-Pass-Ravi-Kumar-WF-0002.pdf
+	old |= set(frappe.get_all("File", filters={**base, "file_name": ["like", f"{output}-%.pdf"]}, pluck="name"))
+	for name in old:
 		frappe.delete_doc("File", name, ignore_permissions=True, force=True)
 
 
@@ -324,7 +333,42 @@ def generate_pdf_for(doc, output, event=None):
 	return _save_pdf(doc, row.output_name, pdf)
 
 
-def _log_sent(doc, output, event, file_url=None):
+def refresh_pdfs(docname, skip=None):
+	"""Background job: make or remake the registration's PDFs from its current details. Sends nothing.
+	`skip`: outputs an email job is already making the PDF for."""
+	doc = frappe.get_doc(DOCTYPE, docname)
+	for row in pdf_outputs(doc):
+		if row.output_name in (skip or []):
+			continue
+		pdf = _make_pdf(doc, row)
+		if pdf:
+			_save_pdf(doc, row.output_name, pdf)
+
+
+def pdf_outputs(doc):
+	"""Outputs of the registration's event that have a PDF it may have now (approved, if required)."""
+	return [
+		row
+		for row in get_outputs(event_for(doc))
+		if row.print_format and (is_approved(doc) or not cint(row.requires_approval))
+	]
+
+
+def queue_pdf_refresh(doc, skip=None):
+	if not [row for row in pdf_outputs(doc) if row.output_name not in (skip or [])]:
+		return
+	frappe.enqueue(
+		"ito_customization.ito_customization.doc_events.event_outputs.refresh_pdfs",
+		queue="short",
+		docname=doc.name,
+		skip=skip or [],
+		enqueue_after_commit=True,
+		job_id=f"refresh_pdfs::{doc.name}",
+		deduplicate=True,
+	)
+
+
+def _log_sent(doc, output, event):
 	log = frappe.get_doc(
 		{
 			"doctype": "ITO Output Log",
@@ -337,7 +381,6 @@ def _log_sent(doc, output, event, file_url=None):
 			"recipient": doc.email,
 			"sent_on": now_datetime(),
 			"sent_by": frappe.session.user,
-			"pdf": file_url,
 		}
 	)
 	log.db_insert()
@@ -361,19 +404,17 @@ def get_send_options(docname=None):
 		frappe.has_permission(DOCTYPE, "read", throw=True)
 		event = get_active_event()
 	rows = get_outputs(event)
+	meta = frappe.get_meta(DOCTYPE)
 	return {
 		"event": event,
 		"outputs": [row.output_name for row in rows],
-		"pdf_outputs": [row.output_name for row in rows if row.print_format],
+		# output -> its PDF field, for the Download buttons
+		"pdf_fields": {
+			row.output_name: pdf_field(row.output_name)
+			for row in rows
+			if row.print_format and meta.has_field(pdf_field(row.output_name))
+		},
 	}
-
-
-@frappe.whitelist()
-def generate_pdf(docname, output):
-	"""Make (or remake) an output's PDF and save it on the registration, without sending an email."""
-	doc = frappe.get_doc(DOCTYPE, docname)
-	doc.check_permission("write")
-	return generate_pdf_for(doc, output)
 
 
 @frappe.whitelist()

@@ -12,6 +12,7 @@ frappe.ui.form.on("Web Forms Registration", {
 		render_linked_records(frm);
 
 		add_send_buttons(frm);
+		listen_for_pdf(frm);
 	},
 });
 
@@ -29,30 +30,32 @@ function add_send_buttons(frm) {
 				const label = sent ? __("Resend {0}", [output]) : __("Send {0}", [output]);
 				frm.add_custom_button(label, () => confirm_send(frm, output, sent), __("Send"));
 			});
-			((r.message && r.message.pdf_outputs) || []).forEach((output) => {
-				frm.add_custom_button(__("Generate {0} PDF", [output]), () => generate_pdf(frm, output), __("PDF"));
+			// "Download E-Pass" once its PDF exists (made on approval, updated on every save)
+			Object.entries((r.message && r.message.pdf_fields) || {}).forEach(([output, field]) => {
+				if (frm.doc[field]) {
+					frm.add_custom_button(__("Download {0}", [output]), () => window.open(frm.doc[field], "_blank"));
+				}
 			});
 		},
 	});
 }
 
-// Make the PDF without sending an email, e.g. to download it and share it by hand.
-function generate_pdf(frm, output) {
-	frappe.call({
-		method: `${WFR_OUTPUTS_API}.generate_pdf`,
-		args: { docname: frm.doc.name, output },
-		freeze: true,
-		freeze_message: __("Making {0} PDF...", [output]),
-		callback(r) {
-			if (r.exc || !r.message) return;
-			frm.reload_doc();
-			frappe.msgprint({
-				title: __("{0} PDF ready", [output]),
-				indicator: "green",
-				message: __("It is saved on this record. No email was sent."),
-				primary_action: { label: __("Download"), action: () => window.open(r.message) },
+// The PDF is made in the background a few seconds after a save. Show the new one as soon as it is
+// ready, so nobody downloads or shares the old one.
+function listen_for_pdf(frm) {
+	if (frm._pdf_listener) return;
+	frm._pdf_listener = true;
+	frappe.realtime.on("output_pdf_updated", (data) => {
+		if (!data || frm.doctype !== "Web Forms Registration" || frm.doc.name !== data.name) return;
+		if (frm.is_dirty()) {
+			frappe.show_alert({
+				message: __("{0} PDF was updated. Save or reload to see the new one.", [data.output]),
+				indicator: "orange",
 			});
-		},
+			return;
+		}
+		frm.reload_doc();
+		frappe.show_alert({ message: __("{0} PDF updated", [data.output]), indicator: "green" });
 	});
 }
 

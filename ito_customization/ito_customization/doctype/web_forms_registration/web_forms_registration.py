@@ -18,6 +18,21 @@ class WebFormsRegistration(Document):
 			self.mobile_number = self.mobile_number.strip()
 			if _mobile_exists(self.mobile_number, exclude=self.name):
 				frappe.throw(MOBILE_ALREADY_REGISTERED_MSG, title="Already Registered")
+		self._keep_system_fields()
+
+	def _keep_system_fields(self):
+		"""Fields the email job sets are kept as they are in the database.
+
+		The job runs after the save that approves a registration, so the open form still holds the
+		values from before it. Saving that form again would clear "E-Pass PDF", "Mail Sent" and the
+		Sent Outputs log, and the next send would then add a second PDF.
+		"""
+		before = self.get_doc_before_save()
+		if not before:
+			return
+		for field in SYSTEM_FIELDS + _pdf_fields():
+			self.set(field, before.get(field))
+		self.set("output_log", [row.as_dict() for row in before.get("output_log") or []])
 
 	def before_insert(self):
 		if not self.epass_token:
@@ -38,11 +53,23 @@ class WebFormsRegistration(Document):
 		from ito_customization.ito_customization.doc_events.event_outputs import (
 			is_approved,
 			queue_outputs_for_trigger,
+			queue_pdf_refresh,
 		)
 
-		if is_approved(previous) or not is_approved(self):
-			return
-		queue_outputs_for_trigger(self, "On Approval")
+		sending = []
+		if not is_approved(previous) and is_approved(self):
+			sending = queue_outputs_for_trigger(self, "On Approval")
+		# The PDF always follows the saved details (no email). Outputs being emailed make their own PDF.
+		queue_pdf_refresh(self, skip=sending)
+
+
+SYSTEM_FIELDS = ["mail_sent", "epass_email_sent", "epass_token"]
+
+
+def _pdf_fields():
+	"""Attach fields named <output>_pdf (e_pass_pdf, ...), filled by the output engine."""
+	meta = frappe.get_meta("Web Forms Registration")
+	return [f.fieldname for f in meta.fields if f.fieldtype == "Attach" and f.fieldname.endswith("_pdf")]
 
 
 def _email_exists(email, exclude=None):

@@ -4,7 +4,7 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "links": [],
- "modified": "2026-11-18 12:00:00.000000",
+ "modified": "2026-11-18 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "owner": "Administrator",
@@ -23,7 +23,7 @@
    "label": "Output",
    "in_list_view": 1,
    "read_only": 1,
-   "columns": 1
+   "columns": 2
   },
   {
    "fieldname": "event",
@@ -32,7 +32,7 @@
    "options": "ITO Event",
    "in_list_view": 1,
    "read_only": 1,
-   "columns": 2
+   "columns": 3
   },
   {
    "fieldname": "recipient",
@@ -58,14 +58,6 @@
    "in_list_view": 1,
    "read_only": 1,
    "columns": 1
-  },
-  {
-   "fieldname": "pdf",
-   "fieldtype": "Attach",
-   "label": "PDF",
-   "in_list_view": 1,
-   "read_only": 1,
-   "columns": 2
   }
  ],
  "field_order": [
@@ -73,7 +65,6 @@
   "event",
   "recipient",
   "sent_on",
-  "sent_by",
-  "pdf"
+  "sent_by"
  ]
 }
