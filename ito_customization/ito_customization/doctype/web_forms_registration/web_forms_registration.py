@@ -22,17 +22,27 @@ class WebFormsRegistration(Document):
 	def before_insert(self):
 		if not self.epass_token:
 			self.epass_token = frappe.generate_hash(length=24)
+		# set only by the web form's submit request (frappe.website...web_form.accept)
+		if not self.web_form and frappe.form_dict.get("web_form"):
+			self.web_form = frappe.form_dict.get("web_form")
+		if not self.event:
+			from ito_customization.ito_customization.doc_events.event_outputs import get_event_for_web_form
+
+			self.event = get_event_for_web_form(self.web_form)
 
 	def on_update(self):
 		previous = self.get_doc_before_save()
 		if not previous:
 			return
 
-		from ito_customization.ito_customization.doc_events.epass import is_approved, queue_epass
+		from ito_customization.ito_customization.doc_events.event_outputs import (
+			is_approved,
+			queue_outputs_for_trigger,
+		)
 
 		if is_approved(previous) or not is_approved(self):
 			return
-		queue_epass(self)
+		queue_outputs_for_trigger(self, "On Approval")
 
 
 def _email_exists(email, exclude=None):
@@ -85,7 +95,9 @@ def send_bulk_email(names, email_template):
 			skipped += 1
 			continue
 
-		rendered = template.get_formatted_email({"doc": doc.as_dict()})
+		from ito_customization.ito_customization.doc_events.event_outputs import event_context
+
+		rendered = template.get_formatted_email({"doc": doc.as_dict(), "event": event_context(doc)})
 		subject, message = rendered["subject"], rendered["message"]
 
 		frappe.sendmail(

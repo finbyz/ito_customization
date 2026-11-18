@@ -46,36 +46,61 @@ frappe.listview_settings["Web Forms Registration"] = {
 			d.show();
 		});
 
-		listview.page.add_inner_button(__("Resend E-Pass Email"), () => {
-			const names = listview.get_checked_items(true);
-			if (!names.length) {
-				frappe.msgprint(__("Please select at least one record."));
-				return;
-			}
-			frappe.confirm(__("Resend the E-Pass email for {0} selected record(s)?", [names.length]), () => {
-				frappe.call({
-					method: "ito_customization.ito_customization.doc_events.epass.bulk_resend_epass_email",
-					args: { names },
-					freeze: true,
-					freeze_message: __("Queuing emails..."),
-					callback(r) {
-						if (r.exc) return;
-						show_resend_result(r.message || {});
-						listview.clear_checked_items();
-						listview.refresh();
-					},
-				});
-			});
-		});
+		add_bulk_send_buttons(listview);
 	},
 };
 
-// Short advice shown under each skip reason (keys match _resend_block_reason in epass.py).
+const WFR_LIST_OUTPUTS_API = "ito_customization.ito_customization.doc_events.event_outputs";
+
+// One "Send" menu item per enabled output of the Active event (set up on the ITO Event).
+// Each selected record is sent using its own event's setup.
+function add_bulk_send_buttons(listview) {
+	const add = (outputs) =>
+		outputs.forEach((output) =>
+			listview.page.add_inner_button(__("Send {0}", [output]), () => bulk_send(listview, output), __("Send"))
+		);
+	if (listview.wfr_outputs) {
+		add(listview.wfr_outputs);
+		return;
+	}
+	frappe.call({
+		method: `${WFR_LIST_OUTPUTS_API}.get_send_options`,
+		callback(r) {
+			listview.wfr_outputs = (r.message && r.message.outputs) || [];
+			add(listview.wfr_outputs);
+		},
+	});
+}
+
+function bulk_send(listview, output) {
+	const names = listview.get_checked_items(true);
+	if (!names.length) {
+		frappe.msgprint(__("Please select at least one record."));
+		return;
+	}
+	frappe.confirm(__("Send {0} to {1} selected record(s)? Records that already got it are sent again.", [output, names.length]), () => {
+		frappe.call({
+			method: `${WFR_LIST_OUTPUTS_API}.bulk_send`,
+			args: { names, output },
+			freeze: true,
+			freeze_message: __("Queuing emails..."),
+			callback(r) {
+				if (r.exc) return;
+				show_resend_result(r.message || {}, output);
+				listview.clear_checked_items();
+				listview.refresh();
+			},
+		});
+	});
+}
+
+// Short advice shown under each skip reason (keys match block_reason in event_outputs.py).
 const WFR_RESEND_HINTS = {
 	"Registration is not approved": __("Set the status to Approve, then resend."),
 	"No email address": __("Add an email address on the record, then resend."),
 	"Not permitted": __("You need write access to these records."),
 	"Not found": __("These records may have been deleted."),
+	"Output not set up for this event": __("Add this output to the record's ITO Event, or change the record's event."),
 };
 
 // Styles live with the dialog, so a cached stylesheet can never leave it unstyled.
@@ -106,9 +131,9 @@ const WFR_RESEND_CSS = `
 .wfr-rs-ghint::before { content: "\\2192  "; }
 `;
 
-function show_resend_result({ queued = [], skipped = [] }) {
+function show_resend_result({ queued = [], skipped = [] }, output) {
 	if (!skipped.length) {
-		frappe.show_alert({ message: __("{0} E-Pass email(s) queued", [queued.length]), indicator: "green" });
+		frappe.show_alert({ message: __("{0} {1} email(s) queued", [queued.length, output]), indicator: "green" });
 		return;
 	}
 	const esc = frappe.utils.escape_html;

@@ -10,6 +10,8 @@
   "linked_records_section",
   "linked_records_html",
   "section_break_zvrv",
+  "event",
+  "web_form",
   "full_name",
   "school_name",
   "school_code",
@@ -26,13 +28,33 @@
   "school_state",
   "photo",
   "epass_email_sent",
+  "e_pass_pdf",
   "attendance_section",
   "event_attendance",
   "attendance_marked_on",
   "attendance_marked_by",
-  "name1"
+  "name1",
+  "outputs_sent_section",
+  "output_log"
  ],
  "fields": [
+  {
+   "fieldname": "event",
+   "fieldtype": "Link",
+   "label": "Event",
+   "options": "ITO Event",
+   "in_standard_filter": 1,
+   "in_list_view": 0,
+   "description": "Filled in with the Active event when the registration is created."
+  },
+  {
+   "fieldname": "web_form",
+   "fieldtype": "Link",
+   "label": "Web Form",
+   "options": "Web Form",
+   "read_only": 1,
+   "description": "The form this registration was sent from. Blank if it was created in the desk."
+  },
   {
    "fieldname": "full_name",
    "fieldtype": "Data",
@@ -110,6 +132,13 @@
    "read_only": 1
   },
   {
+   "fieldname": "e_pass_pdf",
+   "fieldtype": "Attach",
+   "label": "E-Pass PDF",
+   "read_only": 1,
+   "description": "Saved each time the E-Pass is sent or generated. Download it from here to share it by hand, for example if the email address was wrong."
+  },
+  {
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
@@ -155,6 +184,19 @@
    "label": "Name"
   },
   {
+   "fieldname": "outputs_sent_section",
+   "fieldtype": "Section Break",
+   "label": "Sent Outputs",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "output_log",
+   "fieldtype": "Table",
+   "label": "Sent Outputs",
+   "options": "ITO Output Log",
+   "read_only": 1
+  },
+  {
    "depends_on": "eval:!doc.__islocal",
    "fieldname": "linked_records_section",
    "fieldtype": "Section Break",
@@ -173,7 +215,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-11 18:01:26.777727",
+ "modified": "2026-11-18 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "Web Forms Registration",

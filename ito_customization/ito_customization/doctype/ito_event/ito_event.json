@@ -1,0 +1,229 @@
+{
+ "actions": [],
+ "creation": "2026-11-17 14:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "links": [],
+ "modified": "2026-11-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "owner": "Administrator",
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "name": "ITO Event",
+ "autoname": "field:event_name",
+ "naming_rule": "By fieldname",
+ "title_field": "event_name",
+ "track_changes": 1,
+ "show_title_field_in_link": 0,
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1
+  },
+  {
+   "role": "ITO Event Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1
+  }
+ ],
+ "fields": [
+  {
+   "fieldname": "overview_section",
+   "fieldtype": "Section Break",
+   "label": "Overview",
+   "depends_on": "eval:!doc.__islocal"
+  },
+  {
+   "fieldname": "overview_html",
+   "fieldtype": "HTML",
+   "label": "Overview"
+  },
+  {
+   "fieldname": "event_section",
+   "fieldtype": "Section Break",
+   "label": "Event"
+  },
+  {
+   "fieldname": "event_name",
+   "fieldtype": "Data",
+   "label": "Event Name",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "organiser_name",
+   "fieldtype": "Data",
+   "label": "Organiser Name",
+   "default": "Indian Talent Olympiad",
+   "description": "Small heading shown above the event name."
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nActive\nClosed",
+   "default": "Draft",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Only one event can be Active. New registrations are linked to the Active event."
+  },
+  {
+   "fieldname": "web_forms",
+   "fieldtype": "Table MultiSelect",
+   "label": "Web Forms",
+   "options": "ITO Event Web Form",
+   "description": "Registration forms that belong to this event. A registration sent from one of these forms is linked to this event."
+  },
+  {
+   "fieldname": "column_break_event",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "event_date",
+   "fieldtype": "Date",
+   "label": "Event Date",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "start_time",
+   "fieldtype": "Time",
+   "label": "Start Time"
+  },
+  {
+   "fieldname": "end_time",
+   "fieldtype": "Time",
+   "label": "End Time"
+  },
+  {
+   "fieldname": "venue_section",
+   "fieldtype": "Section Break",
+   "label": "Venue"
+  },
+  {
+   "fieldname": "venue_name",
+   "fieldtype": "Data",
+   "label": "Venue Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "venue_address",
+   "fieldtype": "Small Text",
+   "label": "Venue Address"
+  },
+  {
+   "fieldname": "column_break_venue",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "venue_map_url",
+   "fieldtype": "Data",
+   "label": "Google Maps Link",
+   "options": "URL",
+   "description": "Leave blank to hide the \"Open in Google Maps\" link."
+  },
+  {
+   "fieldname": "branding_section",
+   "fieldtype": "Section Break",
+   "label": "Branding",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "logo",
+   "fieldtype": "Attach Image",
+   "label": "Logo"
+  },
+  {
+   "fieldname": "column_break_brand",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "brand_colour",
+   "fieldtype": "Color",
+   "label": "Brand Colour",
+   "default": "#2f7f73"
+  },
+  {
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "label": "Extra Details and Notes",
+   "description": "Any text the templates need, such as the entry note, dress code or reporting time. Add a row here, then use it in a template as {{ event.details.<key> }}."
+  },
+  {
+   "fieldname": "details",
+   "fieldtype": "Table",
+   "label": "Details",
+   "options": "ITO Event Detail"
+  },
+  {
+   "fieldname": "outputs_section",
+   "fieldtype": "Section Break",
+   "label": "Outputs",
+   "description": "Each row is something this event sends to registrations, for example the E-Pass. Pick its email template and print format."
+  },
+  {
+   "fieldname": "outputs",
+   "fieldtype": "Table",
+   "label": "Outputs",
+   "options": "ITO Event Output"
+  },
+  {
+   "fieldname": "guide_section",
+   "fieldtype": "Section Break",
+   "label": "Template Placeholders",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "placeholder_guide",
+   "fieldtype": "HTML",
+   "label": "Placeholder Guide"
+  }
+ ],
+ "field_order": [
+  "overview_section",
+  "overview_html",
+  "event_section",
+  "event_name",
+  "organiser_name",
+  "status",
+  "web_forms",
+  "column_break_event",
+  "event_date",
+  "start_time",
+  "end_time",
+  "venue_section",
+  "venue_name",
+  "venue_address",
+  "column_break_venue",
+  "venue_map_url",
+  "branding_section",
+  "logo",
+  "column_break_brand",
+  "brand_colour",
+  "details_section",
+  "details",
+  "outputs_section",
+  "outputs",
+  "guide_section",
+  "placeholder_guide"
+ ]
+}

@@ -65,11 +65,12 @@
 	.ep-login { display: block; text-align: center; padding: 10px; font-size: 12px; color: #5f6368; }
 	.ep-foot { padding: 14px 22px 20px; font-size: 12px; color: #5f6368; text-align: center; line-height: 1.5; }
 </style>
+{% if event.brand_colour %}<style>.ep-head, .ep-fab { background: {{ event.brand_colour }}; } .ep-map { color: {{ event.brand_colour }}; }</style>{% endif %}
 
 <div class="ep-wrap">
 	<div class="ep-card">
 		<div class="ep-head">
-			<div class="ep-org">Indian Talent Olympiad</div>
+			<div class="ep-org">{{ organiser_name }}</div>
 			<div class="ep-event">{{ event_name }}</div>
 			<div class="ep-tag">E-PASS</div>
 		</div>
@@ -85,8 +86,8 @@
 				<div class="ep-row"><span>School Code</span><b>{{ d.school_code }}</b></div>
 				<div class="ep-row"><span>City</span><b>{{ d.school_city }}</b></div>
 				<div class="ep-row"><span>State</span><b>{{ d.school_state }}</b></div>
-				<div class="ep-row"><span>Date</span><b>23 Nov 2026, 10:00 AM &ndash; 1:00 PM</b></div>
-				<div class="ep-row ep-venue"><span>Venue</span><b>{{ venue_name }}<br><span class="ep-addr">{{ venue_address }}</span>{% if not is_staff %}<br><a class="ep-map" href="{{ venue_map_url }}" target="_blank" rel="noopener">Open in Google Maps</a>{% endif %}</b></div>
+				<div class="ep-row"><span>Date</span><b>{{ event_when }}</b></div>
+				<div class="ep-row ep-venue"><span>Venue</span><b>{{ venue_name }}<br><span class="ep-addr">{{ venue_address }}</span>{% if not is_staff and venue_map_url %}<br><a class="ep-map" href="{{ venue_map_url }}" target="_blank" rel="noopener">Open in Google Maps</a>{% endif %}</b></div>
 				<!-- <div class="ep-row"><span>Pass No.</span><b>{{ d.name }}</b></div> -->
 			</div>
 		</div>
@@ -164,7 +165,7 @@
 		{% else %}
 		<a class="ep-login" href="{{ login_url }}">Event staff? Log in</a>
 		{% endif %}
-		<div class="ep-foot">Entry is strictly for the invited individual and is subject to verification at the venue. No accompanying persons are permitted.</div>
+		{% if entry_note %}<div class="ep-foot">{{ entry_note }}</div>{% endif %}
 		{% else %}
 		<div class="ep-bad">&#10006; {{ reason }}<br>Please contact the event organisers if you think this is a mistake.</div>
 		{% endif %}

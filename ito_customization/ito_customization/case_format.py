@@ -26,6 +26,12 @@ SYSTEM_SKIP = {
     "Activity Log",
     "Access Log",
     "Deleted Document",
+    # Event text is printed exactly as typed (e.g. "ITO", "9c"), and detail keys are used in templates.
+    "ITO Event",
+    "ITO Event Detail",
+    "ITO Event Output",
+    "ITO Output Log",
+    "ITO Event Web Form",
 }
 SKIP_FIELDNAMES = {
     "name",

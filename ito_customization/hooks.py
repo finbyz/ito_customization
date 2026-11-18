@@ -24,7 +24,6 @@ fixtures = [
     {"dt": "Custom Field", "filters": [["module", "in", ["ITO Customization"]]]},
     {"dt": "Property Setter", "filters": [["module", "in", ["ITO Customization"]]]},
     {"dt": "Case Format Settings"},
-    {"dt": "Print Format", "filters": [["name", "in", ["ITO E-Pass"]]]},
 ]
 
 after_migrate = "ito_customization.ito_customization.student_agent_setup.ensure_student_list_agent"
@@ -167,6 +166,12 @@ doc_events = {
     },
     "Sales Partner": {
         "on_update": "ito_customization.ito_customization.doc_events.sales_partner.after_save"
+    },
+    "Email Template": {
+        "validate": "ito_customization.ito_customization.doc_events.template_checks.check_email_template"
+    },
+    "Print Format": {
+        "validate": "ito_customization.ito_customization.doc_events.template_checks.check_print_format"
     },
     "Item Price": {
         "validate": "ito_customization.ito_customization.doc_events.item_price.validate_item_price"
@@ -328,6 +333,7 @@ jinja = {
         "ito_customization.ito_customization.doc_events.little_champ_hall_ticket.get_little_champ_exam_dates",
         "ito_customization.ito_customization.doc_events.epass.qr_data_uri",
         "ito_customization.ito_customization.doc_events.epass.photo_data_uri",
+        "ito_customization.ito_customization.doc_events.event_outputs.event_context",
 
     ]
 }

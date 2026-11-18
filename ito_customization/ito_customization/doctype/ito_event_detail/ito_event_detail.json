@@ -1,0 +1,49 @@
+{
+ "actions": [],
+ "creation": "2026-11-17 14:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "links": [],
+ "modified": "2026-11-17 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "owner": "Administrator",
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "name": "ITO Event Detail",
+ "istable": 1,
+ "editable_grid": 1,
+ "permissions": [],
+ "fields": [
+  {
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "label": "Label",
+   "in_list_view": 1,
+   "reqd": 1,
+   "columns": 3
+  },
+  {
+   "fieldname": "key",
+   "fieldtype": "Data",
+   "label": "Key",
+   "in_list_view": 1,
+   "columns": 2,
+   "description": "Used in templates as {{ event.details.<key> }}. Filled in from the label if left blank."
+  },
+  {
+   "fieldname": "value",
+   "fieldtype": "Small Text",
+   "label": "Value",
+   "in_list_view": 1,
+   "columns": 5
+  }
+ ],
+ "field_order": [
+  "label",
+  "key",
+  "value"
+ ]
+}

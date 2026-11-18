@@ -4,19 +4,12 @@ import re
 
 import frappe
 from frappe.utils import get_url
-from frappe.utils.data import cint
+
+from ito_customization.ito_customization.doc_events.event_outputs import is_approved, queue_outputs_for_trigger
 
 DOCTYPE = "Web Forms Registration"
-PRINT_FORMAT = "ITO E-Pass"
 STAFF_ROLES = {"ITO Event Staff", "System Manager"}
 ATTENDANCE_STATUSES = ("Present", "Absent")
-EVENT_NAME = "ITO Excellence Award Felicitation Ceremony 2026\u201327"
-VENUE_NAME = "Dr. B. R. Ambedkar Bhavana"
-VENUE_ADDRESS = (
-	"9c, 2nd A Cross Rd, Sector A, Yelahanka Satellite Town, Yelahanka New Town, "
-	"Bengaluru, Karnataka 560064"
-)
-VENUE_MAP_URL = "https://maps.app.goo.gl/7Ca2HyThYC82fR9L8"
 
 
 def no_autolink(text):
@@ -26,36 +19,6 @@ def no_autolink(text):
 	from markupsafe import Markup, escape
 
 	return Markup(re.sub(r"(\d)(?=\w)", r"\1&zwnj;", str(escape(text))))
-
-EMAIL_HTML = """
-<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;color:#202124">
-  <div style="background:#2f7f73;color:#fff;padding:18px 22px;border-radius:8px 8px 0 0">
-    <div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:.85">Indian Talent Olympiad</div>
-    <div style="font-size:20px;font-weight:bold;margin-top:4px">{{ event }}</div>
-  </div>
-  <div style="border:1px solid #dadce0;border-top:0;padding:22px;border-radius:0 0 8px 8px">
-    <p>Dear {{ name }},</p>
-    <p>Thank you for registering. Your <b>E-Pass</b> is confirmed. Please show the QR code below
-       (or the attached E-Pass PDF) at the venue entrance.</p>
-    <p style="text-align:center;margin:22px 0">
-      <img src="{{ qr_url }}" width="200" height="200" alt="E-Pass QR code"
-           style="border:1px solid #dadce0;padding:8px;border-radius:8px">
-      <br><span style="font-size:12px;color:#5f6368">If the image is hidden, open the attached QR / PDF.</span>
-    </p>
-    <table style="font-size:14px;line-height:1.7">
-      <tr><td style="color:#5f6368;padding-right:14px;vertical-align:top">Date</td><td><b>23rd November 2026</b></td></tr>
-      <tr><td style="color:#5f6368;padding-right:14px;vertical-align:top">Time</td><td><b>10:00 AM to 1:00 PM</b></td></tr>
-      <tr><td style="color:#5f6368;padding-right:14px;vertical-align:top">Venue</td><td><b>{{ venue_name }}</b><br>
-        <a href="{{ venue_map_url }}" style="color:#202124 !important;text-decoration:none !important;cursor:text"><span style="color:#202124 !important;text-decoration:none !important">{{ venue_address }}</span></a><br>
-        <a href="{{ venue_map_url }}">Open in Google Maps</a></td></tr>
-    </table>
-    <p style="font-size:13px;color:#5f6368;margin-top:18px">
-      Entry is strictly for the invited individual. Accompanying persons are not permitted.
-      Entry is subject to verification at the venue.</p>
-    <p style="font-size:13px"><a href="{{ page_url }}">View your E-Pass online</a></p>
-  </div>
-</div>
-"""
 
 
 def epass_url(token):
@@ -111,130 +74,34 @@ def photo_data_uri(file_url, max_px=500):
 		return ""
 
 
-def is_approved(doc):
-	return str(doc.status or "").strip().lower() == "approve"
+# The E-Pass is now an output of the generic engine (event_outputs.py), set up on the ITO Event.
+# These names are kept so queued jobs and old buttons keep working.
 
 
 def queue_epass(doc):
-	if (
-		not is_approved(doc)
-		or not doc.email
-		or not doc.epass_token
-		or cint(doc.epass_email_sent)
-		or cint(doc.mail_sent)
-	):
-		return
-	frappe.enqueue(
-		"ito_customization.ito_customization.doc_events.epass.send_epass_email",
-		queue="short",
-		docname=doc.name,
-		enqueue_after_commit=True,
-	)
+	from ito_customization.ito_customization.doc_events.event_outputs import queue_outputs_for_trigger
+
+	queue_outputs_for_trigger(doc, "On Approval")
 
 
 def send_epass_email(docname, force=False):
-	doc = frappe.get_doc(DOCTYPE, docname)
-	if not is_approved(doc) or not doc.email or not doc.epass_token:
-		return
-	if not force and (cint(doc.epass_email_sent) or cint(doc.mail_sent)):
-		return
+	from ito_customization.ito_customization.doc_events.event_outputs import LEGACY_OUTPUT, send_output
 
-	page_url = epass_url(doc.epass_token)
-	attachments = [{"fname": f"E-Pass-QR-{doc.name}.png", "fcontent": qr_png_bytes(page_url)}]
-	try:
-		attachments.insert(
-			0,
-			frappe.attach_print(DOCTYPE, doc.name, print_format=PRINT_FORMAT, file_name=f"E-Pass-{doc.name}"),
-		)
-	except Exception:
-		frappe.log_error(title="E-Pass PDF could not be generated")
-
-	message = frappe.render_template(
-		EMAIL_HTML,
-		{
-			"event": EVENT_NAME,
-			"name": doc.full_name,
-			"page_url": page_url,
-			# Plain text: the address sits inside our own <a> (see EMAIL_HTML), so mail apps
-			# don't add their own maps link, and copying it gives clean text.
-			"venue_name": VENUE_NAME,
-			"venue_address": VENUE_ADDRESS,
-			"venue_map_url": VENUE_MAP_URL,
-			"qr_url": f"{get_url()}/api/method/ito_customization.ito_customization.doc_events.epass.qr_image?t={doc.epass_token}",
-		},
-	)
-	frappe.sendmail(
-		recipients=[doc.email],
-		subject=f"Your E-Pass \u2013 {EVENT_NAME}",
-		message=message,
-		attachments=attachments,
-		reference_doctype=DOCTYPE,
-		reference_name=doc.name,
-	)
-	frappe.db.set_value(
-		DOCTYPE,
-		doc.name,
-		{"epass_email_sent": 1, "mail_sent": 1},
-		update_modified=False,
-	)
-
-
-def _resend_block_reason(doc):
-	"""Why the E-Pass email cannot be resent for this registration, or None if it can."""
-	if not doc.has_permission("write"):
-		return "Not permitted"
-	if not is_approved(doc):
-		return "Registration is not approved"
-	if not doc.email:
-		return "No email address"
-	return None
-
-
-def _queue_resend(doc):
-	if not doc.epass_token:
-		frappe.db.set_value(DOCTYPE, doc.name, "epass_token", frappe.generate_hash(length=24), update_modified=False)
-	frappe.enqueue(
-		"ito_customization.ito_customization.doc_events.epass.send_epass_email",
-		queue="short",
-		docname=doc.name,
-		force=True,
-		enqueue_after_commit=True,
-	)
+	send_output(docname, LEGACY_OUTPUT, force=force)
 
 
 @frappe.whitelist()
 def resend_epass_email(docname):
-	"""Re-queue the E-Pass email for an approved registration (button on the form)."""
-	doc = frappe.get_doc(DOCTYPE, docname)
-	doc.check_permission("write")
-	reason = _resend_block_reason(doc)
-	if reason:
-		frappe.throw(f"E-Pass email cannot be resent: {reason}.")
-	_queue_resend(doc)
-	return True
+	from ito_customization.ito_customization.doc_events.event_outputs import LEGACY_OUTPUT, send_now
+
+	return send_now(docname, LEGACY_OUTPUT)
 
 
 @frappe.whitelist()
 def bulk_resend_epass_email(names):
-	"""Re-queue the E-Pass email for each selected registration (list view).
-	Records that fail the same checks as the form button are skipped and reported back."""
-	if isinstance(names, str):
-		names = frappe.parse_json(names)
+	from ito_customization.ito_customization.doc_events.event_outputs import LEGACY_OUTPUT, bulk_send
 
-	queued, skipped = [], []
-	for name in names or []:
-		if not frappe.db.exists(DOCTYPE, name):
-			skipped.append({"name": name, "reason": "Not found"})
-			continue
-		doc = frappe.get_doc(DOCTYPE, name)
-		reason = _resend_block_reason(doc)
-		if reason:
-			skipped.append({"name": name, "full_name": doc.full_name, "email": doc.email, "status": doc.status, "reason": reason})
-			continue
-		_queue_resend(doc)
-		queued.append(name)
-
-	return {"queued": queued, "skipped": skipped}
+	return bulk_send(names, LEGACY_OUTPUT)
 
 
 @frappe.whitelist(allow_guest=True)
@@ -256,7 +123,7 @@ def backfill_tokens_and_queue(send_emails=False):
 		doc = frappe.get_doc(DOCTYPE, name)
 		if not doc.epass_token:
 			frappe.db.set_value(DOCTYPE, name, "epass_token", frappe.generate_hash(length=24), update_modified=False)
-		if send_emails and not doc.epass_email_sent:
+		if send_emails:
 			queue_epass(frappe.get_doc(DOCTYPE, name))
 
 
@@ -325,6 +192,8 @@ def mark_attendance(t, status):
 	doc.flags.ignore_permissions = True
 	doc.flags.ignore_validate = True
 	doc.save()
+	if status == "Present":
+		queue_outputs_for_trigger(doc, "On Marked Present")
 	return {"changed": True, "message": f"Marked {status}.", **attendance_info(doc)}
 
 

@@ -1,0 +1,99 @@
+{
+ "actions": [],
+ "creation": "2026-11-17 14:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "links": [],
+ "modified": "2026-11-17 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "owner": "Administrator",
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "name": "ITO Event Output",
+ "istable": 1,
+ "editable_grid": 1,
+ "permissions": [],
+ "fields": [
+  {
+   "fieldname": "output_name",
+   "fieldtype": "Data",
+   "label": "Output",
+   "in_list_view": 1,
+   "reqd": 1,
+   "columns": 2,
+   "description": "For example E-Pass, E-Card or Attendance Certificate."
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "1",
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "send_on",
+   "fieldtype": "Select",
+   "label": "Send When",
+   "in_list_view": 1,
+   "columns": 2,
+   "options": "Manual\nOn Approval\nOn Marked Present",
+   "default": "Manual",
+   "description": "Manual: only from the Send buttons. On Approval: when the status becomes Approve. On Marked Present: when attendance is marked Present."
+  },
+  {
+   "fieldname": "requires_approval",
+   "fieldtype": "Check",
+   "label": "Only for Approved",
+   "default": "1"
+  },
+  {
+   "fieldname": "column_break_tpl",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "email_template",
+   "fieldtype": "Link",
+   "label": "Email Template",
+   "options": "Email Template",
+   "in_list_view": 1,
+   "reqd": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "print_format",
+   "fieldtype": "Link",
+   "label": "Print Format",
+   "options": "Print Format",
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "attach_pdf",
+   "fieldtype": "Check",
+   "label": "Attach PDF",
+   "default": "1",
+   "depends_on": "print_format"
+  },
+  {
+   "fieldname": "attach_qr",
+   "fieldtype": "Check",
+   "label": "Attach QR Image",
+   "default": "0"
+  }
+ ],
+ "field_order": [
+  "output_name",
+  "enabled",
+  "send_on",
+  "requires_approval",
+  "column_break_tpl",
+  "email_template",
+  "print_format",
+  "attach_pdf",
+  "attach_qr"
+ ]
+}

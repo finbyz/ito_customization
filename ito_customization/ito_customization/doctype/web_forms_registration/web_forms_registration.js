@@ -11,25 +11,70 @@ frappe.ui.form.on("Web Forms Registration", {
 		add_create_button(frm);
 		render_linked_records(frm);
 
-		if (frm.doc.status !== "Approve") return;
-
-		frm.add_custom_button(__("Resend Email"), () => {
-			frappe.confirm(__("Resend the E-Pass email to {0}?", [frm.doc.email]), () => {
-				frappe.call({
-					method: "ito_customization.ito_customization.doc_events.epass.resend_epass_email",
-					args: { docname: frm.doc.name },
-					freeze: true,
-					freeze_message: __("Queuing email..."),
-					callback(r) {
-						if (!r.exc) {
-							frappe.show_alert({ message: __("Email queued"), indicator: "green" });
-						}
-					},
-				});
-			});
-		});
+		add_send_buttons(frm);
 	},
 });
+
+const WFR_OUTPUTS_API = "ito_customization.ito_customization.doc_events.event_outputs";
+
+// One "Send" menu item per enabled output of this registration's event (set up on the ITO Event).
+function add_send_buttons(frm) {
+	frappe.call({
+		method: `${WFR_OUTPUTS_API}.get_send_options`,
+		args: { docname: frm.doc.name },
+		callback(r) {
+			const outputs = (r.message && r.message.outputs) || [];
+			outputs.forEach((output) => {
+				const sent = (frm.doc.output_log || []).some((l) => l.output === output);
+				const label = sent ? __("Resend {0}", [output]) : __("Send {0}", [output]);
+				frm.add_custom_button(label, () => confirm_send(frm, output, sent), __("Send"));
+			});
+			((r.message && r.message.pdf_outputs) || []).forEach((output) => {
+				frm.add_custom_button(__("Generate {0} PDF", [output]), () => generate_pdf(frm, output), __("PDF"));
+			});
+		},
+	});
+}
+
+// Make the PDF without sending an email, e.g. to download it and share it by hand.
+function generate_pdf(frm, output) {
+	frappe.call({
+		method: `${WFR_OUTPUTS_API}.generate_pdf`,
+		args: { docname: frm.doc.name, output },
+		freeze: true,
+		freeze_message: __("Making {0} PDF...", [output]),
+		callback(r) {
+			if (r.exc || !r.message) return;
+			frm.reload_doc();
+			frappe.msgprint({
+				title: __("{0} PDF ready", [output]),
+				indicator: "green",
+				message: __("It is saved on this record. No email was sent."),
+				primary_action: { label: __("Download"), action: () => window.open(r.message) },
+			});
+		},
+	});
+}
+
+function confirm_send(frm, output, sent) {
+	const msg = sent
+		? __("{0} was already sent. Send it again to {1}?", [output, frm.doc.email])
+		: __("Send {0} to {1}?", [output, frm.doc.email]);
+	frappe.confirm(msg, () => {
+		frappe.call({
+			method: `${WFR_OUTPUTS_API}.send_now`,
+			args: { docname: frm.doc.name, output },
+			freeze: true,
+			freeze_message: __("Queuing email..."),
+			callback(r) {
+				if (!r.exc) {
+					frappe.show_alert({ message: __("{0} email queued", [output]), indicator: "green" });
+					setTimeout(() => frm.reload_doc(), 4000);
+				}
+			},
+		});
+	});
+}
 
 function add_create_button(frm) {
 	// Label shows progress, e.g. "Create (2/4 done)"; click always re-reads the latest state.

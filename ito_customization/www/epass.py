@@ -2,11 +2,8 @@ from urllib.parse import quote
 
 import frappe
 
+from ito_customization.ito_customization.doc_events.event_outputs import event_context
 from ito_customization.ito_customization.doc_events.epass import (
-	EVENT_NAME,
-	VENUE_ADDRESS,
-	VENUE_NAME,
-	VENUE_MAP_URL,
 	DOCTYPE,
 	attendance_info,
 	is_approved,
@@ -18,10 +15,7 @@ from ito_customization.ito_customization.doc_events.epass import (
 
 def get_context(context):
 	context.no_cache = 1
-	context.event_name = EVENT_NAME
-	context.venue_name = no_autolink(VENUE_NAME)
-	context.venue_address = no_autolink(VENUE_ADDRESS)
-	context.venue_map_url = VENUE_MAP_URL
+	set_event(context, event_context())
 	context.valid = False
 	context.reason = "This E-Pass is invalid or could not be found."
 	context.photo = ""
@@ -45,6 +39,7 @@ def get_context(context):
 		context.reason = "This registration has not been approved for an E-Pass."
 		return context
 
+	set_event(context, event_context(registration))
 	context.valid = True
 	context.token = token
 	context.login_url = f"/login?redirect-to=/epass%3Ft%3D{quote(token)}"
@@ -56,3 +51,15 @@ def get_context(context):
 	context.d = registration
 	context.photo = photo_data_uri(registration.photo)
 	return context
+
+
+def set_event(context, event):
+	"""Event details shown on the page; all of them come from the ITO Event."""
+	context.event = event
+	context.organiser_name = event.organiser_name
+	context.event_name = event.event_name
+	context.event_when = event.when_short
+	context.venue_name = no_autolink(event.venue_name)
+	context.venue_address = no_autolink(event.venue_address)
+	context.venue_map_url = event.venue_map_url
+	context.entry_note = event.details.entry_note
