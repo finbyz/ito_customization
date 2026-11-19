@@ -46,10 +46,6 @@
     "field_name": "serial_no"
    },
    {
-    "document_type": "BOM Creator Item",
-    "field_name": "parent_row_no"
-   },
-   {
     "document_type": "Bank Guarantee",
     "field_name": "fixed_deposit_number"
    },
