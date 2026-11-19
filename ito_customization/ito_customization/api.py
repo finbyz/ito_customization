@@ -3,7 +3,11 @@
 
 from functools import reduce
 import frappe
-from ito_customization.ito_customization.academic_year import DEFAULT_ACADEMIC_YEAR, normalize_academic_year
+from ito_customization.ito_customization.academic_year import (
+	DEFAULT_ACADEMIC_YEAR,
+	academic_year_filter,
+	normalize_academic_year,
+)
 from frappe import _, scrub
 import json
 import csv
@@ -972,7 +976,7 @@ def get_customer_from_session_user():
 		yearly_exam_dates = frappe.get_all(
 			"Yearly Exam Date",
 			filters={
-				"academic_year": academic_year,
+				"academic_year": academic_year_filter(academic_year),
 				"is_little_champ": 1,
 				"docstatus": 1,
 			},
@@ -1071,7 +1075,7 @@ def get_customer_from_session_user():
 		if ay:
 			normalized_ay = ay
 			normalized_ay = normalize_academic_year(normalized_ay)
-			yed_filters["academic_year"] = normalized_ay
+			yed_filters["academic_year"] = academic_year_filter(normalized_ay)
 
 		yearly_exams = frappe.get_all("Yearly Exam Date", filters=yed_filters, fields=["name", "academic_year"], order_by="creation desc", limit=1)
 		if not yearly_exams:
@@ -1211,7 +1215,7 @@ def _get_little_champ_exam_summary(customer_name):
 	exam_dates = frappe.get_all(
 		"Yearly Exam Date",
 		filters={
-			"academic_year": academic_year,
+			"academic_year": academic_year_filter(academic_year),
 			"is_little_champ": 1,
 			"docstatus": 1,
 		},
@@ -1868,7 +1872,7 @@ def get_subjects_for_year(
 
 		# Build filters for parent document
 		filters = {
-			"academic_year": academic_year,
+			"academic_year": academic_year_filter(academic_year),
 			"docstatus": 1  # ← ONLY fetch SUBMITTED documents
 		}
 		if has_parent_lc_field:
@@ -2510,7 +2514,7 @@ def save_bulk_student_list():
 		try:
 			bsl_name = frappe.db.get_value("Bulk Student List", {
 				"customer": customer_name,
-				"academic_year": academic_year,
+				"academic_year": academic_year_filter(academic_year),
 				"for_student": 1,
 			}, "name", order_by="creation desc")
 
@@ -2760,7 +2764,7 @@ def _get_little_champ_registration_subject_counts(customer_name, academic_year):
 	exam_dates = frappe.get_all(
 		"Yearly Exam Date",
 		filters={
-			"academic_year": academic_year,
+			"academic_year": academic_year_filter(academic_year),
 			"is_little_champ": 1,
 			"docstatus": 1,
 		},
@@ -2874,7 +2878,7 @@ def _get_ito_registration_subject_counts(customer_name, academic_year):
 	exam_dates = frappe.get_all(
 		"Yearly Exam Date",
 		filters={
-			"academic_year": academic_year,
+			"academic_year": academic_year_filter(academic_year),
 			"is_little_champ": 0,
 			"docstatus": 1,
 		},
@@ -2966,7 +2970,7 @@ def _get_wof_olympiad_registration_subject_counts(customer_name, academic_year=N
 	exam_dates = frappe.get_all(
 		"Yearly Exam Date",
 		filters={
-			"academic_year": academic_year,
+			"academic_year": academic_year_filter(academic_year),
 			"is_little_champ": 0,
 			"docstatus": 1,
 		},
@@ -3100,7 +3104,7 @@ def get_bulk_student_list(academic_year=None, selected_class=None):
 		# 2. Reconstruct from Bulk Student List child table (primary DB source)
 		bsl_name = frappe.db.get_value("Bulk Student List", {
 			"customer": customer_name,
-			"academic_year": academic_year,
+			"academic_year": academic_year_filter(academic_year),
 			"for_student": 1,
 		}, "name", order_by="creation desc")
 
@@ -3257,7 +3261,7 @@ def save_little_champ_bulk():
 		try:
 			bsl_name = frappe.db.get_value("Bulk Student List", {
 				"customer": customer_name,
-				"academic_year": academic_year,
+				"academic_year": academic_year_filter(academic_year),
 				"for_little_champ": 1,
 			}, "name", order_by="creation desc")
 
@@ -3571,7 +3575,7 @@ def get_little_champ_bulk(academic_year=None, selected_class=None):
 		# 2. Reconstruct from Bulk Student List child table (primary DB source)
 		bsl_name = frappe.db.get_value("Bulk Student List", {
 			"customer": customer_name,
-			"academic_year": academic_year,
+			"academic_year": academic_year_filter(academic_year),
 			"for_little_champ": 1,
 		}, "name", order_by="creation desc")
 
@@ -6032,7 +6036,7 @@ def save_wof_exams_summary(customer, exams_data):
 		academic_year = normalize_academic_year(academic_year)
 	yed_filters = {"docstatus": 1, "is_little_champ": 0}
 	if academic_year:
-		yed_filters["academic_year"] = academic_year
+		yed_filters["academic_year"] = academic_year_filter(academic_year)
 	yed_name = frappe.db.get_value(
 		"Yearly Exam Date", yed_filters, "name", order_by="creation desc"
 	)

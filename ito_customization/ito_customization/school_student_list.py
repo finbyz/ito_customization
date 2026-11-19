@@ -19,7 +19,12 @@ import re
 from collections import defaultdict
 
 import frappe
-from ito_customization.ito_customization.academic_year import DEFAULT_ACADEMIC_YEAR, normalize_academic_year
+from ito_customization.ito_customization.academic_year import (
+    DEFAULT_ACADEMIC_YEAR,
+    academic_year_filter,
+    academic_year_variants,
+    normalize_academic_year,
+)
 from frappe import _
 from frappe.utils import cint
 
@@ -395,7 +400,7 @@ def _summarise_preview(parsed: dict, school) -> dict:
 
 def _student_rows(school_name: str, academic_year: str | None) -> list[frappe._dict]:
     """One row per (student, subject) for the school's active students, with the student's source."""
-    year_filter = "and rs.academic_year = %(year)s" if academic_year else ""
+    year_filter = "and rs.academic_year in %(years)s" if academic_year else ""
     return frappe.db.sql(
         f"""
         select rs.name, rs.student_name, rs.class, rs.roll_no, rs.mobile_number,
@@ -411,7 +416,7 @@ def _student_rows(school_name: str, academic_year: str | None) -> list[frappe._d
         where rs.school = %(school)s and rs.not_registered = 0 and rs.docstatus < 2 {year_filter}
         order by rs.creation, rs.name, ct.idx
         """,
-        {"school": school_name, "year": academic_year, "link": SOURCE_LINK},
+        {"school": school_name, "years": tuple(academic_year_variants(academic_year)) if academic_year else (), "link": SOURCE_LINK},
         as_dict=True,
     )
 
@@ -486,7 +491,7 @@ def _get_or_create_exams_summary(customer: str, is_lc: bool = False, is_wof: boo
     year = resolve_academic_year(frappe.db.get_value("Customer", customer, "custom_current_academic_year"))
     filters = {"docstatus": 1, "is_little_champ": 0}
     if year:
-        filters["academic_year"] = year
+        filters["academic_year"] = academic_year_filter(year)
     exam_detail = frappe.db.get_value("Yearly Exam Date", filters, "name", order_by="creation desc")
     if not exam_detail:
         frappe.throw(_("No submitted exam schedule is available for this school."))

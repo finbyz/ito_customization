@@ -4,7 +4,7 @@
 import re
 import secrets
 import frappe
-from ito_customization.ito_customization.academic_year import normalize_academic_year
+from ito_customization.ito_customization.academic_year import academic_year_filter, normalize_academic_year
 from frappe.model.document import Document
 from frappe.utils import flt, cint
 from ito_customization.ito_customization.book_order_delivery_charge import (
@@ -347,7 +347,7 @@ def get_customer_exam_details(customer=None, school_code=None, token=None, class
 		yed_filters = {"docstatus": 1}
 		if ay:
 			normalized_ay = normalize_academic_year(ay)
-			yed_filters["academic_year"] = normalized_ay
+			yed_filters["academic_year"] = academic_year_filter(normalized_ay)
 
 		yearly_exams = frappe.get_all(
 			"Yearly Exam Date",
