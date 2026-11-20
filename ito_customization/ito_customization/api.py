@@ -1559,6 +1559,20 @@ def save_wof_registration(registration_data):
 		frappe.flags.ignore_permissions = original_ignore_permissions
 
 
+# MATRIX-KEY-FIX start (remove this function and the two marked calls to undo)
+def _add_form_comp_keys(subject_lookup, subjects):
+	"""Also map each subject by the key the portal form builds for it.
+
+	The form (normalizeCompKey) turns every character that is not a-z or 0-9
+	into "_", so "Commerce Olympiad (CIO)" becomes "commerce_olympiad__cio_".
+	frappe.scrub only changes spaces and hyphens, so without this the server
+	cannot find those subjects and the matrix save fails.
+	"""
+	for s in subjects:
+		subject_lookup.setdefault(re.sub(r"[^a-z0-9]", "_", s.lower()), s)
+# MATRIX-KEY-FIX end
+
+
 def save_competition_entry_matrix_record(customer, entry_matrix, is_submitted=False):
 	if not customer or not entry_matrix:
 		return None
@@ -1571,6 +1585,9 @@ def save_competition_entry_matrix_record(customer, entry_matrix, is_submitted=Fa
 	for s in all_school_subjects:
 		subject_lookup[s.lower()] = s
 		subject_lookup[s] = s
+	# MATRIX-KEY-FIX start (remove this block to undo)
+	_add_form_comp_keys(subject_lookup, all_school_subjects)
+	# MATRIX-KEY-FIX end
 
 	alias_map = {
 		"colouring": "Colouring Competition",
@@ -1707,6 +1724,9 @@ def sync_wof_entry_matrix_to_exams_summary(customer, entry_matrix):
 		}
 		school_subjects = frappe.get_all("School Subject", pluck="name")
 		subject_lookup = {frappe.scrub(subject): subject for subject in school_subjects}
+		# MATRIX-KEY-FIX start (remove this block to undo)
+		_add_form_comp_keys(subject_lookup, school_subjects)
+		# MATRIX-KEY-FIX end
 
 		for group_key, comp_dict in entry_matrix.items():
 			if not isinstance(comp_dict, dict):
@@ -3945,8 +3965,6 @@ def save_wof_student_list():
 		payload = json.loads(data.get("data", "{}")) if isinstance(data.get("data"), str) else data.get("data", {})
 
 		school_info = payload.get("school_info", {})
-		rosters = payload.get("rosters", {})
-		totals = payload.get("totals", {})
 
 		customer_name = frappe.db.get_value("Portal User", {"user": frappe.session.user}, "parent")
 		if not customer_name:
@@ -3959,295 +3977,328 @@ def save_wof_student_list():
 		if not customer_name:
 			return {"success": False, "message": "Customer not found"}
 
-		raw_year = school_info.get("academic_year", "")
-		if not raw_year:
-			raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or DEFAULT_ACADEMIC_YEAR
-
-		academic_year = normalize_academic_year(raw_year)
-
-		if not frappe.db.exists("School Academic Year", academic_year):
-			existing = frappe.db.get_value("School Academic Year", {}, "name", order_by="creation desc")
-			if existing:
-				academic_year = existing
-
-		school_name = (
-			frappe.db.get_value("Customer", customer_name, "customer_name")
-			or school_info.get("school_name")
-			or ""
-		).strip()
-
-		ito_code = (
-			frappe.db.get_value("Customer", customer_name, "custom_school_code")
-			or frappe.db.get_value("Customer", customer_name, "custom_ito_school_code")
-			or frappe.db.get_value("Customer", customer_name, "custom_lc_school_code")
-			or school_info.get("school_code")
-			or ""
-		).strip().upper()
-
-		bsl_name = frappe.db.get_value("Bulk Student List", {
-			"customer": customer_name,
-			"for_wof_list": 1,
-			"is_submitted": 0
-		}, "name", order_by="creation desc")
-
-		if not bsl_name:
-			bsl_name = frappe.db.get_value("Bulk Student List", {
-				"customer": customer_name,
-				"for_wof_list": 1,
-			}, "name", order_by="creation desc")
-
-		if bsl_name:
-			bsl = frappe.get_doc("Bulk Student List", bsl_name)
-			bsl.table_xxdu = []
-		else:
-			bsl = frappe.new_doc("Bulk Student List")
-			bsl.customer = customer_name
-
-		bsl.academic_year = academic_year
-		bsl.for_wof_list = 1
-		bsl.for_student = 0
-		bsl.for_little_champ = 0
-		bsl.is_submitted = 1
-
-		dynamic_subjects = get_subjects_for_year(academic_year, 0, customer_name=customer_name, for_chitrakala=1)
-
-		subject_lookup = {}
-		for sub in dynamic_subjects:
-			s_abbr = (sub.get("abbr") or sub.get("shortName") or sub.get("code") or "").strip()
-			s_code = (sub.get("code") or "").strip()
-			s_name = (sub.get("name") or "").strip()
-
-			for key in (s_abbr, s_code, s_name):
-				if key:
-					subject_lookup[key.strip().lower()] = sub
-
-		has_registered_students_doctype = frappe.db.exists("DocType", "Registered Students")
-		saved_roll_numbers = {}
-
-		# Process each batch and its students
-		for batch_key, batch_data in rosters.items():
-			students = []
-			raw_class = ""
-			if isinstance(batch_data, dict):
-				students = batch_data.get("students", [])
-				raw_class = batch_data.get("class_grade") or batch_key.split('_')[0]
-			elif isinstance(batch_data, list):
-				students = batch_data
-				raw_class = batch_key.split('_')[0]
-
-			target_class = map_class_to_erp(raw_class)
-
-			# Gather submitted students for this batch
-			batch_submitted_students = []
-			for st in students:
-				student_name = (st.get("student_name") or st.get("name") or "").strip().upper()
-				subs = st.get("subjects", {})
-				if isinstance(subs, str):
-					try:
-						subs = json.loads(subs)
-					except Exception:
-						subs = {}
-
-				if not student_name or not isinstance(subs, dict):
-					continue
-
-				submitted_roll = (st.get("roll_no") or "").strip()
-				submitted_mobile = (st.get("mobile") or st.get("mobile_number") or st.get("parent_mobile") or "").strip()
-				row_id = str(st.get("row_id") or st.get("id") or f"{batch_key}_{student_name}").strip()
-
-				student_registered_subjects = []
-				for sub_key, sub_val in subs.items():
-					is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
-					if not is_checked:
-						continue
-
-					matched = subject_lookup.get(str(sub_key).strip().lower())
-					if not matched:
-						continue
-
-					subject_name = matched.get("name")
-					subject_abbr = matched.get("abbr") or matched.get("shortName") or matched.get("code") or ""
-
-					if not subject_name or not frappe.db.exists("School Subject", subject_name):
-						continue
-
-					bsl.append("table_xxdu", {
-						"student_name": student_name,
-						"school_subject": subject_name,
-						"abbr": subject_abbr,
-						"check_ptxn": 1,
-						"class": target_class,
-						"mobile_number": submitted_mobile,
-					})
-					student_registered_subjects.append({"name": subject_name, "abbr": subject_abbr})
-
-				if student_registered_subjects:
-					batch_submitted_students.append({
-						"row_id": row_id,
-						"student_name": student_name,
-						"roll_no": submitted_roll,
-						"mobile": submitted_mobile,
-						"subjects": student_registered_subjects,
-						"target_class": target_class,
-					})
-
-			# Synchronize with Registered Students for this batch's class
-			if has_registered_students_doctype and batch_submitted_students:
-				active_records = frappe.get_all(
-					"Registered Students",
-					filters={
-						"school": customer_name,
-						"class": target_class,
-						"not_registered": 0,
-					},
-					fields=["name", "student_name", "roll_no", "mobile_number"],
-				)
-				records_by_roll = {record.roll_no: record for record in active_records if record.roll_no}
-				records_by_name = {}
-				for record in active_records:
-					normalized_name = (record.student_name or "").strip().upper()
-					if not normalized_name:
-						continue
-					records_by_name.setdefault(normalized_name, []).append(record)
-
-				matched_existing_names = set()
-				items_to_process = []
-
-				for item in batch_submitted_students:
-					sname = item["student_name"]
-					sroll = item["roll_no"]
-					smobile = item["mobile"]
-
-					record = None
-					if sroll:
-						record = records_by_roll.get(sroll)
-					else:
-						name_matches = records_by_name.get(sname, [])
-						if len(name_matches) == 1:
-							record = name_matches[0]
-						elif len(name_matches) > 1:
-							record = name_matches[0]
-
-					if record:
-						matched_existing_names.add(record["name"])
-						stored_mobile = (record.get("mobile_number") or "").strip()
-						if stored_mobile and smobile and stored_mobile != smobile:
-							items_to_process.append({"type": "mobile_changed", "item": item, "old_rec": record})
-						else:
-							items_to_process.append({"type": "update", "item": item, "rec": record})
-					else:
-						items_to_process.append({"type": "new", "item": item})
-
-				for proc in items_to_process:
-					itype = proc["type"]
-					item = proc["item"]
-					sname = item["student_name"]
-					smobile = item["mobile"]
-					ssubjects = item["subjects"]
-					item_cls = item["target_class"]
-
-					if itype == "mobile_changed":
-						old_rec = proc["old_rec"]
-
-						replacement = frappe.new_doc("Registered Students")
-						replacement.student_name = sname
-						replacement.mobile_number = smobile
-						replacement.school = customer_name
-						replacement.full_name = school_name
-						replacement.ito_school_code = ito_code
-						replacement.set("class", item_cls)
-						replacement.set("subjects_registered", [])
-						for sub in ssubjects:
-							replacement.append("subjects_registered", {
-								"subject": sub["name"],
-								"abbr": sub["abbr"],
-							})
-						replacement.insert(ignore_permissions=True)
-
-						old_doc = frappe.get_doc("Registered Students", old_rec["name"])
-						old_doc.not_registered = 1
-						old_doc.save(ignore_permissions=True)
-
-					elif itype == "update":
-						rec = proc["rec"]
-						rs_doc = frappe.get_doc("Registered Students", rec["name"])
-						rs_doc.not_registered = 0
-						rs_doc.student_name = sname
-						rs_doc.mobile_number = smobile
-						rs_doc.school = customer_name
-						rs_doc.full_name = school_name
-						rs_doc.ito_school_code = ito_code
-						rs_doc.set("class", item_cls)
-						rs_doc.set("subjects_registered", [])
-						for sub in ssubjects:
-							rs_doc.append("subjects_registered", {
-								"subject": sub["name"],
-								"abbr": sub["abbr"],
-							})
-						rs_doc.save(ignore_permissions=True)
-						saved_roll_numbers[item["row_id"]] = rs_doc.roll_no
-
-					else:  # "new"
-						rs_doc = frappe.new_doc("Registered Students")
-						if item["roll_no"]:
-							rs_doc.roll_no = item["roll_no"]
-						rs_doc.student_name = sname
-						rs_doc.mobile_number = smobile
-						rs_doc.school = customer_name
-						rs_doc.full_name = school_name
-						rs_doc.ito_school_code = ito_code
-						rs_doc.set("class", item_cls)
-						rs_doc.set("subjects_registered", [])
-						for sub in ssubjects:
-							rs_doc.append("subjects_registered", {
-								"subject": sub["name"],
-								"abbr": sub["abbr"],
-							})
-						rs_doc.insert(ignore_permissions=True)
-						if rs_doc.roll_no:
-							saved_roll_numbers[item["row_id"]] = rs_doc.roll_no
-
-		if bsl.is_new():
-			bsl.insert(ignore_permissions=True)
-		else:
-			bsl.save(ignore_permissions=True)
-
-		# Cache the submitted payload while preserving any existing roll numbers.
-		for b_key, b_val in rosters.items():
-			b_students = b_val.get("students", []) if isinstance(b_val, dict) else b_val
-			for st in b_students:
-				st_id = str(st.get("row_id") or st.get("id") or f"{b_key}_{(st.get('student_name') or st.get('name') or '').strip().upper()}").strip()
-				if st_id in saved_roll_numbers:
-					st["roll_no"] = saved_roll_numbers[st_id]
-
-		frappe.cache().set_value(f"wof_student_draft_{customer_name}_{academic_year}", payload)
-		frappe.cache().set_value(f"wof_student_draft_{customer_name}_{raw_year}", payload)
-
-		try:
-			customer_doc = frappe.get_doc("Customer", customer_name)
-			total_students = totals.get("total_students", len(bsl.table_xxdu))
-			total_entries = totals.get("total_entries", 0)
-			total_batches = totals.get("total_batches", len(rosters))
-			customer_doc.add_comment(
-				"Info",
-				f"WOF Student List submitted: {total_students} students across {total_batches} batches with {total_entries} total competition entries ({academic_year})."
-			)
-		except Exception as e:
-			frappe.log_error(frappe.get_traceback(), "WOF Student List Add Comment Error")
-
-		return {
-			"success": True,
-			"name": bsl.name,
-			"message": "WOF Student list submitted and saved to Bulk Student List successfully",
-			"roll_numbers": saved_roll_numbers,
-			"totals": totals
-		}
+		return _save_chitrakala_rosters(customer_name, payload)
 
 	except Exception as e:
 		frappe.log_error(frappe.get_traceback(), "Save WOF Student List Error")
 		return {"success": False, "message": str(e)}
 	finally:
 		frappe.flags.ignore_permissions = original_flag
+
+
+def _save_chitrakala_rosters(customer_name, payload, competitions=None):
+	"""Save a Chitrakala student list for one school and return the result.
+
+	payload is {"school_info": {...}, "rosters": {"<class>_<section>": {"class_grade", "section",
+	"students": [...]}}, "totals": {...}}. The list replaces the school's Chitrakala Bulk Student List
+	(for_wof_list = 1) and is synced to Registered Students. Used by save_wof_student_list (the old
+	Student List page) and by the Entry Matrix upload of the Chitrakala registration form
+	(chitrakala_student_list). competitions ({name, abbr}) overrides the subject lookup, so the
+	upload saves exactly the competitions its Entry Matrix shows.
+	The caller resolves the school and sets ignore_permissions; errors are raised to the caller.
+	"""
+	school_info = payload.get("school_info", {}) or {}
+	rosters = payload.get("rosters", {}) or {}
+	totals = payload.get("totals", {}) or {}
+
+	raw_year = school_info.get("academic_year", "")
+	if not raw_year:
+		raw_year = frappe.db.get_value("Customer", customer_name, "custom_current_academic_year") or DEFAULT_ACADEMIC_YEAR
+
+	academic_year = normalize_academic_year(raw_year)
+
+	if not frappe.db.exists("School Academic Year", academic_year):
+		existing = frappe.db.get_value("School Academic Year", {}, "name", order_by="creation desc")
+		if existing:
+			academic_year = existing
+
+	school_name = (
+		frappe.db.get_value("Customer", customer_name, "customer_name")
+		or school_info.get("school_name")
+		or ""
+	).strip()
+
+	ito_code = (
+		frappe.db.get_value("Customer", customer_name, "custom_school_code")
+		or frappe.db.get_value("Customer", customer_name, "custom_ito_school_code")
+		or frappe.db.get_value("Customer", customer_name, "custom_lc_school_code")
+		or school_info.get("school_code")
+		or ""
+	).strip().upper()
+
+	bsl_name = frappe.db.get_value("Bulk Student List", {
+		"customer": customer_name,
+		"for_wof_list": 1,
+		"is_submitted": 0
+	}, "name", order_by="creation desc")
+
+	if not bsl_name:
+		bsl_name = frappe.db.get_value("Bulk Student List", {
+			"customer": customer_name,
+			"for_wof_list": 1,
+		}, "name", order_by="creation desc")
+
+	if bsl_name:
+		bsl = frappe.get_doc("Bulk Student List", bsl_name)
+		bsl.table_xxdu = []
+	else:
+		bsl = frappe.new_doc("Bulk Student List")
+		bsl.customer = customer_name
+
+	bsl.academic_year = academic_year
+	bsl.for_wof_list = 1
+	bsl.for_student = 0
+	bsl.for_little_champ = 0
+	bsl.is_submitted = 1
+
+	if competitions is not None:
+		dynamic_subjects = [{"name": c["name"], "abbr": c.get("abbr") or "", "code": c.get("code") or ""} for c in competitions]
+	else:
+		dynamic_subjects = get_subjects_for_year(academic_year, 0, customer_name=customer_name, for_chitrakala=1)
+
+	subject_lookup = {}
+	for sub in dynamic_subjects:
+		s_abbr = (sub.get("abbr") or sub.get("shortName") or sub.get("code") or "").strip()
+		s_code = (sub.get("code") or "").strip()
+		s_name = (sub.get("name") or "").strip()
+
+		for key in (s_abbr, s_code, s_name):
+			if key:
+				subject_lookup[key.strip().lower()] = sub
+
+	has_registered_students_doctype = frappe.db.exists("DocType", "Registered Students")
+	saved_roll_numbers = {}
+
+	# Process each batch and its students
+	for batch_key, batch_data in rosters.items():
+		students = []
+		raw_class = ""
+		if isinstance(batch_data, dict):
+			students = batch_data.get("students", [])
+			raw_class = batch_data.get("class_grade") or batch_key.split('_')[0]
+		elif isinstance(batch_data, list):
+			students = batch_data
+			raw_class = batch_key.split('_')[0]
+
+		target_class = map_class_to_erp(raw_class)
+
+		# Gather submitted students for this batch
+		batch_submitted_students = []
+		for st in students:
+			student_name = (st.get("student_name") or st.get("name") or "").strip().upper()
+			subs = st.get("subjects", {})
+			if isinstance(subs, str):
+				try:
+					subs = json.loads(subs)
+				except Exception:
+					subs = {}
+
+			if not student_name or not isinstance(subs, dict):
+				continue
+
+			submitted_roll = (st.get("roll_no") or "").strip()
+			submitted_mobile = (st.get("mobile") or st.get("mobile_number") or st.get("parent_mobile") or "").strip()
+			submitted_parent = (st.get("parentName") or st.get("parent_name") or "").strip()
+			row_id = str(st.get("row_id") or st.get("id") or f"{batch_key}_{student_name}").strip()
+
+			student_registered_subjects = []
+			for sub_key, sub_val in subs.items():
+				is_checked = bool(sub_val) and str(sub_val).lower() not in ("false", "0", "")
+				if not is_checked:
+					continue
+
+				matched = subject_lookup.get(str(sub_key).strip().lower())
+				if not matched:
+					continue
+
+				subject_name = matched.get("name")
+				subject_abbr = matched.get("abbr") or matched.get("shortName") or matched.get("code") or ""
+
+				if not subject_name or not frappe.db.exists("School Subject", subject_name):
+					continue
+
+				bsl.append("table_xxdu", {
+					"student_name": student_name,
+					"school_subject": subject_name,
+					"abbr": subject_abbr,
+					"check_ptxn": 1,
+					"class": target_class,
+					"mobile_number": submitted_mobile,
+				})
+				student_registered_subjects.append({"name": subject_name, "abbr": subject_abbr})
+
+			if student_registered_subjects:
+				batch_submitted_students.append({
+					"row_id": row_id,
+					"student_name": student_name,
+					"roll_no": submitted_roll,
+					"mobile": submitted_mobile,
+					"parent_name": submitted_parent,
+					"subjects": student_registered_subjects,
+					"target_class": target_class,
+				})
+
+		# Synchronize with Registered Students for this batch's class
+		if has_registered_students_doctype and batch_submitted_students:
+			active_records = frappe.get_all(
+				"Registered Students",
+				filters={
+					"school": customer_name,
+					"class": target_class,
+					"not_registered": 0,
+					# Students from the WOF Olympiad upload (source "School") are a separate list:
+					# never match them, or a Chitrakala save would overwrite their WOF subjects.
+					"registration_source": ["is", "not set"],
+				},
+				fields=["name", "student_name", "roll_no", "mobile_number"],
+			)
+			records_by_roll = {record.roll_no: record for record in active_records if record.roll_no}
+			records_by_name = {}
+			for record in active_records:
+				normalized_name = (record.student_name or "").strip().upper()
+				if not normalized_name:
+					continue
+				records_by_name.setdefault(normalized_name, []).append(record)
+
+			matched_existing_names = set()
+			items_to_process = []
+
+			for item in batch_submitted_students:
+				sname = item["student_name"]
+				sroll = item["roll_no"]
+				smobile = item["mobile"]
+
+				record = None
+				if sroll:
+					record = records_by_roll.get(sroll)
+				else:
+					name_matches = records_by_name.get(sname, [])
+					if len(name_matches) == 1:
+						record = name_matches[0]
+					elif len(name_matches) > 1:
+						record = name_matches[0]
+
+				if record:
+					matched_existing_names.add(record["name"])
+					stored_mobile = (record.get("mobile_number") or "").strip()
+					if stored_mobile and smobile and stored_mobile != smobile:
+						items_to_process.append({"type": "mobile_changed", "item": item, "old_rec": record})
+					else:
+						items_to_process.append({"type": "update", "item": item, "rec": record})
+				else:
+					items_to_process.append({"type": "new", "item": item})
+
+			for proc in items_to_process:
+				itype = proc["type"]
+				item = proc["item"]
+				sname = item["student_name"]
+				smobile = item["mobile"]
+				ssubjects = item["subjects"]
+				sparent = item.get("parent_name") or ""
+				item_cls = item["target_class"]
+
+				if itype == "mobile_changed":
+					old_rec = proc["old_rec"]
+
+					replacement = frappe.new_doc("Registered Students")
+					replacement.student_name = sname
+					replacement.mobile_number = smobile
+					if sparent:
+						replacement.parent_name = sparent
+					replacement.school = customer_name
+					replacement.full_name = school_name
+					replacement.ito_school_code = ito_code
+					replacement.set("class", item_cls)
+					replacement.set("subjects_registered", [])
+					for sub in ssubjects:
+						replacement.append("subjects_registered", {
+							"subject": sub["name"],
+							"abbr": sub["abbr"],
+						})
+					replacement.insert(ignore_permissions=True)
+
+					old_doc = frappe.get_doc("Registered Students", old_rec["name"])
+					old_doc.not_registered = 1
+					old_doc.save(ignore_permissions=True)
+
+				elif itype == "update":
+					rec = proc["rec"]
+					rs_doc = frappe.get_doc("Registered Students", rec["name"])
+					rs_doc.not_registered = 0
+					rs_doc.student_name = sname
+					rs_doc.mobile_number = smobile
+					if sparent:
+						rs_doc.parent_name = sparent
+					rs_doc.school = customer_name
+					rs_doc.full_name = school_name
+					rs_doc.ito_school_code = ito_code
+					rs_doc.set("class", item_cls)
+					rs_doc.set("subjects_registered", [])
+					for sub in ssubjects:
+						rs_doc.append("subjects_registered", {
+							"subject": sub["name"],
+							"abbr": sub["abbr"],
+						})
+					rs_doc.save(ignore_permissions=True)
+					saved_roll_numbers[item["row_id"]] = rs_doc.roll_no
+
+				else:  # "new"
+					rs_doc = frappe.new_doc("Registered Students")
+					if item["roll_no"]:
+						rs_doc.roll_no = item["roll_no"]
+					rs_doc.student_name = sname
+					rs_doc.mobile_number = smobile
+					if sparent:
+						rs_doc.parent_name = sparent
+					rs_doc.school = customer_name
+					rs_doc.full_name = school_name
+					rs_doc.ito_school_code = ito_code
+					rs_doc.set("class", item_cls)
+					rs_doc.set("subjects_registered", [])
+					for sub in ssubjects:
+						rs_doc.append("subjects_registered", {
+							"subject": sub["name"],
+							"abbr": sub["abbr"],
+						})
+					rs_doc.insert(ignore_permissions=True)
+					if rs_doc.roll_no:
+						saved_roll_numbers[item["row_id"]] = rs_doc.roll_no
+
+	if bsl.is_new():
+		bsl.insert(ignore_permissions=True)
+	else:
+		bsl.save(ignore_permissions=True)
+
+	# Cache the submitted payload while preserving any existing roll numbers.
+	for b_key, b_val in rosters.items():
+		b_students = b_val.get("students", []) if isinstance(b_val, dict) else b_val
+		for st in b_students:
+			st_id = str(st.get("row_id") or st.get("id") or f"{b_key}_{(st.get('student_name') or st.get('name') or '').strip().upper()}").strip()
+			if st_id in saved_roll_numbers:
+				st["roll_no"] = saved_roll_numbers[st_id]
+
+	frappe.cache().set_value(f"wof_student_draft_{customer_name}_{academic_year}", payload)
+	frappe.cache().set_value(f"wof_student_draft_{customer_name}_{raw_year}", payload)
+
+	try:
+		customer_doc = frappe.get_doc("Customer", customer_name)
+		total_students = totals.get("total_students", len(bsl.table_xxdu))
+		total_entries = totals.get("total_entries", 0)
+		total_batches = totals.get("total_batches", len(rosters))
+		customer_doc.add_comment(
+			"Info",
+			f"WOF Student List submitted: {total_students} students across {total_batches} batches with {total_entries} total competition entries ({academic_year})."
+		)
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "WOF Student List Add Comment Error")
+
+	return {
+		"success": True,
+		"name": bsl.name,
+		"message": "WOF Student list submitted and saved to Bulk Student List successfully",
+		"roll_numbers": saved_roll_numbers,
+		"totals": totals
+	}
 
 
 @frappe.whitelist()

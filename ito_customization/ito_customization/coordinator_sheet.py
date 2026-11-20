@@ -172,11 +172,19 @@ def _parse_mobile(value, country_code: str) -> tuple[str, str | None]:
 		if len(digits) < 8 or len(digits) > 15:
 			return s, "Mobile number looks incorrect"
 		return s, None
+	code = _text(country_code) or "+91"
+	code_digits = re.sub(r"\D", "", code)
+	# Excel drops the "+" when a number is typed into a number cell: 911234567890 is +91 1234567890
+	# and 971501234567 is +971 501234567, so the school's code is not added a second time. Only numbers
+	# longer than 10 digits qualify, so a 10-digit local number that happens to start with 91 is kept.
+	rest = digits[len(code_digits):]
+	if code_digits and len(digits) > 10 and digits.startswith(code_digits) and 7 <= len(rest) <= 10:
+		return f"{code} {rest}", None
 	if len(digits) < 6 or len(digits) > 12:
 		return s, "Mobile number looks incorrect"
 	if len(digits) == 11 and digits.startswith("0"):
 		digits = digits[1:]
-	return f"{_text(country_code) or '+91'} {digits}", None
+	return f"{code} {digits}", None
 
 
 def _match_role(label: str, roles: list[dict]) -> dict | None:
@@ -236,11 +244,18 @@ def parse_coordinator_sheet(filedata=None, filename=None, roles=None, country_co
 		return row[i] if i < len(row) else None
 
 	result, warnings, seen = [], [], set()
+	# Rows with details but no role (typed below the role rows, e.g. under the example): they are
+	# not guessed, but named in the message so the school knows where to type.
+	no_role_rows = []
 	for offset, row in enumerate(rows[header_idx + 1 :], header_idx + 2):
 		label = _text(cell(row, "role"))
-		if not label or label.upper().startswith(("EXAMPLE", "HOW TO FILL")) or re.match(r"^\d\.", label):
-			continue
 		has_data = any(_text(cell(row, k)) or isinstance(cell(row, k), (date, datetime)) for k in FIELD_KEYS)
+		if label.upper().startswith("EXAMPLE"):
+			continue
+		if not label or label.upper().startswith("HOW TO FILL") or re.match(r"^\d\.", label):
+			if has_data:
+				no_role_rows.append(offset)
+			continue
 		if not has_data:
 			continue
 		role = _match_role(label, roles)
@@ -272,6 +287,18 @@ def parse_coordinator_sheet(filedata=None, filename=None, roles=None, country_co
 			 "row": offset, "errors": list(dict.fromkeys(errors))}
 		)
 
+	if no_role_rows:
+		rows_text = ", ".join(str(n) for n in no_role_rows)
+		if not result:
+			frappe.throw(
+				_(
+					"No co-ordinator details were found next to a role. The details in row(s) {0} have no role. "
+					"Type each person's details in the same row as their role (rows {1} to {2}) and upload again."
+				).format(rows_text, header_idx + 2, header_idx + 1 + len(roles))
+			)
+		warnings.append(
+			_("Row(s) {0} have details but no role, so they were skipped. Type them next to the right role.").format(rows_text)
+		)
 	if not result:
-		frappe.throw(_("No co-ordinator details were found in the file."))
+		frappe.throw(_("No co-ordinator details were found in the file. Fill in the rows next to each role."))
 	return {"rows": result, "warnings": warnings}
