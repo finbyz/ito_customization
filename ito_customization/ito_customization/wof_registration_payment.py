@@ -24,6 +24,12 @@ WOF_PAGE = "WOF Registration"
 FEE_ITEM_NAME = "WOF Registration Fee"
 FEE_ITEM_GROUP = "Fee Component"
 RETENTION_PERCENT = 0.20  # 20% retention by school
+# Remark on the invoice of an additional lot. The main registration's invoice has no such remark.
+LOT_REMARK_PREFIX = "WOF registration lot:"
+
+
+def _is_lot_invoice(remarks) -> bool:
+    return str(remarks or "").strip().startswith(LOT_REMARK_PREFIX)
 
 
 def _get_customer(customer=None):
@@ -244,11 +250,47 @@ def _find_fee_invoice(customer, company, lot_id=None):
     invoices = frappe.get_all(
         "Sales Invoice",
         filters=filters,
-        fields=["name", "docstatus", "outstanding_amount", "grand_total"],
+        fields=["name", "docstatus", "outstanding_amount", "grand_total", "remarks"],
         order_by="creation desc",
     )
     for invoice in invoices:
+        # The main registration never picks up an additional lot's invoice.
+        if not lot_id and _is_lot_invoice(invoice.remarks):
+            continue
         if frappe.db.exists("Sales Invoice Item", {"parent": invoice.name, "item_code": fee_item}):
+            return invoice
+    return None
+
+
+def get_paid_registration(customer, since=None):
+    """The main registration's fee invoice once the school has paid, or None.
+
+    Paid means a submitted fee invoice with nothing outstanding (online payment), or a draft fee
+    invoice, which is what a submit with DD, NEFT or UPI creates. Additional lots are ignored.
+    since (a date) skips invoices from earlier academic years.
+    """
+    try:
+        company = _get_razorpay_settings().company
+    except Exception:
+        return None
+    fee_item = _get_registration_fee_item(company)
+    if not fee_item:
+        return None
+    filters = {"customer": customer, "company": company, "docstatus": ["!=", 2]}
+    if since:
+        filters["posting_date"] = [">=", since]
+    invoices = frappe.get_all(
+        "Sales Invoice",
+        filters=filters,
+        fields=["name", "docstatus", "outstanding_amount", "grand_total", "remarks"],
+        order_by="creation desc",
+    )
+    for invoice in invoices:
+        if _is_lot_invoice(invoice.remarks):
+            continue
+        if not frappe.db.exists("Sales Invoice Item", {"parent": invoice.name, "item_code": fee_item}):
+            continue
+        if invoice.docstatus == 0 or flt(invoice.outstanding_amount) <= 0:
             return invoice
     return None
 
@@ -549,7 +591,7 @@ def get_wof_registration_fee_payment_status(customer=None, new_lot_id=None):
     invoices = frappe.get_all(
         "Sales Invoice",
         filters=filters,
-        fields=["name", "outstanding_amount"],
+        fields=["name", "outstanding_amount", "remarks"],
         order_by="creation desc",
     )
 
@@ -559,6 +601,9 @@ def get_wof_registration_fee_payment_status(customer=None, new_lot_id=None):
         fee_item = None
 
     for invoice in invoices:
+        # The main registration's status never counts an additional lot's invoice.
+        if not new_lot_id and _is_lot_invoice(invoice.remarks):
+            continue
         if fee_item and not frappe.db.exists("Sales Invoice Item", {"parent": invoice.name, "item_code": fee_item}):
             continue
         if flt(invoice.outstanding_amount) <= 0:

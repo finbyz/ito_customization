@@ -11,6 +11,10 @@ The Chitrakala sheet is not the WOF Olympiad sheet (school_student_list): it has
 Section columns, the Chitrakala competitions of the school's Entry Matrix, pre-primary classes
 (Nursery, LKG, UKG), and pre-primary students (Group A) may only take the colouring competition.
 A saved upload fills both the student list and the Entry Matrix counts.
+
+Until the school pays, an upload replaces its list. Once the registration fee is paid (or the
+registration is submitted with DD, NEFT or UPI), the list can no longer be replaced: the school
+registers another lot, uploads only its new students (mode "add"), and pays for those alone.
 """
 
 import re
@@ -465,6 +469,84 @@ def _saved_counts(school) -> dict:
 	}
 
 
+def _year_start(academic_year):
+	"""Earliest start date recorded for any spelling of the academic year, or None."""
+	dates = frappe.get_all(
+		"School Academic Year",
+		filters={"name": ["in", academic_year_variants(academic_year)]},
+		pluck="year_start_date",
+	)
+	dates = [d for d in dates if d]
+	return min(dates) if dates else None
+
+
+def paid_registration(school):
+	"""The main registration's fee invoice once the school has paid for this year, or None."""
+	from ito_customization.ito_customization.wof_registration_payment import get_paid_registration
+
+	return get_paid_registration(school.name, since=_year_start(school.academic_year))
+
+
+def mobile_key(mobile) -> str:
+	"""A mobile number for matching: digits only, last 10, so "+91 98765-43210" and "9876543210" match."""
+	return re.sub(r"\D", "", str(mobile or ""))[-10:]
+
+
+def _saved_student_keys(school) -> set:
+	"""(name, class, mobile) of every student already in the school's Chitrakala list."""
+	bulk_list = _latest_chitrakala_list(school.name, school.academic_year)
+	if not bulk_list:
+		return set()
+	rows = frappe.get_all(
+		"Exam List CT",
+		filters={"parent": bulk_list.name, "parenttype": "Bulk Student List", "parentfield": "table_xxdu"},
+		fields=["student_name", "class", "mobile_number"],
+	)
+	return {
+		((r.student_name or "").strip().upper(), str(r["class"] or ""), mobile_key(r.mobile_number)) for r in rows
+	}
+
+
+def _mark_already_saved(parsed: dict, school) -> None:
+	"""For a new lot: a student already in the list is an error, so nobody is paid for twice.
+
+	A student is the same one when name, class and parent mobile all match. Two different children
+	with the same name in one class (different mobiles) are both allowed; the lot save
+	(api._save_chitrakala_rosters with append) also matches Registered Students on name and mobile,
+	so the new one is added and the saved one is never overwritten.
+	"""
+	saved = _saved_student_keys(school)
+	for row in parsed["rows"]:
+		if (row["student_name"], row["class"], mobile_key(row["mobile"])) in saved:
+			row["errors"].append(
+				_("{0} in {1} (mobile {2}) is already in your student list. A new lot is for new students only.").format(
+					row["student_name"], row["class"], row["mobile"] or _("none")
+				)
+			)
+
+
+def school_entry_matrix(school) -> dict:
+	"""The school's whole Chitrakala list as an Entry Matrix ({group: {competition: students}}).
+
+	Same rules as the form: Group A only for colouring; handwriting counts Groups B+C under B and
+	D+E under D. Keys are the competition names, which the matrix save resolves directly.
+	"""
+	matrix = {group: {} for group in GROUPS}
+	for name, by_group in _saved_counts(school)["matrix_counts"].items():
+		lower = name.lower()
+		n = lambda g: cint(by_group.get(g))  # noqa: E731
+		if "handwriting" in lower or "writing" in lower:
+			values = {"group_a": 0, "group_b": n("group_b") + n("group_c"), "group_c": 0,
+				"group_d": n("group_d") + n("group_e"), "group_e": 0}
+		else:
+			values = {g: n(g) for g in GROUPS}
+			if not is_colouring(name):
+				values["group_a"] = 0
+		for group, value in values.items():
+			matrix[group][name] = value
+	return matrix
+
+
 @frappe.whitelist()
 def get_chitrakala_upload_state():
 	"""What the upload step needs: whether a list is saved, its size and whether it is locked."""
@@ -479,6 +561,8 @@ def get_chitrakala_upload_state():
 		"last_saved": counts["last_saved"],
 		"matrix_counts": counts["matrix_counts"],
 		"locked": is_locked(school),
+		# Paid: the list can no longer be replaced; new students go in another lot.
+		"registered": bool(paid_registration(school)),
 		"deadline": str(registration_deadline(school) or "") or None,
 		"academic_year": school.academic_year,
 		"competitions": [c["abbr"] for c in competitions],
@@ -487,19 +571,27 @@ def get_chitrakala_upload_state():
 
 
 @frappe.whitelist()
-def preview_chitrakala_student_list(filedata=None, filename=None):
-	"""Validate an upload and return it row by row. Saves nothing."""
+def preview_chitrakala_student_list(filedata=None, filename=None, mode="replace"):
+	"""Validate an upload and return it row by row. Saves nothing.
+
+	mode "add" (a new lot) also flags students already in the list.
+	"""
 	school = get_session_school()
 	parsed = parse_chitrakala_sheet(read_sheet(filedata, filename), get_competitions(school))
+	if mode == "add":
+		_mark_already_saved(parsed, school)
 	return _summarise_preview(parsed, school, _saved_counts(school)["students"])
 
 
 @frappe.whitelist()
-def save_chitrakala_student_list(filedata=None, filename=None, replace=0):
+def save_chitrakala_student_list(filedata=None, filename=None, replace=0, mode="replace"):
 	"""Validate the upload again on the server and save it as the school's Chitrakala student list.
 
-	The file is re-read here rather than trusting a preview from the browser. An existing list is
-	replaced only when the school confirms (replace=1).
+	The file is re-read here rather than trusting a preview from the browser.
+	mode "replace" (before payment): the file replaces the list; an existing list is replaced only
+	when the school confirms (replace=1).
+	mode "add" (a new lot, after payment): the file's students are added to the list. matrix_counts
+	in the result are then this lot's students only, which is what the lot pays for.
 	"""
 	from ito_customization.ito_customization.api import _save_chitrakala_rosters
 
@@ -507,13 +599,24 @@ def save_chitrakala_student_list(filedata=None, filename=None, replace=0):
 	if is_locked(school):
 		frappe.throw(_("The registration deadline has passed, so the student list can no longer be changed."))
 
+	adding = mode == "add"
+	paid = paid_registration(school)
+	if adding and not paid:
+		frappe.throw(_("A new lot is for after the registration fee is paid. Until then, upload your whole list again to replace it."))
+	if not adding and paid:
+		frappe.throw(
+			_("Your registration fee is paid, so the student list can no longer be replaced. To add new students, register another lot.")
+		)
+
 	competitions = get_competitions(school)
 	parsed = parse_chitrakala_sheet(read_sheet(filedata, filename), competitions)
+	if adding:
+		_mark_already_saved(parsed, school)
 	existing = _saved_counts(school)["students"]
 	preview = _summarise_preview(parsed, school, existing)
 	if not preview["can_save"]:
 		return {"success": False, "message": _("Fix the errors in the file before saving."), "preview": preview}
-	if existing and not cint(replace):
+	if not adding and existing and not cint(replace):
 		return {"success": False, "needs_confirmation": True, "existing_students": existing}
 
 	# Same shape as the old Student List page sends, so both save the same way.
@@ -547,13 +650,15 @@ def save_chitrakala_student_list(filedata=None, filename=None, replace=0):
 	flags = frappe.flags.ignore_permissions
 	frappe.flags.ignore_permissions = True
 	try:
-		_save_chitrakala_rosters(school.name, payload, competitions=competitions)
+		_save_chitrakala_rosters(school.name, payload, competitions=competitions, append=adding)
 	finally:
 		frappe.flags.ignore_permissions = flags
 
 	return {
 		"success": True,
 		"students": len(parsed["rows"]),
+		"added": adding,
+		# The file's students: the whole list, or for a new lot only the students it adds.
 		"matrix_counts": preview["matrix_counts"],
 		"state": get_chitrakala_upload_state(),
 	}

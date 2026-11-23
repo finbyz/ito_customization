@@ -1528,9 +1528,21 @@ def save_wof_registration(registration_data):
 		create_or_update_teachers(coordinators_data, customer)
 
 		entry_matrix = data.get("entry_matrix")
-		if entry_matrix:
-			save_competition_entry_matrix_record(customer, entry_matrix, is_submitted=True)
-			sync_wof_entry_matrix_to_exams_summary(customer, entry_matrix)
+		# An additional lot's matrix holds only its new students (what the lot pays for). The school's
+		# own Entry Matrix and Exams Summary keep counting every student, so they are rebuilt from
+		# the whole Chitrakala list, which already includes the lot's students.
+		school_matrix = entry_matrix
+		if data.get("new_lot_id"):
+			from ito_customization.ito_customization import chitrakala_student_list, school_student_list
+
+			school = frappe._dict(name=customer)
+			school.academic_year = school_student_list.resolve_academic_year(
+				frappe.db.get_value("Customer", customer, "custom_current_academic_year")
+			)
+			school_matrix = chitrakala_student_list.school_entry_matrix(school)
+		if school_matrix:
+			save_competition_entry_matrix_record(customer, school_matrix, is_submitted=True)
+			sync_wof_entry_matrix_to_exams_summary(customer, school_matrix)
 
 		payment = dict(data.get("payment") or {})
 		from ito_customization.ito_customization import wof_registration_payment as wof
@@ -1685,7 +1697,14 @@ def sync_wof_entry_matrix_to_exams_summary(customer, entry_matrix):
 		{"customer": customer, "is_little_champ": 0, "is_wof": 0},
 	)
 	if not es_name:
-		yed_name = frappe.db.get_value("Yearly Exam Date", {"docstatus": 1}, "name", order_by="creation desc")
+		# The school's year first (any spelling), then the newest submitted schedule as before.
+		yed_filters = {"docstatus": 1, "is_little_champ": 0}
+		academic_year = frappe.db.get_value("Customer", customer, "custom_current_academic_year")
+		if academic_year:
+			yed_filters["academic_year"] = academic_year_filter(academic_year)
+		yed_name = frappe.db.get_value(
+			"Yearly Exam Date", yed_filters, "name", order_by="creation desc"
+		) or frappe.db.get_value("Yearly Exam Date", {"docstatus": 1}, "name", order_by="creation desc")
 		if yed_name:
 			es_doc = frappe.new_doc("Exams Summary")
 			es_doc.customer = customer
@@ -3986,7 +4005,7 @@ def save_wof_student_list():
 		frappe.flags.ignore_permissions = original_flag
 
 
-def _save_chitrakala_rosters(customer_name, payload, competitions=None):
+def _save_chitrakala_rosters(customer_name, payload, competitions=None, append=False):
 	"""Save a Chitrakala student list for one school and return the result.
 
 	payload is {"school_info": {...}, "rosters": {"<class>_<section>": {"class_grade", "section",
@@ -3995,6 +4014,7 @@ def _save_chitrakala_rosters(customer_name, payload, competitions=None):
 	Student List page) and by the Entry Matrix upload of the Chitrakala registration form
 	(chitrakala_student_list). competitions ({name, abbr}) overrides the subject lookup, so the
 	upload saves exactly the competitions its Entry Matrix shows.
+	append=True (a new lot) adds the students to the list instead of replacing it.
 	The caller resolves the school and sets ignore_permissions; errors are raised to the caller.
 	"""
 	school_info = payload.get("school_info", {}) or {}
@@ -4040,7 +4060,8 @@ def _save_chitrakala_rosters(customer_name, payload, competitions=None):
 
 	if bsl_name:
 		bsl = frappe.get_doc("Bulk Student List", bsl_name)
-		bsl.table_xxdu = []
+		if not append:
+			bsl.table_xxdu = []
 	else:
 		bsl = frappe.new_doc("Bulk Student List")
 		bsl.customer = customer_name
@@ -4171,6 +4192,18 @@ def _save_chitrakala_rosters(customer_name, payload, competitions=None):
 				record = None
 				if sroll:
 					record = records_by_roll.get(sroll)
+				elif append:
+					# A new lot: the same name in the same class is the same student only when the
+					# mobile also matches. Otherwise it is a new child, and the saved one is kept.
+					from ito_customization.ito_customization.chitrakala_student_list import mobile_key
+
+					record = next(
+						(
+							r for r in records_by_name.get(sname, [])
+							if mobile_key(r.get("mobile_number")) == mobile_key(smobile)
+						),
+						None,
+					)
 				else:
 					name_matches = records_by_name.get(sname, [])
 					if len(name_matches) == 1:

@@ -641,6 +641,14 @@ def download_school_student_template():
     school = get_session_school()
     subjects = get_subject_columns(school)
     if not subjects:
+        if school.is_wof:
+            frappe.throw(
+                _(
+                    "No WOF Olympiad subjects are set up for academic year {0}. Subjects ticked "
+                    "For Chitrakala are left out of this template, so check that the Olympiad subjects "
+                    "in the submitted Yearly Exam Date are not ticked For Chitrakala."
+                ).format(school.academic_year or _("(not set)"))
+            )
         frappe.throw(
             _("No subjects are set up for academic year {0}. Check the submitted Yearly Exam Date for this year.").format(
                 school.academic_year or _("(not set)")

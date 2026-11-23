@@ -15,9 +15,6 @@ def ensure_subject_exists(subject_name):
         except frappe.DuplicateEntryError:
             pass  # Subject was created by another process
 
-
-
-
 @frappe.whitelist()
 def save_books_order(registration_data):
     try:
