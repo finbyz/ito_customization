@@ -4,11 +4,20 @@ One sheet row is one school. A row creates or updates:
 - the Customer (matched by school code), its Address,
 - the Principal contact and the staff as Teachers on the school,
 - the Exams Summary of the chosen exam schedule (class-wise student counts and slot dates),
-- the subject slots (A/B/C) on the Customer.
+- the subject slots (A/B/C) on the Customer,
+- the open (not submitted) Books Selection of the school, with the book counts of the sheet.
 
-Book orders, payment and dispatch columns are not imported.
+Book counts go to the 5 book fields of Books Selection. The sheet's column group says the book type:
+	WORKBOOK ...                 -> Practice Workbook (ITO) or Work Book (Little Champ)
+	... STUDENT GUIDE ... / OSG  -> Student Guide
+	PREVIOUS YEAR ... / PYQP     -> Previous Year Paper
+	TEXT BOOK ...                -> Text Book (Little Champ)
+A count is saved only when the School Subject has a book item for that class in the matching table.
+For a workbook the ITO table is tried first, then the Little Champ one.
 
-Masters (State, School Subject, Class) are never created here. A value that does not match an
+Payment and dispatch columns are not imported.
+
+Masters (State, School Subject, Class, book items) are never created here. A value that does not match an
 existing master is reported as an error on that row, and the row is skipped.
 
 The sheet has a three-row header (group / sub-group / leaf, with merged cells), the same layout as
@@ -76,6 +85,35 @@ TOP_FIELDS = {
 	"EMAIL": "email",
 }
 
+# Book column groups: (words in the group header, book type). Checked in this order.
+BOOK_GROUPS = [
+	(("STUDENT GUIDE", "OSG"), "sg"),
+	(("PREVIOUS YEAR", "PYQP"), "yp"),
+	(("TEXT BOOK", "TEXTBOOK"), "tb"),
+	(("WORKBOOK", "WORK BOOK"), "wb"),
+]
+
+# Book type -> Books Selection CT / School Subject book table fields, in the order they are tried.
+BOOK_FIELDS = {
+	"wb": ("practice_workbook_110", "work_book"),
+	"sg": ("student_guide_220",),
+	"yp": ("prev_year_paper_160",),
+	"tb": ("text_book",),
+}
+BOOK_LABELS = {"wb": "Workbook", "sg": "Student Guide", "yp": "Previous Year Paper", "tb": "Text Book"}
+BOOK_QTY_FIELDS = ("practice_workbook_110", "student_guide_220", "prev_year_paper_160", "text_book", "work_book")
+
+# Template group header per book type.
+BOOK_TEMPLATE_GROUPS = {
+	"wb": "WORKBOOK ORDER COUNT",
+	"yp": "PREVIOUS YEAR QUESTION PAPER ORDER COUNT",
+	"sg": "OLYMPIAD STUDENT GUIDE ORDER COUNT",
+	"tb": "TEXT BOOK ORDER COUNT",
+}
+BOOK_TEMPLATE_SUFFIX = {"wb": "WB", "yp": "PYQP", "sg": "OSG", "tb": "TB"}
+
+CLASS_ALIASES = {"LKG": "Junior KG", "JR KG": "Junior KG", "UKG": "Senior KG", "SR KG": "Senior KG"}
+
 ADDRESS_FIELDS = {
 	"ADDRESS": "address",
 	"CITY": "city",
@@ -118,9 +156,14 @@ def subject_key(header: str) -> str | None:
 	return None
 
 
-def class_from_header(header: str) -> str | None:
-	match = re.search(r"\d+", _header(header))
-	return str(int(match.group())) if match else None
+def class_from_header(header: str, classes=()) -> str | None:
+	"""'1ST' -> '1'; 'NURSERY' / 'LKG' / 'JUNIOR KG' -> the Class name (matched without case)."""
+	header = _header(header)
+	match = re.search(r"\d+", header)
+	if match:
+		return str(int(match.group()))
+	header = CLASS_ALIASES.get(header, header)
+	return next((c for c in classes if c.upper() == header.upper()), header or None)
 
 
 def read_records(file_url: str) -> list[dict]:
@@ -158,7 +201,14 @@ def read_records(file_url: str) -> list[dict]:
 
 	records = []
 	for offset, row in enumerate(rows[header_at + 3 :]):
-		record = {"row_no": header_at + 4 + offset, "school": {}, "staff": {}, "enrollment": {}, "slots": {}}
+		record = {
+			"row_no": header_at + 4 + offset,
+			"school": {},
+			"staff": {},
+			"enrollment": {},
+			"slots": {},
+			"books": [],
+		}
 		for spec, value in zip(columns, row):
 			if spec is None or value is None or _text(value) == "":
 				continue
@@ -171,6 +221,8 @@ def read_records(file_url: str) -> list[dict]:
 				record["enrollment"].setdefault(spec[1], {})[spec[2]] = value
 			elif kind == "slot":
 				record["slots"][spec[1]] = value
+			elif kind == "book":
+				record["books"].append({"type": spec[1], "subject": spec[2], "class": spec[3], "value": value})
 		if record["school"].get("school_code") or record["school"].get("school_name"):
 			records.append(record)
 	return records
@@ -185,6 +237,9 @@ def _column_spec(group, sub, leaf):
 		return ("school", ADDRESS_FIELDS[sub])
 	if "STAFF" in group and sub and leaf in ("NAME", "MOBILE", "EMAIL"):
 		return ("staff", sub, leaf.lower())
+	for words, book_type in BOOK_GROUPS:
+		if any(word in group for word in words):
+			return ("book", book_type, sub, leaf) if sub and leaf else None
 	if "ENROL" in group and sub and leaf:
 		return ("enrollment", sub, leaf)
 	if group.startswith("SLOT") and sub:
@@ -216,8 +271,23 @@ def build_context(exam_detail: str) -> frappe._dict:
 		if row.subject and not row.for_chitrakala and not row.is_little_champ:
 			schedule[row.subject] = {n: row.get(f"tg_date_{n}") for n in (1, 2, 3)}
 
+	# Book items per School Subject: {subject: {field: {class}}}, Little Champ subjects included.
+	book_classes = {}
+	for row in frappe.get_all(
+		"School Subject CT",
+		filters={"parenttype": "School Subject", "parentfield": ("in", BOOK_QTY_FIELDS), "item": ("is", "set")},
+		fields=["parent", "parentfield", "class"],
+	):
+		book_classes.setdefault(row.parent, {}).setdefault(row.parentfield, set()).add(str(row.get("class")))
+
 	return frappe._dict(
 		exam_detail=ed.name,
+		book_classes=book_classes,
+		book_subjects={
+			row.name: (row.abbr or "").upper()
+			for row in frappe.get_all("School Subject", fields=["name", "abbr"])
+		},
+		little_champ_subjects=set(frappe.get_all("School Subject", {"little_champ": 1}, pluck="name")),
 		academic_year=ed.academic_year,
 		subject_by_key=by_key,
 		schedule=schedule,
@@ -381,7 +451,7 @@ def check_record(record: dict, ctx) -> dict:
 		letter = slot_by_subject_key.get(key)
 		slot_date = ctx.schedule[subject].get(SLOT_LETTERS[letter]) if letter else None
 		for class_header, value in by_class.items():
-			class_name = class_from_header(class_header)
+			class_name = class_from_header(class_header, ctx.classes)
 			if class_name not in ctx.classes:
 				errors.append(_("{0}: class {1} is not a known Class").format(subject, class_header))
 				continue
@@ -395,6 +465,8 @@ def check_record(record: dict, ctx) -> dict:
 				clean.enrollment.append(
 					{"subject": subject, "class": class_name, "no_of_students": int(count), "slot_date": slot_date}
 				)
+
+	clean.books = _check_books(record["books"], ctx, errors)
 
 	clean.existing = None
 	if clean.school_code:
@@ -410,6 +482,68 @@ def check_record(record: dict, ctx) -> dict:
 
 	clean.errors, clean.warnings = errors, warnings
 	return clean
+
+
+def _book_subject_candidates(header: str, ctx) -> list[str]:
+	"""School Subjects a book column header may mean: by abbreviation or by name."""
+	key = subject_key(header) or ""
+	header_up = _header(header)
+	found = []
+	for name, abbr in ctx.book_subjects.items():
+		paren = re.search(r"\(([A-Za-z]+)\)\s*$", name)
+		keys = {abbr, paren.group(1).upper() if paren else ""} - {""}
+		plain = re.sub(r"\s*\([^)]*\)\s*$", "", name).upper()
+		if key in keys or (key and re.search(rf"\b{re.escape(key)}\b", name.upper())) or plain in header_up:
+			found.append(name)
+	return found
+
+
+def _check_books(cells: list[dict], ctx, errors: list) -> list[dict]:
+	"""Book counts as Books Selection CT rows, one per subject and class.
+
+	Each count goes to the first book field whose School Subject table has an item for that class.
+	"""
+	rows = {}
+	seen = set()
+	for cell in cells:
+		label = BOOK_LABELS[cell["type"]]
+		where = f"{label}, {cell['subject']}, class {cell['class']}"
+		value = cell["value"]
+		count = value if isinstance(value, (int, float)) else _text(value)
+		if isinstance(count, str) and count.isdigit():
+			count = int(count)
+		if not isinstance(count, (int, float)) or count < 0 or int(count) != count:
+			errors.append(_("{0}: {1} is not a whole number").format(where, _text(value)))
+			continue
+		if not count:
+			continue
+
+		class_name = class_from_header(cell["class"], ctx.classes)
+		if class_name not in ctx.classes:
+			errors.append(_("{0}: class {1} is not a known Class").format(where, cell["class"]))
+			continue
+
+		target = None
+		for subject in _book_subject_candidates(cell["subject"], ctx):
+			for field in BOOK_FIELDS[cell["type"]]:
+				if class_name in ctx.book_classes.get(subject, {}).get(field, ()):
+					target = (subject, field)
+					break
+			if target:
+				break
+		if not target:
+			errors.append(_("{0}: no book item is set for this subject and class").format(where))
+			continue
+
+		if (target, class_name) in seen:
+			errors.append(_("{0}: the same book has more than one column").format(where))
+			continue
+		seen.add((target, class_name))
+
+		subject, field = target
+		row = rows.setdefault((subject, class_name), {"subject": subject, "class_grade": class_name})
+		row[field] = int(count)
+	return list(rows.values())
 
 
 # --------------------------------------------------------------------------------------------------
@@ -470,7 +604,42 @@ def import_record(clean, ctx) -> str:
 	if clean.enrollment:
 		_update_exams_summary(customer.name, clean, ctx)
 
+	if clean.books:
+		_update_books_selection(customer, clean, ctx)
+
 	return customer.name
+
+
+def _update_books_selection(customer, clean, ctx) -> None:
+	"""Put the sheet's book counts on the school's open Books Selection (the one the Book Order page
+	edits), or a new one. Submitted selections are orders already placed and are never changed.
+
+	A subject and class in the sheet gets the sheet's counts for the book types the sheet fills; its
+	other book types and the rows the sheet does not mention are kept.
+	"""
+	name = frappe.db.get_value("Books Selection", {"customer": customer.name, "is_submitted": 0})
+	if name:
+		doc = frappe.get_doc("Books Selection", name)
+	else:
+		doc = frappe.new_doc("Books Selection")
+		doc.customer = customer.name
+		doc.order_date = clean.registration_date or frappe.utils.nowdate()
+	doc.customer_name = customer.customer_name
+	doc.academic_year = ctx.academic_year
+
+	existing = {(row.subject, str(row.class_grade)): row for row in doc.select_books}
+	for entry in clean.books:
+		row = existing.get((entry["subject"], entry["class_grade"]))
+		if not row:
+			row = doc.append("select_books", {"subject": entry["subject"], "class_grade": entry["class_grade"]})
+		for field in BOOK_QTY_FIELDS:
+			if field in entry:
+				row.set(field, entry[field])
+
+	if doc.is_new():
+		doc.insert(ignore_permissions=True)
+	else:
+		doc.save(ignore_permissions=True)
 
 
 def _merge_staff(customer: str, sheet_staff: dict) -> dict:
@@ -552,8 +721,9 @@ def _row_message(clean, extra: str | None = None) -> str:
 def _plan_text(clean) -> str:
 	what = _("Updates {0}").format(clean.existing) if clean.existing else _("New school")
 	counts = sum(e["no_of_students"] for e in clean.enrollment)
-	return _("{0}: {1} staff, {2} exam rows, {3} students").format(
-		what, len(clean.staff), len(clean.enrollment), counts
+	books = sum(row.get(f, 0) for row in clean.books for f in BOOK_QTY_FIELDS)
+	return _("{0}: {1} staff, {2} exam rows, {3} students, {4} books").format(
+		what, len(clean.staff), len(clean.enrollment), counts, books
 	)
 
 
@@ -646,6 +816,13 @@ def run_import(import_name: str) -> None:
 # --------------------------------------------------------------------------------------------------
 
 
+def _class_order(class_name: str):
+	order = {"Nursery": -3, "Junior KG": -2, "Senior KG": -1}
+	if class_name in order:
+		return (0, order[class_name])
+	return (1, int(class_name)) if class_name.isdigit() else (2, class_name)
+
+
 @frappe.whitelist()
 def download_template(exam_detail: str):
 	"""An empty registration sheet with one column group per subject of the exam schedule."""
@@ -667,6 +844,17 @@ def download_template(exam_detail: str):
 	for subject in subjects:
 		for class_name in CLASSES:
 			headers.append(("EXAM ENROLLMENT", subject.upper(), class_name))
+	for book_type in ("wb", "yp", "sg", "tb"):
+		for subject, fields in sorted(ctx.book_classes.items()):
+			classes = set()
+			for field in BOOK_FIELDS[book_type]:
+				classes |= fields.get(field, set())
+			# Subjects of this exam schedule, and the Little Champ books (Text Book / Work Book).
+			if not classes or not (subject in ctx.schedule or subject in ctx.little_champ_subjects):
+				continue
+			label = f"{subject.upper()} {BOOK_TEMPLATE_SUFFIX[book_type]}"
+			for class_name in sorted(classes, key=_class_order):
+				headers.append((BOOK_TEMPLATE_GROUPS[book_type], label, class_name))
 	for subject in subjects:
 		headers.append(("SLOT (A/B/C)", subject.upper(), None))
 
