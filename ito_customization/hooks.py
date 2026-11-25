@@ -59,6 +59,7 @@ doctype_js = {
 	"Case Format Settings": "ito_customization/doctype/case_format_settings/case_format_settings.js",
 }
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
+doctype_list_js = {"Customer": "public/js/customer_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 

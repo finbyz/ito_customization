@@ -32,6 +32,9 @@ SYSTEM_SKIP = {
     "ITO Event Output",
     "ITO Output Log",
     "ITO Event Web Form",
+    # Import log messages and school codes are shown exactly as checked.
+    "ITO Bulk Import",
+    "ITO Bulk Import Log",
 }
 SKIP_FIELDNAMES = {
     "name",
