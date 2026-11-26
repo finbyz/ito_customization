@@ -1,0 +1,63 @@
+{
+ "actions": [],
+ "creation": "2026-11-26 10:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "istable": 1,
+ "field_order": [
+  "run_on",
+  "action",
+  "user",
+  "file",
+  "summary"
+ ],
+ "fields": [
+  {
+   "fieldname": "run_on",
+   "fieldtype": "Datetime",
+   "label": "On",
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "action",
+   "fieldtype": "Select",
+   "label": "Action",
+   "options": "Validate\nImport\nRevert",
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "By",
+   "options": "User",
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "file",
+   "fieldtype": "Data",
+   "label": "File"
+  },
+  {
+   "fieldname": "summary",
+   "fieldtype": "Small Text",
+   "label": "Summary",
+   "in_list_view": 1,
+   "columns": 5
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-26 10:00:00",
+ "modified_by": "Administrator",
+ "module": "ITO Customization",
+ "name": "ITO Bulk Import Run",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

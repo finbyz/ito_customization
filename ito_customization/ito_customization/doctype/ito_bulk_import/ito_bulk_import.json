@@ -8,12 +8,19 @@
   "naming_series",
   "exam_detail",
   "academic_year",
+  "customer",
   "column_break_1",
   "status",
   "import_file",
   "section_summary",
   "summary",
-  "rows"
+  "file_notes",
+  "section_rows",
+  "rows_html",
+  "section_raw",
+  "rows",
+  "section_history",
+  "runs"
  ],
  "fields": [
   {
@@ -43,6 +50,13 @@
    "in_list_view": 1
   },
   {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Only This School",
+   "options": "Customer",
+   "description": "Leave empty to import every school in the file. Set to import only this school's row."
+  },
+  {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
   },
@@ -50,7 +64,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "Draft\nValidated\nQueued\nIn Progress\nCompleted\nPartially Completed\nFailed",
+   "options": "Draft\nValidated\nQueued\nIn Progress\nCompleted\nPartially Completed\nFailed\nReverted\nPartially Reverted",
    "default": "Draft",
    "read_only": 1,
    "in_list_view": 1,
@@ -75,15 +89,50 @@
    "read_only": 1
   },
   {
+   "fieldname": "file_notes",
+   "fieldtype": "Small Text",
+   "label": "File Notes",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_rows",
+   "fieldtype": "Section Break",
+   "label": "Schools"
+  },
+  {
+   "fieldname": "rows_html",
+   "fieldtype": "HTML",
+   "label": "Schools"
+  },
+  {
+   "fieldname": "section_raw",
+   "fieldtype": "Section Break",
+   "label": "Row Log",
+   "collapsible": 1
+  },
+  {
    "fieldname": "rows",
    "fieldtype": "Table",
    "label": "Rows",
    "options": "ITO Bulk Import Log",
    "read_only": 1
+  },
+  {
+   "fieldname": "section_history",
+   "fieldtype": "Section Break",
+   "label": "History",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "runs",
+   "fieldtype": "Table",
+   "label": "Runs",
+   "options": "ITO Bulk Import Run",
+   "read_only": 1
   }
  ],
  "links": [],
- "modified": "2026-11-24 00:00:00",
+ "modified": "2026-11-26 10:00:00",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "ITO Bulk Import",

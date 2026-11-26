@@ -10,7 +10,12 @@
   "school_name",
   "status",
   "customer",
-  "message"
+  "exams_summary",
+  "books_selection",
+  "message",
+  "details",
+  "corrections",
+  "undo_data"
  ],
  "fields": [
   {
@@ -38,7 +43,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "Valid\nError\nImported\nFailed",
+   "options": "Valid\nError\nImported\nFailed\nReverted",
    "in_list_view": 1,
    "columns": 1
   },
@@ -51,16 +56,46 @@
    "columns": 1
   },
   {
+   "fieldname": "exams_summary",
+   "fieldtype": "Link",
+   "label": "Exams Summary",
+   "options": "Exams Summary"
+  },
+  {
+   "fieldname": "books_selection",
+   "fieldtype": "Link",
+   "label": "Books Selection",
+   "options": "Books Selection"
+  },
+  {
    "fieldname": "message",
    "fieldtype": "Small Text",
    "label": "Message",
    "in_list_view": 1,
-   "columns": 4
+   "columns": 3
+  },
+  {
+   "fieldname": "details",
+   "fieldtype": "Long Text",
+   "label": "Details",
+   "hidden": 1
+  },
+  {
+   "fieldname": "corrections",
+   "fieldtype": "Long Text",
+   "label": "Corrections",
+   "hidden": 1
+  },
+  {
+   "fieldname": "undo_data",
+   "fieldtype": "Long Text",
+   "label": "Undo Data",
+   "hidden": 1
   }
  ],
  "istable": 1,
  "links": [],
- "modified": "2026-11-24 00:00:00",
+ "modified": "2026-11-26 10:00:00",
  "modified_by": "Administrator",
  "module": "ITO Customization",
  "name": "ITO Bulk Import Log",

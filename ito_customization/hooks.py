@@ -52,7 +52,7 @@ app_include_css = "/assets/ito_customization/css/web_forms_registration.css"
 # include js in doctype views
 doctype_js = {
 	"Lead": "public/js/lead.js",
-	"Customer": "public/js/customer.js",
+	"Customer": ["public/js/customer.js", "public/js/customer_bulk_import.js"],
 	"Sales Partner": "public/js/customer.js",
 	"HD Ticket": "public/js/hd_ticket.js",
 	"Sales Invoice": "public/js/sales_invoice.js",
